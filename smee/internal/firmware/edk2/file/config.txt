@@ -1,0 +1,13 @@
+arm_64bit=1
+arm_boost=1
+enable_uart=1
+uart_2ndstage=1
+disable_commandline_tags=2
+disable_overscan=1
+kernel=vmlinuz-armbian-bcm2711-current
+initramfs initramfs-armbian-bcm2711-current followkernel
+
+[pi4]
+dtoverlay=disable-bt
+dtoverlay=upstream-pi4
+dtoverlay=vc4-kms-v3d
