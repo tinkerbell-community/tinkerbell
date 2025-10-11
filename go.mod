@@ -1,6 +1,6 @@
 module github.com/tinkerbell/tinkerbell
 
-go 1.24.1
+go 1.24.5
 
 require (
 	dario.cat/mergo v1.0.2
@@ -314,3 +314,5 @@ replace (
 	k8s.io/sample-cli-plugin => k8s.io/sample-cli-plugin v0.33.4
 	k8s.io/sample-controller => k8s.io/sample-controller v0.33.4
 )
+
+replace github.com/tinkerbell/tinkerbell => ./

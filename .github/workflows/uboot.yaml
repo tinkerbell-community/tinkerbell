@@ -1,0 +1,156 @@
+name: U-Boot for Raspberry Pi Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      uboot_version:
+        description: "U-Boot version tag to build"
+        required: false
+        default: "v2025.07"
+        type: string
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC to check for updates
+    - cron: "0 2 * * 0"
+
+env:
+  UBOOT_VERSION: ${{ inputs.uboot_version || 'v2025.07' }}
+
+jobs:
+  build-uboot:
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            git \
+            python3 \
+            python3-setuptools \
+            bison \
+            flex \
+            bc \
+            libssl-dev \
+            libgnutls28-dev \
+            libgcrypt20-dev \
+            zlib1g-dev \
+            libcurl4-openssl-dev \
+            gcc-aarch64-linux-gnu \
+            device-tree-compiler
+
+      - name: Create build directory
+        run: mkdir -p /tmp/uboot-build
+
+      - name: Clone U-Boot source
+        run: |
+          cd /tmp/uboot-build
+          git clone --depth 1 --branch ${{ env.UBOOT_VERSION }} https://github.com/u-boot/u-boot.git
+          echo "Cloned U-Boot version: ${{ env.UBOOT_VERSION }}"
+
+      - name: Configure U-Boot for Raspberry Pi 4 ARM64
+        run: |
+          cd /tmp/uboot-build/u-boot
+          make CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
+
+      - name: Add custom boot configuration
+        run: |
+          cd /tmp/uboot-build/u-boot
+          echo 'CONFIG_BOOTCOMMAND="dhcp; pxe get; pxe boot"' >> .config
+          echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+
+      - name: Build U-Boot
+        run: |
+          cd /tmp/uboot-build/u-boot
+          make CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+          ls -la u-boot.bin
+
+      - name: Check if u-boot.bin changed
+        id: check_changes
+        run: |
+          cd /tmp/uboot-build/u-boot
+
+          # Create output directory
+          mkdir -p ${{ github.workspace }}/smee/internal/firmware
+
+          # Check if the new binary is different from the existing one
+          if [ -f "${{ github.workspace }}/smee/internal/firmware/u-boot.bin" ]; then
+            if cmp -s u-boot.bin "${{ github.workspace }}/smee/internal/firmware/u-boot.bin"; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "U-Boot binary is unchanged"
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "U-Boot binary has changed"
+            fi
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "No existing U-Boot binary found, will create new one"
+          fi
+
+          # Copy the new binary
+          cp u-boot.bin "${{ github.workspace }}/smee/internal/firmware/"
+
+          # Get file size for reporting
+          size=$(stat -c%s "${{ github.workspace }}/smee/internal/firmware/u-boot.bin")
+          echo "size=$size" >> $GITHUB_OUTPUT
+
+      - name: Create Pull Request
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            Update U-Boot binary to ${{ env.UBOOT_VERSION }}
+
+            - Built U-Boot ${{ env.UBOOT_VERSION }} for Raspberry Pi 4 ARM64
+            - Binary size: ${{ steps.check_changes.outputs.size }} bytes
+            - Configured for PXE boot: "dhcp; pxe get; pxe boot"
+            - Built natively on ubuntu-24.04-arm runner
+          title: "chore: Update U-Boot binary to ${{ env.UBOOT_VERSION }}"
+          body: |
+            ## U-Boot Build Update
+
+            This PR updates the U-Boot binary to version `${{ env.UBOOT_VERSION }}`.
+
+            ### Changes
+            - ✅ Built U-Boot ${{ env.UBOOT_VERSION }} for Raspberry Pi 4 ARM64
+            - ✅ Binary size: ${{ steps.check_changes.outputs.size }} bytes
+            - ✅ Configured with custom bootcommand: `dhcp; pxe get; pxe boot`
+            - ✅ Built natively on `ubuntu-24.04-arm` runner (no cross-compilation)
+
+            ### Build Configuration
+            - **Target**: `rpi_arm64_defconfig` (Raspberry Pi 4 ARM64)
+            - **Compiler**: `aarch64-linux-gnu-gcc`
+            - **Boot Method**: PXE/DHCP boot for diskless operation
+
+            ### Verification
+            The build process replicated the same steps as the Docker-based build in `cmd/uboot/` but executed natively on ARM64 hardware for optimal compatibility.
+
+            ---
+
+            *This PR was automatically created by the U-Boot build workflow.*
+          branch: update-uboot-${{ env.UBOOT_VERSION }}-${{ github.run_number }}
+          delete-branch: true
+          draft: false
+          labels: |
+            firmware
+            uboot
+            automated-pr
+
+      - name: Report build status
+        run: |
+          if [ "${{ steps.check_changes.outputs.changed }}" == "true" ]; then
+            echo "✅ U-Boot build completed successfully"
+            echo "📝 Pull request created with updated binary"
+            echo "📏 Binary size: ${{ steps.check_changes.outputs.size }} bytes"
+          else
+            echo "ℹ️ U-Boot binary is up-to-date, no changes needed"
+          fi
