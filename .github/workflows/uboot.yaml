@@ -66,6 +66,15 @@ jobs:
           cd /tmp/uboot-build/u-boot
           echo 'CONFIG_BOOTCOMMAND="dhcp; pxe get; pxe boot"' >> .config
           echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+          echo 'CONFIG_ARMV8_PSCI=y' >> .config
+          echo 'CONFIG_ARMV8_PSCI_NR_CPUS=4' >> .config
+          echo 'CONFIG_ARMV8_PSCI_CPUS_PER_CLUSTER=4' >> .config
+          echo 'CONFIG_ARMV8_SPIN_TABLE=n' >> .config
+          echo 'CONFIG_ARM64=y' >> .config
+          echo 'CONFIG_POSITION_INDEPENDENT=y' >> .config
+          echo 'CONFIG_ARMV8_SEC_FIRMWARE_SUPPORT=n' >> .config
+          echo 'CONFIG_OF_LIBFDT=y' >> .config
+          echo 'CONFIG_OF_CONTROL=y' >> .config
 
       - name: Build U-Boot
         run: |
@@ -102,8 +111,49 @@ jobs:
           size=$(stat -c%s "${{ github.workspace }}/smee/internal/firmware/u-boot.bin")
           echo "size=$size" >> $GITHUB_OUTPUT
 
+      - name: Build PSCI device tree overlay
+        run: |
+          cat <<EOF > psci.dts
+          / {
+              psci {
+                  compatible = "arm,psci-1.0", "arm,psci-0.2", "arm,psci";
+                  method = "smc";
+                  cpu_suspend = <0xc4000001>;
+                  cpu_off = <0x84000002>;
+                  cpu_on = <0xc4000003>;
+              };
+          };
+          EOF
+          dtc -O dtb -o psci.dtbo psci.dts
+
+      - name: Check if psci.dtbo changed
+        id: check_psci_changes
+        run: |
+          # Create overlays directory
+          mkdir -p "${{ github.workspace }}/smee/internal/firmware/overlays"
+          
+          if [ -f "${{ github.workspace }}/smee/internal/firmware/overlays/psci.dtbo" ]; then
+            if cmp -s psci.dtbo "${{ github.workspace }}/smee/internal/firmware/overlays/psci.dtbo"; then
+              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "PSCI overlay is unchanged"
+            else
+              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "PSCI overlay has changed"
+            fi
+          else
+            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "No existing PSCI overlay found, will create new one"
+          fi
+          
+          # Copy the new overlay
+          cp psci.dtbo "${{ github.workspace }}/smee/internal/firmware/overlays/"
+
+          # Get file size for reporting
+          size=$(stat -c%s "${{ github.workspace }}/smee/internal/firmware/overlays/psci.dtbo")
+          echo "size=$size" >> $GITHUB_OUTPUT
+
       - name: Create Pull Request
-        if: steps.check_changes.outputs.changed == 'true'
+        if: steps.check_changes.outputs.changed == 'true' || steps.check_psci_changes.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -112,7 +162,9 @@ jobs:
 
             - Built U-Boot ${{ env.UBOOT_VERSION }} for Raspberry Pi 4 ARM64
             - Binary size: ${{ steps.check_changes.outputs.size }} bytes
+            - PSCI overlay size: ${{ steps.check_psci_changes.outputs.size }} bytes
             - Configured for PXE boot: "dhcp; pxe get; pxe boot"
+            - Enabled ARMV8_PSCI for multi-core CPU power management
             - Built natively on ubuntu-24.04-arm runner
           title: "chore: Update U-Boot binary to ${{ env.UBOOT_VERSION }}"
           body: |
@@ -122,7 +174,8 @@ jobs:
 
             ### Changes
             - ✅ Built U-Boot ${{ env.UBOOT_VERSION }} for Raspberry Pi 4 ARM64
-            - ✅ Binary size: ${{ steps.check_changes.outputs.size }} bytes
+            - ✅ U-Boot binary size: ${{ steps.check_changes.outputs.size }} bytes
+            - ✅ PSCI overlay size: ${{ steps.check_psci_changes.outputs.size }} bytes
             - ✅ Configured with custom bootcommand: `dhcp; pxe get; pxe boot`
             - ✅ Built natively on `ubuntu-24.04-arm` runner (no cross-compilation)
 
@@ -130,6 +183,11 @@ jobs:
             - **Target**: `rpi_arm64_defconfig` (Raspberry Pi 4 ARM64)
             - **Compiler**: `aarch64-linux-gnu-gcc`
             - **Boot Method**: PXE/DHCP boot for diskless operation
+            - **PSCI Support**: Enabled for multi-core CPU power management
+              - `CONFIG_ARMV8_PSCI=y` - ARM v8 PSCI support
+              - `CONFIG_ARMV8_PSCI_NR_CPUS=4` - Support for 4 CPU cores
+              - `CONFIG_ARMV8_PSCI_CPUS_PER_CLUSTER=4` - 4 cores per cluster
+              - Device tree overlay: `psci.dtbo` for runtime PSCI enablement
 
             ### Verification
             The build process replicated the same steps as the Docker-based build in `cmd/uboot/` but executed natively on ARM64 hardware for optimal compatibility.
@@ -147,10 +205,20 @@ jobs:
 
       - name: Report build status
         run: |
-          if [ "${{ steps.check_changes.outputs.changed }}" == "true" ]; then
-            echo "✅ U-Boot build completed successfully"
-            echo "📝 Pull request created with updated binary"
-            echo "📏 Binary size: ${{ steps.check_changes.outputs.size }} bytes"
+          uboot_changed="${{ steps.check_changes.outputs.changed }}"
+          psci_changed="${{ steps.check_psci_changes.outputs.changed }}"
+          
+          if [ "$uboot_changed" == "true" ] || [ "$psci_changed" == "true" ]; then
+            echo "✅ Build completed successfully"
+            echo "📝 Pull request created with updated files:"
+            
+            if [ "$uboot_changed" == "true" ]; then
+              echo "   - U-Boot binary (${{ steps.check_changes.outputs.size }} bytes)"
+            fi
+            
+            if [ "$psci_changed" == "true" ]; then
+              echo "   - PSCI overlay (${{ steps.check_psci_changes.outputs.size }} bytes)"
+            fi
           else
-            echo "ℹ️ U-Boot binary is up-to-date, no changes needed"
+            echo "ℹ️ Both U-Boot binary and PSCI overlay are up-to-date, no changes needed"
           fi
