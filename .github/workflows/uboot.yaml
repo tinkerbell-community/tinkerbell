@@ -113,6 +113,8 @@ jobs:
 
       - name: Build PSCI device tree overlay
         run: |
+          cd /tmp/uboot-build/u-boot
+
           cat <<EOF > psci.dts
           /dts-v1/;
           /plugin/;
@@ -170,6 +172,8 @@ jobs:
       - name: Check if psci.dtbo changed
         id: check_psci_changes
         run: |
+          cd /tmp/uboot-build/u-boot
+          
           # Create overlays directory
           mkdir -p "${{ github.workspace }}/smee/internal/firmware/overlays"
           
