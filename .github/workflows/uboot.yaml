@@ -114,17 +114,58 @@ jobs:
       - name: Build PSCI device tree overlay
         run: |
           cat <<EOF > psci.dts
+          /dts-v1/;
+          /plugin/;
+
           / {
-              psci {
-                  compatible = "arm,psci-1.0", "arm,psci-0.2", "arm,psci";
-                  method = "smc";
-                  cpu_suspend = <0xc4000001>;
-                  cpu_off = <0x84000002>;
-                  cpu_on = <0xc4000003>;
+              compatible = "brcm,bcm2711", "brcm,bcm2837", "brcm,bcm2835";
+              
+              fragment@0 {
+                  target-path = "/";
+                  __overlay__ {
+                      psci {
+                          compatible = "arm,psci-1.0", "arm,psci-0.2", "arm,psci";
+                          method = "smc";
+                          
+                          /* PSCI function IDs */
+                          cpu_suspend = <0xc4000001>;
+                          cpu_off = <0x84000002>;
+                          cpu_on = <0xc4000003>;
+                          affinity_info = <0xc4000004>;
+                          migrate = <0xc4000005>;
+                          migrate_info_type = <0x84000006>;
+                          system_off = <0x84000008>;
+                          system_reset = <0x84000009>;
+                      };
+                  };
+              };
+              
+              fragment@1 {
+                  target-path = "/cpus";
+                  __overlay__ {
+                      #address-cells = <1>;
+                      #size-cells = <0>;
+                      
+                      cpu@0 {
+                          enable-method = "psci";
+                      };
+                      
+                      cpu@1 {
+                          enable-method = "psci";
+                      };
+                      
+                      cpu@2 {
+                          enable-method = "psci";
+                      };
+                      
+                      cpu@3 {
+                          enable-method = "psci";
+                      };
+                  };
               };
           };
           EOF
-          dtc -O dtb -o psci.dtbo psci.dts
+          dtc -@ -I dts -O dtb -o psci.dtbo psci.dts
 
       - name: Check if psci.dtbo changed
         id: check_psci_changes
