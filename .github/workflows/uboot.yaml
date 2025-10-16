@@ -60,13 +60,10 @@ jobs:
       - name: Configure U-Boot for Raspberry Pi 4 ARM64
         working-directory: ${{ env.UBOOT_DIR }}
         run: |
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0002-rpi-add-NVMe-to-boot-order.patch
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0003-Revert-nvme-Correct-the-prps-per-page-calculation-me.patch
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0004-usb-xhci-brcm-Make-driver-compatible-with-downstream.patch
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0005-nvme-improve-readability-of-nvme_setup_prps.patch
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0006-nvme-Use-pointer-for-CPU-addressed-buffers.patch
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0007-nvme-translate-virtual-addresses-into-the-bus-s-addr.patch
-          patch -p1 < ${{ github.workspace }}/main/smee/internal/firmware/patches/0008-enable-nvme-and-fixup-efi-boot.patch
+          for f in ${{ github.workspace }}/main/smee/internal/firmware/patches/*.patch; do
+            echo "Applying patch: $f"
+            patch -p1 < "$f"
+          done
 
           make CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
 
