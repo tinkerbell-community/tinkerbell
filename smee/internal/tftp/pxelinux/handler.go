@@ -135,20 +135,24 @@ func handlePXELinux(filename string, rf io.ReaderFrom, backend BackendReader, co
 	// Get machine data from backend
 	hwInfo, err := getByMac(ctx, mac, backend)
 	if err != nil {
-		log.Info("backend lookup failed, using MAC address defaults", "mac", mac.String(), "error", err)
-		// Create default info for the MAC
-		hwInfo = info{
-			MACAddress: mac,
-			Arch:       "arm64", // default architecture
-		}
+		log.Error(err, "backend lookup failed, using MAC address defaults", "mac", mac.String())
+		return fmt.Errorf("failed to get machine info for MAC %s: %w", mac.String(), err)
+	}
+
+	if !hwInfo.AllowNetboot {
+		e := errors.New("netboot not allowed for this machine")
+		span.SetStatus(codes.Error, e.Error())
+		log.Error(e, "mac", mac.String())
+		return e
 	}
 
 	// Generate the iPXE script content
 	content, err := generateFile(span, hwInfo, config)
 	if err != nil {
-		log.Error(err, "failed to generate pxelinux config")
-		span.SetStatus(codes.Error, err.Error())
-		return fmt.Errorf("failed to generate pxelinux config: %w", err)
+		e := fmt.Errorf("failed to generate pxelinux config: %w", err)
+		log.Error(e, "failed to generate pxelinux config")
+		span.SetStatus(codes.Error, e.Error())
+		return e
 	}
 
 	log.Info("serving generated pxelinux config", "size", len(content))

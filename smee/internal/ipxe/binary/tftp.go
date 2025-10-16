@@ -54,6 +54,14 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 	// Create the shared TFTP server
 	mux := tftpmux.NewServeMux(h.Log)
 
+	// Register iPXE binary handler
+	binaryConfig := Config{
+		Patch: h.Patch,
+	}
+	binaryHandler := NewHandler(binaryConfig, h.Log)
+	// Match common iPXE binary names - this should be more specific based on actual binary names
+	mux.HandleFunc(`\.(efi|kpxe|pxe)$`, binaryHandler)
+
 	// Register PXELinux handler for pxelinux.cfg files
 	pxeConfig := pxelinux.Config{
 		PublicSyslogFQDN:      h.PublicSyslogFQDN,
@@ -63,7 +71,7 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 		ExtraKernelParams:     h.ExtraKernelParams,
 	}
 	pxeHandler := pxelinux.NewHandler(h.Backend, pxeConfig, h.Log)
-	mux.HandleFunc(`^pxelinux\.cfg/01-`, pxeHandler)
+	mux.HandleFunc(`^pxelinux\.cfg/`, pxeHandler)
 
 	// Register hook file handler for initramfs and vmlinuz files
 	hookConfig := tftpHook.Config{
@@ -71,14 +79,6 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 	}
 	hookHandler := tftpHook.NewHandler(hookConfig, h.Log)
 	mux.HandleFunc(`^(initramfs-|vmlinuz-)`, hookHandler)
-
-	// Register iPXE binary handler
-	binaryConfig := Config{
-		Patch: h.Patch,
-	}
-	binaryHandler := NewHandler(binaryConfig, h.Log)
-	// Match common iPXE binary names - this should be more specific based on actual binary names
-	mux.HandleFunc(`\.(efi|kpxe|pxe)$`, binaryHandler)
 
 	// Register firmware handler as catch-all
 	firmwareHandler := firmware.NewHandler(h.Log)
