@@ -6,7 +6,7 @@ on:
       uboot_version:
         description: "U-Boot version tag to build"
         required: false
-        default: "v2025.07"
+        default: "v2024.07"
         type: string
   schedule:
     # Run weekly on Sundays at 2 AM UTC to check for updates
@@ -115,6 +115,7 @@ jobs:
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          path: main
           commit-message: |
             Update U-Boot binary to ${{ env.UBOOT_VERSION }}
 
