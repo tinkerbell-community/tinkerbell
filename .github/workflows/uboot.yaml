@@ -13,7 +13,7 @@ on:
     - cron: "0 2 * * 0"
 
 env:
-  UBOOT_VERSION: ${{ inputs.uboot_version || 'v2025.07' }}
+  UBOOT_VERSION: ${{ inputs.uboot_version || 'v2025.10' }}
   UBOOT_DIR: ${{ github.workspace }}/u-boot
 
 jobs:
