@@ -14,6 +14,7 @@ on:
 
 env:
   UBOOT_VERSION: ${{ inputs.uboot_version || 'v2025.07' }}
+  UBOOT_DIR: /tmp/uboot-build/u-boot
 
 jobs:
   build-uboot:
@@ -27,6 +28,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Checkout u-boot
+        uses: actions/checkout@v4
+        with:
+          repository: u-boot/u-boot
+          fetch-depth: 1
+          path: ${{ env.UBOOT_DIR }}
+          ref: ${{ env.UBOOT_VERSION }}
 
       - name: Install build dependencies
         run: |
@@ -47,37 +56,35 @@ jobs:
             gcc-aarch64-linux-gnu \
             device-tree-compiler
 
-      - name: Create build directory
-        run: mkdir -p /tmp/uboot-build
-
-      - name: Clone U-Boot source
-        run: |
-          cd /tmp/uboot-build
-          git clone --depth 1 --branch ${{ env.UBOOT_VERSION }} https://github.com/u-boot/u-boot.git
-          echo "Cloned U-Boot version: ${{ env.UBOOT_VERSION }}"
-
       - name: Configure U-Boot for Raspberry Pi 4 ARM64
+        working-directory: ${{ env.UBOOT_DIR }}
         run: |
-          cd /tmp/uboot-build/u-boot
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0002-rpi-add-NVMe-to-boot-order.patch
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0003-Revert-nvme-Correct-the-prps-per-page-calculation-me.patch
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0004-usb-xhci-brcm-Make-driver-compatible-with-downstream.patch
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0005-nvme-improve-readability-of-nvme_setup_prps.patch
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0006-nvme-Use-pointer-for-CPU-addressed-buffers.patch
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0007-nvme-translate-virtual-addresses-into-the-bus-s-addr.patch
+          patch -p1 < ${{ github.workspace }}/smee/internal/firmware/patches/0008-enable-nvme-and-fixup-efi-boot.patch
+
           make CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
 
-      - name: Add custom boot configuration
-        run: |
-          cd /tmp/uboot-build/u-boot
-          echo 'CONFIG_BOOTCOMMAND="dhcp; pxe get; pxe boot"' >> .config
-          echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+      # - name: Add custom boot configuration
+      #   working-directory: ${{ env.UBOOT_DIR }}
+      #   run: |
+      #     echo 'CONFIG_BOOTCOMMAND="dhcp; pxe get; pxe boot"' >> .config
+      #     echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
 
       - name: Build U-Boot
+        working-directory: ${{ env.UBOOT_DIR }}
         run: |
-          cd /tmp/uboot-build/u-boot
-          make CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc)
+          make CROSS_COMPILE=aarch64-linux-gnu- -j $(nproc) HOSTLDLIBS_mkimage="-lssl -lcrypto"
           ls -la u-boot.bin
 
       - name: Check if u-boot.bin changed
         id: check_changes
+        working-directory: ${{ env.UBOOT_DIR }}
         run: |
-          cd /tmp/uboot-build/u-boot
-
           # Create output directory
           mkdir -p ${{ github.workspace }}/smee/internal/firmware
 
