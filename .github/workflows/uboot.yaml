@@ -70,7 +70,7 @@ jobs:
       - name: Add custom boot configuration
         working-directory: ${{ env.UBOOT_DIR }}
         run: |
-          echo 'CONFIG_BOOTCOMMAND="setenv bootfile snp-arm64.efi; setenv autoload no; echo Attempting network boot via DHCP...; if dhcp; then echo DHCP successful, downloading boot file...; if tftp ${loadaddr} ${bootfile}; then echo Download successful, attempting EFI boot from network...; bootefi ${loadaddr}; fi; fi; echo Network boot failed or unavailable; echo Attempting EFI boot from disk...; if usb start; then if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootaa64.efi; then bootefi ${kernel_addr_r}; fi; if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootx64.efi; then bootefi ${kernel_addr_r}; fi; fi; echo All boot attempts failed"' >> .config
+          echo 'CONFIG_BOOTCOMMAND="setenv autoload no; echo Attempting network boot via DHCP...; if dhcp; then echo DHCP successful, downloading boot file...; if tftp ${loadaddr} ${bootfile}; then echo Download successful, attempting EFI boot from network...; bootefi ${loadaddr}; fi; fi; echo Network boot failed or unavailable; echo Attempting EFI boot from disk...; if usb start; then if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootaa64.efi; then bootefi ${kernel_addr_r}; fi; if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootx64.efi; then bootefi ${kernel_addr_r}; fi; fi; echo All boot attempts failed"' >> .config
           echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
 
       - name: Build U-Boot
