@@ -353,10 +353,5 @@ spec:
             - name: script
               mountPath: "/script"
         securityContext:
-          privileged: false
-          capabilities:
-            add:
-              - NET_ADMIN
-              - NET_RAW
-              - SYS_ADMIN
+          privileged: true
       {{- end }}
