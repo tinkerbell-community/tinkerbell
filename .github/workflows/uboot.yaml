@@ -67,11 +67,11 @@ jobs:
 
           make CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
 
-      # - name: Add custom boot configuration
-      #   working-directory: ${{ env.UBOOT_DIR }}
-      #   run: |
-      #     echo 'CONFIG_BOOTCOMMAND="dhcp; pxe get; pxe boot"' >> .config
-      #     echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+      - name: Add custom boot configuration
+        working-directory: ${{ env.UBOOT_DIR }}
+        run: |
+          echo 'CONFIG_BOOTCOMMAND="echo Attempting network boot via DHCP...; if dhcp; then echo DHCP successful, attempting EFI boot from network...; bootefi ${kernel_addr_r}; fi; echo Network boot failed or unavailable; echo Attempting EFI boot from disk...; if usb start; then if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootaa64.efi; then bootefi ${kernel_addr_r}; fi; if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootx64.efi; then bootefi ${kernel_addr_r}; fi; fi; echo All boot attempts failed"' >> .config
+          echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
 
       - name: Build U-Boot
         working-directory: ${{ env.UBOOT_DIR }}
