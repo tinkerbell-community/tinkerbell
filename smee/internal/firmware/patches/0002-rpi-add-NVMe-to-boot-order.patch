@@ -20,6 +20,6 @@ index 30228285ed..89f6c5a839 100644
  ramdisk_addr_r=0x05700000
  
 -boot_targets=mmc usb pxe dhcp
-+boot_targets=mmc pxe nvme usb dhcp
++boot_targets=mmc nvme usb pxe dhcp
 -- 
 2.43.0
