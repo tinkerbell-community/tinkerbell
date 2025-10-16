@@ -67,13 +67,13 @@ jobs:
 
           make CROSS_COMPILE=aarch64-linux-gnu- rpi_arm64_defconfig
 
-      - name: Add custom boot configuration
-        working-directory: ${{ env.UBOOT_DIR }}
-        run: |
-          echo 'CONFIG_BOOTCOMMAND="setenv autoload no; setenv localcmd \"echo Attempting EFI boot from disk...; if usb start; then if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootaa64.efi; then bootefi ${kernel_addr_r}; fi; if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootx64.efi; then bootefi ${kernel_addr_r}; fi; fi; echo All boot attempts failed\"; echo Attempting network boot via DHCP/PXE...; if dhcp; then if pxe get; then pxe boot; fi; fi; run localcmd"' >> .config
-          echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
-          echo 'CONFIG_BOOTMETH_EXTLINUX=y' >> .config
-          echo 'CONFIG_BOOTMETH_EXTLINUX_PXE=y' >> .config
+      # - name: Add custom boot configuration
+      #   working-directory: ${{ env.UBOOT_DIR }}
+      #   run: |
+      #     echo 'CONFIG_BOOTCOMMAND="setenv autoload no; setenv localcmd \"echo Attempting EFI boot from disk...; if usb start; then if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootaa64.efi; then bootefi ${kernel_addr_r}; fi; if load usb 0:1 ${kernel_addr_r} /EFI/BOOT/bootx64.efi; then bootefi ${kernel_addr_r}; fi; fi; echo All boot attempts failed\"; echo Attempting network boot via DHCP/PXE...; if dhcp; then if pxe get; then pxe boot; fi; fi; run localcmd"' >> .config
+      #     echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+      #     echo 'CONFIG_BOOTMETH_EXTLINUX=y' >> .config
+      #     echo 'CONFIG_BOOTMETH_EXTLINUX_PXE=y' >> .config
 
       - name: Build U-Boot
         working-directory: ${{ env.UBOOT_DIR }}
