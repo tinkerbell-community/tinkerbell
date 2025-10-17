@@ -1,132 +1,138 @@
 package binary
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/netip"
 	"os"
+	"path"
+	"path/filepath"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/pin/tftp/v3"
-	"github.com/tinkerbell/tinkerbell/pkg/data"
-	tftpmux "github.com/tinkerbell/tinkerbell/smee/internal/tftp"
-	"github.com/tinkerbell/tinkerbell/smee/internal/tftp/pxelinux"
+	binary "github.com/tinkerbell/tinkerbell/smee/internal/ipxe/binary/file"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
-
-// BackendReader is an interface that defines the method to read data from a backend.
-type BackendReader interface {
-	// Read data (from a backend) based on a mac address
-	// and return DHCP headers and options, including netboot info.
-	GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, error)
-}
 
 // TFTP config settings.
 type TFTP struct {
-	// Backend is the backend to use for getting DHCP data.
-	Backend BackendReader
-
 	Log                  logr.Logger
 	EnableTFTPSinglePort bool
 	Addr                 netip.AddrPort
 	Timeout              time.Duration
 	Patch                []byte
 	BlockSize            int
-	Anticipate           uint
-
-	// CacheDir is the directory where hook images are stored and served from
-	CacheDir string
-
-	// Tinkerbell server configuration for cmdline.txt generation
-	PublicSyslogFQDN      string // Public syslog FQDN
-	TinkServerTLS         bool   // TLS enabled for Tink server
-	TinkServerInsecureTLS bool   // Allow insecure TLS
-	TinkServerGRPCAddr    string // Tink server gRPC address
-	ExtraKernelParams     []string
 }
 
-// ListenAndServe will listen and serve files over TFTP using the shared handler system.
+// ListenAndServe will listen and serve iPXE binaries over TFTP.
 func (h *TFTP) ListenAndServe(ctx context.Context) error {
-	// Create the shared TFTP server
-	mux := tftpmux.NewServeMux(h.Log)
-
-	// Register iPXE binary handler
-	binaryConfig := Config{
-		Patch: h.Patch,
+	a, err := net.ResolveUDPAddr("udp", h.Addr.String())
+	if err != nil {
+		return err
 	}
-	binaryHandler := NewHandler(binaryConfig, h.Log)
-	// Match common iPXE binary names - this should be more specific based on actual binary names
-	mux.HandleFunc(`\.(efi|kpxe|pxe)$`, binaryHandler)
-
-	// Register PXELinux handler for pxelinux.cfg files
-	pxeConfig := pxelinux.Config{
-		PublicSyslogFQDN:      h.PublicSyslogFQDN,
-		TinkServerTLS:         h.TinkServerTLS,
-		TinkServerInsecureTLS: h.TinkServerInsecureTLS,
-		TinkServerGRPCAddr:    h.TinkServerGRPCAddr,
-		ExtraKernelParams:     h.ExtraKernelParams,
+	conn, err := net.ListenUDP("udp", a)
+	if err != nil {
+		return err
 	}
-	pxeHandler := pxelinux.NewHandler(h.Backend, pxeConfig, h.Log)
-	mux.HandleFunc(`^pxelinux\.cfg/`, pxeHandler)
 
-	// Create the underlying TFTP server
-	server := tftp.NewServer(mux.ServeTFTP, h.HandleWrite)
-	server.SetTimeout(h.Timeout)
-	server.SetBlockSize(h.BlockSize)
-	server.SetAnticipate(h.Anticipate)
-
-	// Add logging middleware
-	loggingMiddleware := &tftpLoggingHook{log: h.Log}
-	server.SetHook(loggingMiddleware)
-
+	ts := tftp.NewServer(h.HandleRead, h.HandleWrite)
+	ts.SetTimeout(h.Timeout)
+	ts.SetBlockSize(h.BlockSize)
 	if h.EnableTFTPSinglePort {
-		server.EnableSinglePort()
+		ts.EnableSinglePort()
 	}
 
 	go func() {
 		<-ctx.Done()
-		server.Shutdown()
+		conn.Close()
+		ts.Shutdown()
 	}()
 
-	return server.ListenAndServe(h.Addr.String())
+	return ts.Serve(conn)
+}
+
+// HandleRead handlers TFTP GET requests. The function signature satisfies the tftp.Server.readHandler parameter type.
+func (h TFTP) HandleRead(filename string, rf io.ReaderFrom) error {
+	client := net.UDPAddr{}
+	if rpi, ok := rf.(tftp.OutgoingTransfer); ok {
+		client = rpi.RemoteAddr()
+	}
+
+	full := filename
+	filename = path.Base(filename)
+	log := h.Log.WithValues("event", "get", "filename", filename, "uri", full, "client", client)
+
+	// clients can send traceparent over TFTP by appending the traceparent string
+	// to the end of the filename they really want
+	longfile := filename // hang onto this to report in traces
+	ctx, shortfile, err := extractTraceparentFromFilename(context.Background(), filename)
+	if err != nil {
+		log.Error(err, "failed to extract traceparent from filename")
+	}
+	if shortfile != filename {
+		log = log.WithValues("shortfile", shortfile)
+		log.Info("traceparent found in filename", "filenameWithTraceparent", longfile)
+		filename = shortfile
+	}
+	// If a mac address is provided (0a:00:27:00:00:02/snp.efi), parse and log it.
+	// Mac address is optional.
+	optionalMac, _ := net.ParseMAC(path.Dir(full))
+	log = log.WithValues("macFromURI", optionalMac.String())
+
+	tracer := otel.Tracer("TFTP")
+	_, span := tracer.Start(ctx, "TFTP get",
+		trace.WithSpanKind(trace.SpanKindServer),
+		trace.WithAttributes(attribute.String("filename", filename)),
+		trace.WithAttributes(attribute.String("requested-filename", longfile)),
+		trace.WithAttributes(attribute.String("ip", client.IP.String())),
+		trace.WithAttributes(attribute.String("mac", optionalMac.String())),
+	)
+	defer span.End()
+
+	content, ok := binary.Files[filepath.Base(shortfile)]
+	if !ok {
+		err := fmt.Errorf("file [%v] unknown: %w", filepath.Base(shortfile), os.ErrNotExist)
+		log.Error(err, "file unknown")
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	content, err = binary.Patch(content, h.Patch)
+	if err != nil {
+		log.Error(err, "failed to patch binary")
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	ct := bytes.NewReader(content)
+	b, err := rf.ReadFrom(ct)
+	if err != nil {
+		log.Error(err, "file serve failed", "b", b, "contentSize", len(content))
+		span.SetStatus(codes.Error, err.Error())
+
+		return err
+	}
+	log.Info("file served", "bytesSent", b, "contentSize", len(content))
+	span.SetStatus(codes.Ok, filename)
+
+	return nil
 }
 
 // HandleWrite handles TFTP PUT requests. It will always return an error. This library does not support PUT.
 func (h TFTP) HandleWrite(filename string, wt io.WriterTo) error {
 	err := fmt.Errorf("access_violation: %w", os.ErrPermission)
-	h.Log.Error(err, "tftp write request rejected", "filename", filename)
+	client := net.UDPAddr{}
+	if rpi, ok := wt.(tftp.OutgoingTransfer); ok {
+		client = rpi.RemoteAddr()
+	}
+	h.Log.Error(err, "client", client, "event", "put", "filename", filename)
+
 	return err
-}
-
-// tftpLoggingHook implements tftp.Hook interface for logging TFTP transfer statistics.
-type tftpLoggingHook struct {
-	log logr.Logger
-}
-
-// OnSuccess logs successful TFTP transfers.
-func (h *tftpLoggingHook) OnSuccess(stats tftp.TransferStats) {
-	h.log.Info("tftp transfer successful",
-		"filename", stats.Filename,
-		"remoteAddr", stats.RemoteAddr.String(),
-		"duration", stats.Duration.String(),
-		"datagramsSent", stats.DatagramsSent,
-		"datagramsAcked", stats.DatagramsAcked,
-		"mode", stats.Mode,
-		"tid", stats.Tid,
-	)
-}
-
-// OnFailure logs failed TFTP transfers.
-func (h *tftpLoggingHook) OnFailure(stats tftp.TransferStats, err error) {
-	h.log.Error(err, "tftp transfer failed",
-		"filename", stats.Filename,
-		"remoteAddr", stats.RemoteAddr.String(),
-		"duration", stats.Duration.String(),
-		"datagramsSent", stats.DatagramsSent,
-		"datagramsAcked", stats.DatagramsAcked,
-		"mode", stats.Mode,
-		"tid", stats.Tid,
-	)
 }

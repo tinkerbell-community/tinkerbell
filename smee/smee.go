@@ -364,20 +364,12 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 			return fmt.Errorf("invalid TFTP bind address: IP: %v, Port: %v", addrPort.Addr(), addrPort.Port())
 		}
 		tftpHandler := binary.TFTP{
-			Backend:               c.Backend,
-			Log:                   log,
-			EnableTFTPSinglePort:  true,
-			Addr:                  addrPort,
-			Timeout:               c.TFTP.Timeout,
-			Patch:                 []byte(c.IPXE.EmbeddedScriptPatch),
-			BlockSize:             c.TFTP.BlockSize,
-			Anticipate:            c.TFTP.Anticipate,
-			CacheDir:              c.TFTP.CacheDir,
-			PublicSyslogFQDN:      c.DHCP.SyslogIP.String(),
-			TinkServerTLS:         c.TinkServer.UseTLS,
-			TinkServerInsecureTLS: c.TinkServer.InsecureTLS,
-			TinkServerGRPCAddr:    c.TinkServer.AddrPort,
-			ExtraKernelParams:     c.IPXE.HTTPScriptServer.ExtraKernelArgs,
+			Log:                  log,
+			EnableTFTPSinglePort: true,
+			Addr:                 addrPort,
+			Timeout:              c.TFTP.Timeout,
+			Patch:                []byte(c.IPXE.EmbeddedScriptPatch),
+			BlockSize:            c.TFTP.BlockSize,
 		}
 
 		// start the ipxe binary tftp server
@@ -414,6 +406,12 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 
 		// serve ipxe script from the "/" URI.
 		handlers[IPXEScriptURI] = jh.HandlerFunc()
+
+		// serve pxelinux configs for U-Boot from the same URI.
+		// This allows U-Boot clients to fetch configs via HTTP at paths like:
+		// /ipxe/script/pxelinux.cfg/01-aa-bb-cc-dd-ee-ff
+		handlers[IPXEScriptURI+"pxelinux.cfg/"] = jh.HandlerFuncPXELinux()
+		handlers[IPXEScriptURI+"pxelinux.cfg/default"] = jh.HandlerFuncPXELinuxDefault()
 	}
 
 	if c.ISO.Enabled {

@@ -348,14 +348,16 @@ func (i Info) Bootfile(customUC UserClass, ipxeScript, ipxeHTTPBinServer *url.UR
 			paths = append([]string{macAddrFormat(i.Mac, i.MacAddrFormat)}, paths...)
 		}
 		bootfile = t.JoinPath(paths...).String()
-	case i.Arch == iana.UBOOT_ARM64 || i.Arch == iana.Arch(41): // U-Boot clients use PXELinux configs
-		if i.Mac != nil {
-			// U-Boot PXE boot looks for pxelinux.cfg/01-${mac} where mac is hyphen-delimited
-			// This matches the existing PXELinux handler which generates configs based on MAC address
-			macStr := dashNotation(i.Mac)
-			bootfile = "pxelinux.cfg/01-" + macStr
-		} else {
-			bootfile = "pxelinux.cfg/default"
+	case i.Arch == iana.UBOOT_ARM64 || i.Arch == iana.Arch(41): // U-Boot clients use PXELinux configs served over HTTP
+		if ipxeScript != nil {
+			// U-Boot PXE boot: serve HTTP URL to pxelinux.cfg
+			// Path format: /pxelinux.cfg/01-${mac} where mac is hyphen-delimited
+			if i.Mac != nil {
+				macStr := dashNotation(i.Mac)
+				bootfile = ipxeScript.ResolveReference(&url.URL{Path: "pxelinux.cfg/01-" + macStr}).String()
+			} else {
+				bootfile = ipxeScript.ResolveReference(&url.URL{Path: "pxelinux.cfg/default"}).String()
+			}
 		}
 	default:
 		if i.IPXEBinary != "" {
