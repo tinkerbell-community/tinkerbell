@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
+	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
@@ -73,6 +74,9 @@ type info struct {
 }
 
 // pxeTemplate is the PXE extlinux.conf script template used to boot a machine via TFTP.
+// IMPORTANT: U-Boot's PXE implementation requires RELATIVE paths for kernel/initrd.
+// U-Boot will fetch these files using the same protocol (TFTP) that was used to fetch this config.
+// The paths are relative to the TFTP server root directory.
 var pxeTemplate = `
 default {{ if .AllowNetboot }}deploy{{ else }}local{{ end }}
 
@@ -214,15 +218,21 @@ func generateFile(span trace.Span, hw info, config Config) ([]byte, error) {
 		WorkerID:              wID,
 	}
 
-	if hw.OSIE.Kernel != "" {
+	switch {
+	case hw.OSIE.Kernel != "":
 		hook.Kernel = hw.OSIE.Kernel
-	} else {
+	case dhcp.IsRaspberryPI(hw.MACAddress):
+		hook.Kernel = "vmlinuz-armbian-bcm2711-current"
+	default:
 		hook.Kernel = "vmlinuz-" + arch
 	}
 
-	if hw.OSIE.Initrd != "" {
+	switch {
+	case hw.OSIE.Initrd != "":
 		hook.Initrd = hw.OSIE.Initrd
-	} else {
+	case dhcp.IsRaspberryPI(hw.MACAddress):
+		hook.Initrd = "initramfs-armbian-bcm2711-current"
+	default:
 		hook.Initrd = "initramfs-" + arch
 	}
 
