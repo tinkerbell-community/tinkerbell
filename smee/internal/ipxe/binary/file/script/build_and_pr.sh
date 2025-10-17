@@ -15,6 +15,7 @@ tracked_files=(
     "./script/ipxe-customizations/common.h"
     "./script/embed.ipxe"
     "./script/ipxe.commit"
+    "./script/shell.nix"
     "./ipxe.efi"
     "./snp-arm64.efi"
     "./snp-x86_64.efi"
@@ -91,7 +92,7 @@ function create_checksums() {
 # push a new branch to GitHub
 function push_new_branch_to_github() {
     local branch="${1}"
-    local repository="${2:-tinkerbell/tinkerbell}"
+    local repository="${2:-${GITHUB_REPOSITORY:-tinkerbell/tinkerbell}}"
     local git_actor="${3:-github-actions[bot]}"
     local token="${4:-${GITHUB_TOKEN}}"
 

@@ -80,7 +80,9 @@ func ArchToBootFile() map[iana.Arch]constant.IPXEBinary {
 		iana.EFI_ARM32_HTTP:    constant.IPXEBinarySNPARM64,
 		iana.EFI_ARM64_HTTP:    constant.IPXEBinarySNPARM64,
 		iana.INTEL_X86PC_HTTP:  constant.IPXEBinaryUndionlyKPXE,
-		iana.Arch(41):          constant.IPXEBinarySNPARM64, // arm rpiboot (0x29): https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml#processor-architecture
+		// U-Boot clients use PXELinux configs, not binaries
+		// The bootfile will be set to pxelinux.cfg/01-${mac} in Bootfile() method
+		// iana.UBOOT_ARM64 and iana.Arch(41) are handled specially in Bootfile()
 	}
 }
 
@@ -346,6 +348,17 @@ func (i Info) Bootfile(customUC UserClass, ipxeScript, ipxeHTTPBinServer *url.UR
 			paths = append([]string{macAddrFormat(i.Mac, i.MacAddrFormat)}, paths...)
 		}
 		bootfile = t.JoinPath(paths...).String()
+	case i.Arch == iana.UBOOT_ARM64 || i.Arch == iana.Arch(41): // U-Boot clients use PXELinux configs served over HTTP
+		if ipxeScript != nil {
+			// U-Boot PXE boot: serve HTTP URL to pxelinux.cfg
+			// Path format: /pxelinux.cfg/01-${mac} where mac is hyphen-delimited
+			if i.Mac != nil {
+				macStr := dashNotation(i.Mac)
+				bootfile = ipxeScript.ResolveReference(&url.URL{Path: "pxelinux.cfg/01-" + macStr}).String()
+			} else {
+				bootfile = ipxeScript.ResolveReference(&url.URL{Path: "pxelinux.cfg/default"}).String()
+			}
+		}
 	default:
 		if i.IPXEBinary != "" {
 			bootfile = i.IPXEBinary
