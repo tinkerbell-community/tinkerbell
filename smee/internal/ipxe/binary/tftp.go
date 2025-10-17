@@ -13,8 +13,6 @@ import (
 	"github.com/pin/tftp/v3"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	tftpmux "github.com/tinkerbell/tinkerbell/smee/internal/tftp"
-	"github.com/tinkerbell/tinkerbell/smee/internal/tftp/firmware"
-	tftpHook "github.com/tinkerbell/tinkerbell/smee/internal/tftp/hook"
 	"github.com/tinkerbell/tinkerbell/smee/internal/tftp/pxelinux"
 )
 
@@ -72,17 +70,6 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 	}
 	pxeHandler := pxelinux.NewHandler(h.Backend, pxeConfig, h.Log)
 	mux.HandleFunc(`^pxelinux\.cfg/`, pxeHandler)
-
-	// Register hook file handler for initramfs and vmlinuz files
-	hookConfig := tftpHook.Config{
-		CacheDir: h.CacheDir,
-	}
-	hookHandler := tftpHook.NewHandler(hookConfig, h.Log)
-	mux.HandleFunc(`^(initramfs-|vmlinuz-)`, hookHandler)
-
-	// Register firmware handler as catch-all
-	firmwareHandler := firmware.NewHandler(h.Log)
-	mux.HandleFunc(`.*`, firmwareHandler) // Catch-all pattern
 
 	// Create the underlying TFTP server
 	server := tftp.NewServer(mux.ServeTFTP, h.HandleWrite)

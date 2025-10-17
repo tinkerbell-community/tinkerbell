@@ -15,6 +15,7 @@ tracked_files=(
     "./script/ipxe-customizations/common.h"
     "./script/embed.ipxe"
     "./script/ipxe.commit"
+    "./script/shell.nix"
     "./ipxe.efi"
     "./snp-arm64.efi"
     "./snp-x86_64.efi"
