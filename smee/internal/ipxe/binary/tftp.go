@@ -90,6 +90,10 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 	server.SetBlockSize(h.BlockSize)
 	server.SetAnticipate(h.Anticipate)
 
+	// Add logging middleware
+	loggingMiddleware := &tftpLoggingHook{log: h.Log}
+	server.SetHook(loggingMiddleware)
+
 	if h.EnableTFTPSinglePort {
 		server.EnableSinglePort()
 	}
@@ -107,4 +111,35 @@ func (h TFTP) HandleWrite(filename string, wt io.WriterTo) error {
 	err := fmt.Errorf("access_violation: %w", os.ErrPermission)
 	h.Log.Error(err, "tftp write request rejected", "filename", filename)
 	return err
+}
+
+// tftpLoggingHook implements tftp.Hook interface for logging TFTP transfer statistics.
+type tftpLoggingHook struct {
+	log logr.Logger
+}
+
+// OnSuccess logs successful TFTP transfers.
+func (h *tftpLoggingHook) OnSuccess(stats tftp.TransferStats) {
+	h.log.Info("tftp transfer successful",
+		"filename", stats.Filename,
+		"remoteAddr", stats.RemoteAddr.String(),
+		"duration", stats.Duration.String(),
+		"datagramsSent", stats.DatagramsSent,
+		"datagramsAcked", stats.DatagramsAcked,
+		"mode", stats.Mode,
+		"tid", stats.Tid,
+	)
+}
+
+// OnFailure logs failed TFTP transfers.
+func (h *tftpLoggingHook) OnFailure(stats tftp.TransferStats, err error) {
+	h.log.Error(err, "tftp transfer failed",
+		"filename", stats.Filename,
+		"remoteAddr", stats.RemoteAddr.String(),
+		"duration", stats.Duration.String(),
+		"datagramsSent", stats.DatagramsSent,
+		"datagramsAcked", stats.DatagramsAcked,
+		"mode", stats.Mode,
+		"tid", stats.Tid,
+	)
 }
