@@ -1,7 +1,7 @@
 defaultPlatforms:
   - linux/arm64
   - linux/amd64
-defaultBaseImage: docker.io/chainguard/static:latest
+defaultBaseImage: ghcr.io/tinkerbell-community/hook-images/ipmitool:latest
 builds:
   - dir: ./cmd/tinkerbell
     main: .
