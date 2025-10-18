@@ -1,10 +1,7 @@
-FROM --platform=$TARGETOS/$TARGETARCH alpine:3.22
+FROM --platform=$TARGETOS/$TARGETARCH ghcr.io/tinkerbell-community/hook-images/ipmitool:latest
 
 ARG TARGETOS
 ARG TARGETARCH
-
-# Install ipmitool needed for bmclib.
-RUN apk add --upgrade ipmitool=1.8.19-r1
 
 COPY out/tinkerbell-${TARGETOS}-${TARGETARCH} /tinkerbell
 ENTRYPOINT [ "/tinkerbell" ]

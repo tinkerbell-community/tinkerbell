@@ -13,7 +13,7 @@ before:
     - go mod tidy
 
 builds:
-  - id: build
+  - id: tinkerbell
     env: ["CGO_ENABLED=0"]
     main: ./cmd/tinkerbell
     binary: "{{ .Env.BINARY }}"
@@ -38,7 +38,7 @@ snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
 kos:
-  - build: build
+  - build: tinkerbell
     repositories:
       - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
     tags:
