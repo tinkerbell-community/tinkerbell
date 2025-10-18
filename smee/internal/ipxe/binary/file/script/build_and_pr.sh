@@ -36,7 +36,7 @@ binaries=(
 
 # check for the GITHUB_TOKEN environment variable
 function check_github_token() {
-  if [ -z "${GITHUB_TOKEN}" ]; then
+  if [[ -z "${GITHUB_TOKEN}" ]]; then
     echo "GITHUB_TOKEN is not set"
     exit 1
   fi
@@ -148,7 +148,7 @@ function main() {
     local branch="$2"
     local sha_file="$3"
 
-    if [ "${task}" == "build" ]; then
+    if [[ "${task}" == "build" ]]; then
         # Build iPXE binaries
         check_github_token
         changes_detected "${sha_file}"
@@ -158,16 +158,16 @@ function main() {
         clean_iPXE
         build_iPXE
         create_checksums "${sha_file}"
-        if [ -n "${GITHUB_OUTPUT:-}" ]; then
-            echo "new_binaries_built=true" >> "$GITHUB_OUTPUT"
-            echo "new_branch_name=${branch}" >> "$GITHUB_OUTPUT"
+        if [[ -n "${GITHUB_OUTPUT:-}" ]]; then
+            echo "new_binaries_built=true" >> "${GITHUB_OUTPUT}"
+            echo "new_branch_name=${branch}" >> "${GITHUB_OUTPUT}"
         else
             echo "not running in GitHub Actions"
         fi
         return 0
     fi
 
-    if [ "${task}" == "pr" ]; then
+    if [[ "${task}" == "pr" ]]; then
         echo "Creating pull request"
         # Create pull request
         check_github_token

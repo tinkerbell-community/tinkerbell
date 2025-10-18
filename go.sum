@@ -750,6 +750,8 @@ k8s.io/pod-security-admission v0.33.4 h1:adSwY7a/Q4Eoj+uCUfav90xRe6mB8waF0HAZ4gZ
 k8s.io/pod-security-admission v0.33.4/go.mod h1:K+4JaqBz5yqE7TXf3g5zEiBLcu9RdW2BjTWydFEror4=
 k8s.io/utils v0.0.0-20241210054802-24370beab758 h1:sdbE21q2nlQtFh65saZY+rRM6x6aJJI8IUa1AmH/qa0=
 k8s.io/utils v0.0.0-20241210054802-24370beab758/go.mod h1:OLgZIPagt7ERELqWJFomSt595RzquPNLL48iOWgYOg0=
+oras.land/oras-go/v2 v2.6.0 h1:X4ELRsiGkrbeox69+9tzTu492FMUu7zJQW6eJU+I2oc=
+oras.land/oras-go/v2 v2.6.0/go.mod h1:magiQDfG6H1O9APp+rOsvCPcW1GD2MM7vgnKY0Y+u1o=
 quamina.net/go/quamina v1.5.2-0.20250207005432-0526acc321a8 h1:dtQDLuBmRd2XjA12bnnhs7wYQ+plIx/rQOf5ybNZsvg=
 quamina.net/go/quamina v1.5.2-0.20250207005432-0526acc321a8/go.mod h1:tYJ2Xjt7JC+e40J/UkDYTzYtPpdnDb2yKYW/+JRas3Q=
 sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.31.2 h1:jpcvIRr3GLoUoEKRkHKSmGjxb6lWwrBlJsXc+eUYQHM=

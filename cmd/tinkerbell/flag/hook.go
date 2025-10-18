@@ -13,8 +13,10 @@ type HookConfig struct {
 
 func RegisterHookFlags(fs *Set, hc *HookConfig) {
 	fs.Register(HookImagePath, ffval.NewValueDefault(&hc.Config.ImagePath, hc.Config.ImagePath))
-	fs.Register(HookVersion, ffval.NewValueDefault(&hc.Config.Version, hc.Config.Version))
-	fs.Register(HookDownloadTimeout, ffval.NewValueDefault(&hc.Config.DownloadTimeout, hc.Config.DownloadTimeout))
+	fs.Register(HookOCIRegistry, ffval.NewValueDefault(&hc.Config.OCIRegistry, hc.Config.OCIRegistry))
+	fs.Register(HookOCIRepository, ffval.NewValueDefault(&hc.Config.OCIRepository, hc.Config.OCIRepository))
+	fs.Register(HookOCIReference, ffval.NewValueDefault(&hc.Config.OCIReference, hc.Config.OCIReference))
+	fs.Register(HookPullTimeout, ffval.NewValueDefault(&hc.Config.PullTimeout, hc.Config.PullTimeout))
 	fs.Register(HookHTTPAddr, &ntip.AddrPort{AddrPort: &hc.Config.HTTPAddr})
 	fs.Register(HookEnableHTTPServer, ffval.NewValueDefault(&hc.Config.EnableHTTPServer, hc.Config.EnableHTTPServer))
 	fs.Register(HookLogLevel, ffval.NewValueDefault(&hc.LogLevel, hc.LogLevel))
@@ -25,14 +27,24 @@ var HookImagePath = Config{
 	Usage: "[hook] directory path where hook images are stored",
 }
 
-var HookVersion = Config{
-	Name:  "hook-version",
-	Usage: "[hook] hook version to download (latest, v1.2.3, etc.)",
+var HookOCIRegistry = Config{
+	Name:  "hook-oci-registry",
+	Usage: "[hook] OCI registry URL (e.g., ghcr.io, docker.io)",
 }
 
-var HookDownloadTimeout = Config{
-	Name:  "hook-download-timeout",
-	Usage: "[hook] timeout for downloading hook archives",
+var HookOCIRepository = Config{
+	Name:  "hook-oci-repository",
+	Usage: "[hook] OCI repository path (e.g., tinkerbell/hook)",
+}
+
+var HookOCIReference = Config{
+	Name:  "hook-oci-reference",
+	Usage: "[hook] OCI image reference - tag or digest (e.g., latest, v1.2.3, sha256:...)",
+}
+
+var HookPullTimeout = Config{
+	Name:  "hook-pull-timeout",
+	Usage: "[hook] timeout for pulling OCI images",
 }
 
 var HookHTTPAddr = Config{

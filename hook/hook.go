@@ -1,30 +1,33 @@
 package hook
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"context"
 	"fmt"
-	"io"
 	"net/http"
 	"net/netip"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/go-logr/logr"
+	"oras.land/oras-go/v2"
+	"oras.land/oras-go/v2/content/file"
+	"oras.land/oras-go/v2/registry/remote"
+	"oras.land/oras-go/v2/registry/remote/auth"
 )
 
 // Config holds the configuration for the hook service
 type Config struct {
 	// ImagePath is the directory where hook images are stored
 	ImagePath string
-	// Version specifies the hook version to download (e.g., "latest", "v1.2.3")
-	Version string
-	// DownloadTimeout for downloading hook archives
-	DownloadTimeout time.Duration
+	// OCIRegistry is the OCI registry URL (e.g., "ghcr.io")
+	OCIRegistry string
+	// OCIRepository is the repository path (e.g., "tinkerbell/hook")
+	OCIRepository string
+	// OCIReference is the image tag or digest (e.g., "latest", "v1.2.3", "sha256:...")
+	OCIReference string
+	// PullTimeout for pulling OCI images
+	PullTimeout time.Duration
 	// HTTPAddr is the address to bind the HTTP server to
 	HTTPAddr netip.AddrPort
 	// EnableHTTPServer controls whether to start the HTTP file server
@@ -40,15 +43,27 @@ func WithImagePath(path string) Option {
 	}
 }
 
-func WithVersion(version string) Option {
+func WithOCIRegistry(registry string) Option {
 	return func(c *Config) {
-		c.Version = version
+		c.OCIRegistry = registry
 	}
 }
 
-func WithDownloadTimeout(timeout time.Duration) Option {
+func WithOCIRepository(repository string) Option {
 	return func(c *Config) {
-		c.DownloadTimeout = timeout
+		c.OCIRepository = repository
+	}
+}
+
+func WithOCIReference(reference string) Option {
+	return func(c *Config) {
+		c.OCIReference = reference
+	}
+}
+
+func WithPullTimeout(timeout time.Duration) Option {
+	return func(c *Config) {
+		c.PullTimeout = timeout
 	}
 }
 
@@ -68,8 +83,10 @@ func WithEnableHTTPServer(enable bool) Option {
 func NewConfig(opts ...Option) *Config {
 	defaults := &Config{
 		ImagePath:        "/var/lib/hook",
-		Version:          "latest",
-		DownloadTimeout:  10 * time.Minute,
+		OCIRegistry:      "ghcr.io",
+		OCIRepository:    "tinkerbell/hook",
+		OCIReference:     "latest",
+		PullTimeout:      10 * time.Minute,
 		EnableHTTPServer: true,
 	}
 
@@ -82,38 +99,22 @@ func NewConfig(opts ...Option) *Config {
 
 // service manages hook image downloads and serving
 type service struct {
-	config       *Config
-	log          logr.Logger
-	downloadOnce sync.Once
-	mutex        sync.RWMutex
-	ready        bool
-	httpServer   *http.Server
-}
-
-// RequiredFiles lists the required files for each architecture
-var RequiredFiles = map[string][]string{
-	"x86_64": {"initramfs-x86_64", "vmlinuz-x86_64"},
-	"arm64":  {"initramfs-arm64", "vmlinuz-arm64"},
-}
-
-// ArchitectureMap maps architectures to their download URL suffixes and file suffixes
-var ArchitectureMap = map[string]struct {
-	URLSuffix  string
-	FileSuffix string
-}{
-	"x86_64": {
-		URLSuffix:  "latest-lts-x86_64",
-		FileSuffix: "latest-lts-x86_64",
-	},
-	"arm64": {
-		URLSuffix:  "armbian-bcm2711-current",
-		FileSuffix: "armbian-bcm2711-current",
-	},
+	config     *Config
+	log        logr.Logger
+	pullOnce   sync.Once
+	mutex      sync.RWMutex
+	ready      bool
+	httpServer *http.Server
 }
 
 // Start initializes and starts the hook service
 func (c *Config) Start(ctx context.Context, log logr.Logger) error {
-	log.Info("starting hook service", "version", c.Version, "imagePath", c.ImagePath, "httpEnabled", c.EnableHTTPServer)
+	log.Info("starting hook service",
+		"ociRegistry", c.OCIRegistry,
+		"ociRepository", c.OCIRepository,
+		"ociReference", c.OCIReference,
+		"imagePath", c.ImagePath,
+		"httpEnabled", c.EnableHTTPServer)
 
 	svc := &service{
 		config: c,
@@ -125,23 +126,25 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 		return fmt.Errorf("failed to create image directory: %w", err)
 	}
 
-	// Check if required files exist
-	if svc.allFilesExist() {
-		log.Info("all required hook files exist, skipping download")
+	// Check if ImagePath has any files
+	if svc.imagePathHasFiles() {
+		log.Info("image path contains files, skipping OCI pull")
 		svc.ready = true
 	} else {
-		log.Info("required hook files missing, will download all architectures in background")
+		log.Info("image path is empty, will pull OCI image in background")
 	}
 
-	// Start background download
+	// Start background pull if needed
 	go func() {
-		if err := svc.downloadAndExtractHook(ctx); err != nil {
-			log.Error(err, "failed to download hook files")
-		} else {
-			svc.mutex.Lock()
-			svc.ready = true
-			svc.mutex.Unlock()
-			log.Info("hook files downloaded and ready")
+		if !svc.ready {
+			if err := svc.pullOCIImage(ctx); err != nil {
+				log.Error(err, "failed to pull OCI image")
+			} else {
+				svc.mutex.Lock()
+				svc.ready = true
+				svc.mutex.Unlock()
+				log.Info("OCI image pulled and ready")
+			}
 		}
 	}()
 
@@ -155,211 +158,86 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 	return nil
 }
 
-// allFilesExist checks if all required files exist
-func (s *service) allFilesExist() bool {
-	for arch, files := range RequiredFiles {
-		for _, file := range files {
-			filePath := filepath.Join(s.config.ImagePath, file)
-			if _, err := os.Stat(filePath); os.IsNotExist(err) {
-				s.log.Info("missing required file", "arch", arch, "file", file)
-				return false
-			}
+// imagePathHasFiles checks if the ImagePath directory contains any files
+func (s *service) imagePathHasFiles() bool {
+	entries, err := os.ReadDir(s.config.ImagePath)
+	if err != nil {
+		s.log.Info("unable to read image path", "error", err)
+		return false
+	}
+
+	// Check if there are any files (not just directories)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			return true
 		}
 	}
-	return true
+
+	return false
 }
 
-// downloadAndExtractHook downloads and extracts the hook tar.gz file
-func (s *service) downloadAndExtractHook(ctx context.Context) error {
+// pullOCIImage pulls the OCI image from the registry and extracts it to ImagePath
+func (s *service) pullOCIImage(ctx context.Context) error {
 	var err error
-	s.downloadOnce.Do(func() {
-		err = s.doDownloadAndExtract(ctx)
+	s.pullOnce.Do(func() {
+		err = s.doPullOCIImage(ctx)
 		if err != nil {
-			s.log.Error(err, "failed to download and extract hook")
+			s.log.Error(err, "failed to pull OCI image")
 		}
 	})
 	return err
 }
 
-// doDownloadAndExtract performs the actual download and extraction
-func (s *service) doDownloadAndExtract(ctx context.Context) error {
-	log := s.log.WithValues("event", "download_hook", "imagePath", s.config.ImagePath)
-	log.Info("downloading hook archives for all architectures")
+// doPullOCIImage performs the actual OCI image pull
+func (s *service) doPullOCIImage(ctx context.Context) error {
+	log := s.log.WithValues("event", "pull_oci_image",
+		"registry", s.config.OCIRegistry,
+		"repository", s.config.OCIRepository,
+		"reference", s.config.OCIReference,
+		"imagePath", s.config.ImagePath)
 
-	// Create image directory if it doesn't exist
-	if err := os.MkdirAll(s.config.ImagePath, 0o755); err != nil {
-		return fmt.Errorf("failed to create image directory: %w", err)
-	}
+	log.Info("pulling OCI image")
 
-	extractedFiles := make(map[string]string) // original filename -> extracted path
+	// Create a timeout context for the pull operation
+	pullCtx, cancel := context.WithTimeout(ctx, s.config.PullTimeout)
+	defer cancel()
 
-	// Download and extract for each architecture defined in ArchitectureMap
-	// This ensures we have hook files available for all supported architectures
-	for arch := range ArchitectureMap {
-		log.Info("downloading hook archive", "architecture", arch)
-
-		archExtracted, err := s.downloadAndExtractArch(ctx, arch)
-		if err != nil {
-			log.Error(err, "failed to download architecture", "arch", arch)
-			return fmt.Errorf("failed to download %s architecture: %w", arch, err)
-		}
-
-		// Merge extracted files
-		for filename, path := range archExtracted {
-			extractedFiles[filename] = path
-		}
-	}
-
-	// Create architecture-specific symlinks
-	if err := s.createArchSymlinks(extractedFiles); err != nil {
-		return fmt.Errorf("failed to create architecture symlinks: %w", err)
-	}
-
-	log.Info("all hook archives extracted successfully")
-	return nil
-}
-
-// downloadAndExtractArch downloads and extracts hook files for a specific architecture
-func (s *service) downloadAndExtractArch(ctx context.Context, arch string) (map[string]string, error) {
-	hookDownloadURL := s.getDownloadURL(arch)
-
-	log := s.log.WithValues("event", "download_hook_arch", "architecture", arch, "url", hookDownloadURL)
-	log.Info("downloading hook archive for architecture")
-
-	// Download the tar.gz file
-	req, err := http.NewRequestWithContext(ctx, "GET", hookDownloadURL, nil)
+	// Create a file store for the extracted files
+	fileStore, err := file.New(s.config.ImagePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return fmt.Errorf("failed to create file store: %w", err)
 	}
+	defer fileStore.Close()
 
-	client := &http.Client{
-		Timeout: s.config.DownloadTimeout,
-	}
-	resp, err := client.Do(req)
+	// Create a remote repository
+	repo, err := remote.NewRepository(fmt.Sprintf("%s/%s", s.config.OCIRegistry, s.config.OCIRepository))
 	if err != nil {
-		return nil, fmt.Errorf("failed to download hook archive: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to download hook archive: HTTP %d", resp.StatusCode)
+		return fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	// Create gzip reader
-	gzr, err := gzip.NewReader(resp.Body)
+	// Use anonymous auth (can be extended to support credentials)
+	repo.Client = &auth.Client{
+		Client: &http.Client{
+			Timeout: s.config.PullTimeout,
+		},
+		Cache: auth.NewCache(),
+	}
+
+	// Copy from remote repository to local file store
+	reference := s.config.OCIReference
+	log.Info("copying OCI image to local file store", "reference", reference)
+
+	desc, err := oras.Copy(pullCtx, repo, reference, fileStore, reference, oras.DefaultCopyOptions)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
-	}
-	defer gzr.Close()
-
-	// Create tar reader
-	tr := tar.NewReader(gzr)
-
-	// Extract files
-	extractedFiles := make(map[string]string) // original filename -> extracted path
-
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to read tar entry: %w", err)
-		}
-
-		filename := filepath.Base(header.Name)
-
-		// Only extract initramfs and kernel files
-		if strings.HasPrefix(filename, "initramfs-") || strings.HasPrefix(filename, "vmlinuz-") {
-			targetPath := filepath.Join(s.config.ImagePath, filename)
-			log.Info("extracting file", "filename", filename, "targetPath", targetPath, "size", header.Size)
-
-			file, err := os.Create(targetPath)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create file %s: %w", targetPath, err)
-			}
-
-			written, err := io.Copy(file, tr)
-			file.Close()
-			if err != nil {
-				return nil, fmt.Errorf("failed to extract file %s: %w", filename, err)
-			}
-
-			extractedFiles[filename] = targetPath
-			log.Info("file extracted", "filename", filename, "bytesWritten", written)
-		}
+		return fmt.Errorf("failed to pull OCI image: %w", err)
 	}
 
-	log.Info("hook archive extracted for architecture", "filesExtracted", len(extractedFiles))
-	return extractedFiles, nil
-}
-
-// createArchSymlinks creates symlinks for architecture-specific files
-func (s *service) createArchSymlinks(extractedFiles map[string]string) error {
-	// Determine architecture from extracted files and create symlinks
-	for originalFile, extractedPath := range extractedFiles {
-		var targetArch string
-		var targetName string
-
-		// Determine target architecture based on file suffix patterns
-		found := false
-		for arch, archInfo := range ArchitectureMap {
-			if strings.Contains(originalFile, archInfo.FileSuffix) {
-				targetArch = arch
-				found = true
-				break
-			}
-		}
-
-		// Fallback to legacy pattern matching if no explicit match found
-		if !found {
-			if strings.Contains(originalFile, "aarch64") || strings.Contains(originalFile, "arm64") {
-				targetArch = "arm64"
-			} else if strings.Contains(originalFile, "x86_64") || strings.Contains(originalFile, "amd64") {
-				targetArch = "x86_64"
-			} else {
-				// Default to arm64 for Raspberry Pi images
-				targetArch = "arm64"
-			}
-		}
-
-		if strings.HasPrefix(originalFile, "initramfs-") {
-			targetName = fmt.Sprintf("initramfs-%s", targetArch)
-		} else if strings.HasPrefix(originalFile, "vmlinuz-") {
-			targetName = fmt.Sprintf("vmlinuz-%s", targetArch)
-		} else {
-			continue
-		}
-
-		symlinkPath := filepath.Join(s.config.ImagePath, targetName)
-
-		// Remove existing symlink if it exists
-		if _, err := os.Lstat(symlinkPath); err == nil {
-			if err := os.Remove(symlinkPath); err != nil {
-				s.log.Error(err, "failed to remove existing symlink", "path", symlinkPath)
-			}
-		}
-
-		// Create new symlink
-		if err := os.Symlink(filepath.Base(extractedPath), symlinkPath); err != nil {
-			s.log.Error(err, "failed to create symlink", "target", extractedPath, "link", symlinkPath)
-			return err
-		}
-
-		s.log.Info("created architecture symlink", "arch", targetArch, "target", targetName, "source", originalFile)
-	}
+	log.Info("OCI image pulled successfully",
+		"digest", desc.Digest.String(),
+		"size", desc.Size,
+		"mediaType", desc.MediaType)
 
 	return nil
-}
-
-// getDownloadURL constructs the download URL based on version and architecture
-func (s *service) getDownloadURL(arch string) string {
-	archInfo, exists := ArchitectureMap[arch]
-	if !exists {
-		// Fallback to arm64 if architecture not found
-		archInfo = ArchitectureMap["arm64"]
-	}
-	return fmt.Sprintf("https://github.com/tinkerbell/hook/releases/download/%s/hook_%s.tar.gz", s.config.Version, archInfo.URLSuffix)
 }
 
 // startHTTPServer starts the HTTP file server

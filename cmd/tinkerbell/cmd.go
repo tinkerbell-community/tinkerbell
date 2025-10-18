@@ -124,8 +124,10 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 
 	hookOpts := []hook.Option{
 		hook.WithImagePath("/var/lib/hook"),
-		hook.WithVersion("latest"),
-		hook.WithDownloadTimeout(10 * time.Minute),
+		hook.WithOCIRegistry("ghcr.io"),
+		hook.WithOCIRepository("tinkerbell/hook"),
+		hook.WithOCIReference("latest"),
+		hook.WithPullTimeout(10 * time.Minute),
 		hook.WithHTTPAddr(netip.MustParseAddrPort(fmt.Sprintf("%s:%d", detectPublicIPv4().String(), 7173))),
 		hook.WithEnableHTTPServer(true),
 	}

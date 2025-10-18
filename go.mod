@@ -63,6 +63,8 @@ require (
 	sigs.k8s.io/controller-runtime v0.21.0
 )
 
+require oras.land/oras-go/v2 v2.6.0
+
 require (
 	cel.dev/expr v0.24.0 // indirect
 	github.com/AdaLogics/go-fuzz-headers v0.0.0-20240806141605-e8a1dd7889d6 // indirect
