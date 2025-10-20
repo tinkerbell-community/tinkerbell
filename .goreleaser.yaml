@@ -1,40 +1,59 @@
 version: 2
 
-project_name: tinkerbell
+project_name: ""
+
+dist: ./out
 
 env:
-  - REGISTRY={{ if index .Env "REGISTRY"  }}{{ .Env.REGISTRY }}{{ else }}ghcr.io{{ end }}
-  - IMAGE_NAME={{ if index .Env "IMAGE_NAME"  }}{{ .Env.IMAGE_NAME }}{{ else }}{{.GitURL | trimprefix "https://" | trimprefix "git@" | trimprefix "github.com" | trimprefix ":" | trimprefix "/" | trimsuffix ".git"}}{{ end }}
-  - IS_RELEASE={{ if index .Env "IS_RELEASE" }}{{ .Env.IS_RELEASE }}{{ else }}true{{ end }}
-
-before:
-  hooks:
-    - go mod tidy
-    - sh -c 'apko build apko.yaml goreleaser.ko.local/tinkerbell-base:latest tinkerbell-base.tar --arch amd64,arm64'
-    - sh -c 'docker load < tinkerbell-base.tar'
-    - rm tinkerbell-base.tar sbom-aarch64.spdx.json sbom-index.spdx.json sbom-x86_64.spdx.json
+  - REGISTRY={{ envOrDefault "REGISTRY" "ghcr.io" }}
+  - IS_RELEASE={{ envOrDefault "IS_RELEASE" "true" }}
 
 builds:
   - id: tinkerbell
     env: ["CGO_ENABLED=0"]
     main: ./cmd/tinkerbell
-    binary: "tinkerbell"
+    binary: tinkerbell
     goos:
       - linux
     goarch:
       - amd64
       - arm64
+    no_unique_dist_dir: false
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+      - -extldflags '-static'
+    skip: false
+
+  - id: tinkerbell-embedded
+    env: ["CGO_ENABLED=0"]
+    main: ./cmd/tinkerbell
+    binary: tinkerbell-embedded
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    tags:
+      - embedded
+    no_unique_dist_dir: false
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+      - -extldflags '-static'
     skip: false
 
   - id: tink-agent
     env: ["CGO_ENABLED=0"]
     main: ./cmd/agent
-    binary: "tink-agent"
+    binary: tink-agent
     goos:
       - linux
     goarch:
       - amd64
       - arm64
+    no_unique_dist_dir: false
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+      - -extldflags '-static'
     skip: false
 
 upx:
@@ -43,13 +62,11 @@ upx:
       - tinkerbell
       - tink-agent
     compress: best
+    lzma: true
 
 checksum:
-  name_template: "checksums.txt"
-
-archives:
-  - formats:
-      - binary
+  name_template: "{{ .ArtifactName }}-checksums.txt"
+  split: true
 
 release:
   disable: true
@@ -57,14 +74,14 @@ release:
 snapshot:
   version_template: "{{ incpatch .Version }}-next"
 
-kos:
-  - id: tinkerbell-ko
-    build: tinkerbell
-    repositories:
-      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME }}"
+dockers_v2:
+  - id: tinkerbell
+    dockerfile: Dockerfile.tinkerbell
+    images:
+      - '{{ .Env.REGISTRY }}/{{ envOrDefault "IMAGE_NAME" (trimsuffix (trimprefix .GitURL "https://github.com/") ".git") }}'
     tags:
       - '{{ if eq .Env.IS_RELEASE "true" }}v{{ .Version }}{{ end }}'
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
       - '{{ if eq .Branch "main" }}sha-{{ .ShortCommit }}{{ end }}'
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
@@ -72,24 +89,14 @@ kos:
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "v{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
-    bare: true
-    preserve_import_paths: false
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    base_image: goreleaser.ko.local/tinkerbell-base:latest
-    creation_time: "{{.CommitTimestamp}}"
-    ko_data_creation_time: "{{.CommitTimestamp}}"
-    local_domain: "ghcr.io/tinkerbell-community/tinkerbell"
-    disable: "{{ .IsSnapshot }}"
 
-  - id: tink-agent-ko
-    build: tink-agent
-    repositories:
-      - "{{ .Env.REGISTRY }}/{{ .Env.IMAGE_NAME | trimsuffix .ProjectName }}tink-agent"
+  - id: tink-agent
+    dockerfile: Dockerfile.agent
+    images:
+      - '{{ .Env.REGISTRY }}/{{ trimsuffix (envOrDefault "IMAGE_NAME" (trimsuffix (trimprefix .GitURL "https://github.com/") ".git")) .ProjectName }}tink-agent'
     tags:
       - '{{ if eq .Env.IS_RELEASE "true" }}v{{ .Version }}{{ end }}'
-      - "{{ if not .IsSnapshot }}latest{{ end }}"
+      - "{{ if not .IsNightly }}latest{{ end }}"
       - '{{ if eq .Branch "main" }}sha-{{ .ShortCommit }}{{ end }}'
     labels:
       "org.opencontainers.image.created": "{{.Date}}"
@@ -97,16 +104,10 @@ kos:
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "v{{.Version}}"
       "org.opencontainers.image.source": "{{.GitURL}}"
-    bare: true
-    preserve_import_paths: false
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    base_image: docker.io/chainguard/static
-    creation_time: "{{.CommitTimestamp}}"
-    ko_data_creation_time: "{{.CommitTimestamp}}"
-    local_domain: "ghcr.io/tinkerbell-community/tink-agent"
-    disable: "{{ .IsSnapshot }}"
 
 docker_signs:
-  - artifacts: all
+  - cmd: cosign
+    args:
+      - "sign"
+      - "--yes"
+      - "${artifact}@${digest}"

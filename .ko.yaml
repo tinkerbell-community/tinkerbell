@@ -1,5 +1,0 @@
-defaultPlatforms:
-  - linux/arm64
-  - linux/amd64
-defaultBaseImage: ghcr.io/tinkerbell-community/hook-images/ipmitool:latest
-dockerRepo: ghcr.io/tinkerbell-community/tinkerbell

@@ -2,6 +2,7 @@ package hook
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,7 @@ func TestNewConfig(t *testing.T) {
 			name: "default configuration",
 			opts: nil,
 			validate: func(t *testing.T, c *Config) {
+				t.Helper()
 				if c.ImagePath != "/var/lib/hook" {
 					t.Errorf("expected ImagePath=/var/lib/hook, got %s", c.ImagePath)
 				}
@@ -58,6 +60,7 @@ func TestNewConfig(t *testing.T) {
 				WithEnableHTTPServer(false),
 			},
 			validate: func(t *testing.T, c *Config) {
+				t.Helper()
 				if c.ImagePath != "/custom/path" {
 					t.Errorf("expected ImagePath=/custom/path, got %s", c.ImagePath)
 				}
@@ -90,6 +93,7 @@ func TestNewConfig(t *testing.T) {
 				WithHTTPAddr(netip.MustParseAddrPort("127.0.0.1:8080")),
 			},
 			validate: func(t *testing.T, c *Config) {
+				t.Helper()
 				expected := netip.MustParseAddrPort("127.0.0.1:8080")
 				if c.HTTPAddr != expected {
 					t.Errorf("expected HTTPAddr=%s, got %s", expected, c.HTTPAddr)
@@ -115,6 +119,7 @@ func TestImagePathHasFiles(t *testing.T) {
 		{
 			name: "empty directory",
 			setup: func(t *testing.T) string {
+				t.Helper()
 				dir := t.TempDir()
 				return dir
 			},
@@ -123,6 +128,7 @@ func TestImagePathHasFiles(t *testing.T) {
 		{
 			name: "directory with files",
 			setup: func(t *testing.T) string {
+				t.Helper()
 				dir := t.TempDir()
 				err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("test"), 0o644)
 				if err != nil {
@@ -135,6 +141,7 @@ func TestImagePathHasFiles(t *testing.T) {
 		{
 			name: "directory with subdirectories only",
 			setup: func(t *testing.T) string {
+				t.Helper()
 				dir := t.TempDir()
 				err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755)
 				if err != nil {
@@ -147,6 +154,7 @@ func TestImagePathHasFiles(t *testing.T) {
 		{
 			name: "directory with files and subdirectories",
 			setup: func(t *testing.T) string {
+				t.Helper()
 				dir := t.TempDir()
 				err := os.Mkdir(filepath.Join(dir, "subdir"), 0o755)
 				if err != nil {
@@ -163,6 +171,7 @@ func TestImagePathHasFiles(t *testing.T) {
 		{
 			name: "non-existent directory",
 			setup: func(t *testing.T) string {
+				t.Helper()
 				return filepath.Join(t.TempDir(), "nonexistent")
 			},
 			expected: false,
@@ -210,7 +219,7 @@ func TestStartWithExistingFiles(t *testing.T) {
 
 	// Should return without error and not attempt OCI pull
 	err = config.Start(ctx, log)
-	if err != nil && err != context.DeadlineExceeded {
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -242,7 +251,7 @@ func TestStartHTTPServerDisabled(t *testing.T) {
 
 	// Should complete without starting HTTP server
 	err = config.Start(ctx, log)
-	if err != nil && err != context.DeadlineExceeded {
+	if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
@@ -432,23 +441,23 @@ type mockLogger struct {
 
 func (m *mockLogger) Init(logr.RuntimeInfo) {}
 
-func (m *mockLogger) Enabled(level int) bool {
+func (m *mockLogger) Enabled(_ int) bool {
 	return true
 }
 
-func (m *mockLogger) Info(level int, msg string, keysAndValues ...interface{}) {
+func (m *mockLogger) Info(_ int, msg string, _ ...interface{}) {
 	m.logs = append(m.logs, fmt.Sprintf("INFO: %s", msg))
 }
 
-func (m *mockLogger) Error(err error, msg string, keysAndValues ...interface{}) {
+func (m *mockLogger) Error(err error, msg string, _ ...interface{}) {
 	m.logs = append(m.logs, fmt.Sprintf("ERROR: %s: %v", msg, err))
 }
 
-func (m *mockLogger) WithValues(keysAndValues ...interface{}) logr.LogSink {
+func (m *mockLogger) WithValues(_ ...interface{}) logr.LogSink {
 	return m
 }
 
-func (m *mockLogger) WithName(name string) logr.LogSink {
+func (m *mockLogger) WithName(_ string) logr.LogSink {
 	return m
 }
 
@@ -497,7 +506,13 @@ func TestLoggingBehavior(t *testing.T) {
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && (s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || s[1:len(s)-1] != s && contains(s[1:], substr)))
+	// Simple substring check using standard library
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 func TestConfigValidation(t *testing.T) {

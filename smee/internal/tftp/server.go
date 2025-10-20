@@ -88,7 +88,7 @@ func (mux *ServeMux) ServeTFTP(filename string, rf io.ReaderFrom) error {
 // NotFoundHandler returns a simple handler that replies to each request
 // with a "404 file not found" error.
 func NotFoundHandler() Handler {
-	return HandlerFunc(func(filename string, rf io.ReaderFrom) error {
+	return HandlerFunc(func(_ string, _ io.ReaderFrom) error {
 		return ErrNotFound
 	})
 }

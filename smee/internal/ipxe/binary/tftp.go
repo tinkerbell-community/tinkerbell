@@ -102,7 +102,7 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 }
 
 // HandleWrite handles TFTP PUT requests. It will always return an error. This library does not support PUT.
-func (h TFTP) HandleWrite(filename string, wt io.WriterTo) error {
+func (h TFTP) HandleWrite(filename string, _ io.WriterTo) error {
 	err := fmt.Errorf("access_violation: %w", os.ErrPermission)
 	h.Log.Error(err, "tftp write request rejected", "filename", filename)
 	return err
