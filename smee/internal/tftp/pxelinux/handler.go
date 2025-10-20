@@ -93,14 +93,14 @@ label local
 `
 
 // GenerateTemplate generates iPXE script content from template and hook data.
-func GenerateTemplate(data Hook) ([]byte, error) {
+func GenerateTemplate(hookData Hook) ([]byte, error) {
 	t := template.New("pxelinux.cfg")
 	t, err := t.Parse(pxeTemplate)
 	if err != nil {
 		return []byte{}, err
 	}
 	buffer := new(bytes.Buffer)
-	if err := t.Execute(buffer, data); err != nil {
+	if err := t.Execute(buffer, hookData); err != nil {
 		return []byte{}, err
 	}
 

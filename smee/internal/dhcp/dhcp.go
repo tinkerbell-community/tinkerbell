@@ -80,7 +80,6 @@ func ArchToBootFile() map[iana.Arch]constant.IPXEBinary {
 		iana.EFI_ARM32_HTTP:    constant.IPXEBinarySNPARM64,
 		iana.EFI_ARM64_HTTP:    constant.IPXEBinarySNPARM64,
 		iana.INTEL_X86PC_HTTP:  constant.IPXEBinaryUndionlyKPXE,
-		iana.UBOOT_ARM64:       constant.IPXEBinarySNPARM64,
 		iana.Arch(41):          constant.IPXEBinarySNPARM64, // arm rpiboot (0x29): https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml#processor-architecture
 	}
 }
@@ -347,19 +346,8 @@ func (i Info) Bootfile(customUC UserClass, ipxeScript, ipxeHTTPBinServer *url.UR
 			paths = append([]string{macAddrFormat(i.Mac, i.MacAddrFormat)}, paths...)
 		}
 		bootfile = t.JoinPath(paths...).String()
-	case i.Arch == iana.UBOOT_ARM64 || i.Arch == iana.UBOOT_ARM32:
-		t := url.URL{
-			Scheme: "tftp",
-			Host:   ipxeTFTPBinServer.String(),
-		}
-		paths := []string{"pxelinux.cfg"}
-		if i.Mac != nil {
-			macPath := fmt.Sprintf("01-%s", macAddrFormat(i.Mac, constant.MacAddrFormatDash))
-			paths = append(paths, macPath)
-		} else {
-			paths = append(paths, "default")
-		}
-		bootfile = t.JoinPath(paths...).String()
+	case i.Arch == iana.UBOOT_ARM64 || i.Arch == iana.UBOOT_ARM32 || i.Arch == iana.Arch(41):
+		bootfile = ""
 	default:
 		if i.IPXEBinary != "" {
 			bootfile = i.IPXEBinary

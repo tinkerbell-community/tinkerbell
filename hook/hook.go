@@ -231,26 +231,27 @@ func (s *service) doPullOCIImage(ctx context.Context) error {
 		return fmt.Errorf("failed to create repository: %w", err)
 	}
 
+	log.Info("using authenticated registry access")
+	authClient := auth.Client{
+		Client: &http.Client{
+			Timeout: s.config.PullTimeout,
+		},
+		Cache: auth.NewCache(),
+		Credential: auth.StaticCredential(s.config.OCIRegistry, auth.Credential{
+			Username: s.config.OCIUsername,
+			Password: s.config.OCIPassword,
+		}),
+	}
+
 	// Configure authentication only if credentials are provided
 	if s.config.OCIUsername != "" || s.config.OCIPassword != "" {
-		log.Info("using authenticated registry access")
-		repo.Client = &auth.Client{
-			Client: &http.Client{
-				Timeout: s.config.PullTimeout,
-			},
-			Cache: auth.NewCache(),
-			Credential: auth.StaticCredential(s.config.OCIRegistry, auth.Credential{
-				Username: s.config.OCIUsername,
-				Password: s.config.OCIPassword,
-			}),
-		}
-	} else {
-		// Use default client without authentication
-		log.Info("using unauthenticated registry access")
-		repo.Client = &http.Client{
-			Timeout: s.config.PullTimeout,
-		}
+		authClient.Credential = auth.StaticCredential(s.config.OCIRegistry, auth.Credential{
+			Username: s.config.OCIUsername,
+			Password: s.config.OCIPassword,
+		})
 	}
+
+	repo.Client = &authClient
 
 	// Copy from remote repository to local file store
 	reference := s.config.OCIReference
@@ -277,8 +278,9 @@ func (s *service) startHTTPServer(ctx context.Context) error {
 	mux.Handle("/", http.FileServerFS(os.DirFS(s.config.ImagePath)))
 
 	s.httpServer = &http.Server{
-		Addr:    s.config.HTTPAddr.String(),
-		Handler: mux,
+		Addr:              s.config.HTTPAddr.String(),
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
 
 	s.log.Info("starting hook HTTP server", "addr", s.config.HTTPAddr.String())

@@ -70,14 +70,14 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 		ExtraKernelParams:     h.ExtraKernelParams,
 	}
 	pxeHandler := pxelinux.NewHandler(h.Backend, pxeConfig, h.Log)
-	mux.HandleFunc(`^pxelinux\.cfg/`, pxeHandler)
+	mux.HandleFunc(`^(pxelinux\.cfg/)`, pxeHandler)
 
 	// Register hook file handler for initramfs and vmlinuz files
 	hookConfig := tftpHook.Config{
 		CacheDir: h.CacheDir,
 	}
 	hookHandler := tftpHook.NewHandler(hookConfig, h.Log)
-	mux.HandleFunc(`^(initramfs-|vmlinuz-)`, hookHandler)
+	mux.HandleFunc(`^(initramfs-|vmlinuz-|dtb|/dtb)`, hookHandler)
 
 	// Create the underlying TFTP server
 	server := tftp.NewServer(mux.ServeTFTP, h.HandleWrite)
@@ -102,7 +102,7 @@ func (h *TFTP) ListenAndServe(ctx context.Context) error {
 }
 
 // HandleWrite handles TFTP PUT requests. It will always return an error. This library does not support PUT.
-func (h TFTP) HandleWrite(filename string, wt io.WriterTo) error {
+func (h TFTP) HandleWrite(filename string, _ io.WriterTo) error {
 	err := fmt.Errorf("access_violation: %w", os.ErrPermission)
 	h.Log.Error(err, "tftp write request rejected", "filename", filename)
 	return err
