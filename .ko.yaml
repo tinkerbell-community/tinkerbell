@@ -2,8 +2,4 @@ defaultPlatforms:
   - linux/arm64
   - linux/amd64
 defaultBaseImage: ghcr.io/tinkerbell-community/hook-images/ipmitool:latest
-builds:
-  - dir: ./cmd/tinkerbell
-    main: .
-    id: tinkerbell
 dockerRepo: ghcr.io/tinkerbell-community/tinkerbell

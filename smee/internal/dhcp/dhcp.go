@@ -347,6 +347,19 @@ func (i Info) Bootfile(customUC UserClass, ipxeScript, ipxeHTTPBinServer *url.UR
 			paths = append([]string{macAddrFormat(i.Mac, i.MacAddrFormat)}, paths...)
 		}
 		bootfile = t.JoinPath(paths...).String()
+	case i.Arch == iana.UBOOT_ARM64 || i.Arch == iana.UBOOT_ARM32:
+		t := url.URL{
+			Scheme: "tftp",
+			Host:   ipxeTFTPBinServer.String(),
+		}
+		paths := []string{"pxelinux.cfg"}
+		if i.Mac != nil {
+			macPath := fmt.Sprintf("01-%s", macAddrFormat(i.Mac, constant.MacAddrFormatDash))
+			paths = append(paths, macPath)
+		} else {
+			paths = append(paths, "default")
+		}
+		bootfile = t.JoinPath(paths...).String()
 	default:
 		if i.IPXEBinary != "" {
 			bootfile = i.IPXEBinary

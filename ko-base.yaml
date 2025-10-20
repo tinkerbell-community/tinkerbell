@@ -1,0 +1,17 @@
+contents:
+  keyring:
+    - https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-4a6a0840.rsa.pub
+    - https://alpinelinux.org/keys/alpine-devel@lists.alpinelinux.org-616ae350.rsa.pub
+  repositories:
+    - https://dl-cdn.alpinelinux.org/alpine/edge/main
+    - https://dl-cdn.alpinelinux.org/alpine/edge/community
+  packages:
+    - ca-certificates-bundle
+    - ipmitool
+
+entrypoint:
+  command: /bin/sh -l
+
+archs:
+  - x86_64
+  - aarch64

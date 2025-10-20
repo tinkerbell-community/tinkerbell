@@ -52,6 +52,8 @@ func TestNewConfig(t *testing.T) {
 				WithOCIRegistry("docker.io"),
 				WithOCIRepository("myorg/hooks"),
 				WithOCIReference("v1.2.3"),
+				WithOCIUsername("testuser"),
+				WithOCIPassword("testpass"),
 				WithPullTimeout(5 * time.Minute),
 				WithEnableHTTPServer(false),
 			},
@@ -67,6 +69,12 @@ func TestNewConfig(t *testing.T) {
 				}
 				if c.OCIReference != "v1.2.3" {
 					t.Errorf("expected OCIReference=v1.2.3, got %s", c.OCIReference)
+				}
+				if c.OCIUsername != "testuser" {
+					t.Errorf("expected OCIUsername=testuser, got %s", c.OCIUsername)
+				}
+				if c.OCIPassword != "testpass" {
+					t.Errorf("expected OCIPassword=testpass, got %s", c.OCIPassword)
 				}
 				if c.PullTimeout != 5*time.Minute {
 					t.Errorf("expected PullTimeout=5m, got %s", c.PullTimeout)
@@ -696,5 +704,47 @@ func TestReadyStateConcurrency(t *testing.T) {
 	// Wait for all goroutines
 	for i := 0; i < 6; i++ {
 		<-done
+	}
+}
+
+func TestOCIAuthentication(t *testing.T) {
+	// Test that OCI authentication options are properly set
+	config := NewConfig(
+		WithOCIUsername("testuser"),
+		WithOCIPassword("testpass"),
+	)
+
+	if config.OCIUsername != "testuser" {
+		t.Errorf("expected OCIUsername=testuser, got %s", config.OCIUsername)
+	}
+
+	if config.OCIPassword != "testpass" {
+		t.Errorf("expected OCIPassword=testpass, got %s", config.OCIPassword)
+	}
+
+	// Test partial authentication (username only)
+	config2 := NewConfig(
+		WithOCIUsername("useronly"),
+	)
+
+	if config2.OCIUsername != "useronly" {
+		t.Errorf("expected OCIUsername=useronly, got %s", config2.OCIUsername)
+	}
+
+	if config2.OCIPassword != "" {
+		t.Errorf("expected empty OCIPassword, got %s", config2.OCIPassword)
+	}
+}
+
+func TestOCIAuthenticationDefault(t *testing.T) {
+	// Test that OCI authentication defaults to empty (unauthenticated)
+	config := NewConfig()
+
+	if config.OCIUsername != "" {
+		t.Errorf("expected empty OCIUsername by default, got %s", config.OCIUsername)
+	}
+
+	if config.OCIPassword != "" {
+		t.Errorf("expected empty OCIPassword by default, got %s", config.OCIPassword)
 	}
 }

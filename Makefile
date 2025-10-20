@@ -26,7 +26,15 @@ ifeq ($(VERSION),)
 endif
 CGO_ENABLED := 0
 export CGO_ENABLED
-COMPRESS := false
+# UPX compression reduces binary size by ~50-70% but only works on Linux
+# - On Linux: COMPRESS defaults to true (automatic UPX compression)
+# - On macOS/others: COMPRESS defaults to false (UPX binaries won't execute)
+# - Override with: make COMPRESS=true cross-compile (CI/Linux environments)
+ifeq ($(shell uname),Linux)
+	COMPRESS := true
+else
+	COMPRESS := false
+endif
 UPX_BASEDIR := $(PWD)/build
 LOCAL_ARCH := $(shell uname -m)
 LOCAL_ARCH_ALT :=
@@ -128,13 +136,13 @@ crossbinaries := out/tinkerbell-linux-amd64 out/tinkerbell-linux-arm64
 out/tinkerbell-linux-amd64: FLAGS=GOARCH=amd64
 out/tinkerbell-linux-arm64: FLAGS=GOARCH=arm64
 out/tinkerbell-linux-amd64 out/tinkerbell-linux-arm64: $(generated_go_files) $(TINKERBELL_SOURCES)
-	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -tags "${GO_TAGS}" -v -o $@ ./cmd/tinkerbell
+	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -tags "${GO_TAGS}" -v -o $@ ./cmd/tinkerbell
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
 TINKERBELL_SOURCES := $(shell find $(go list -deps ./cmd/tinkerbell | grep -i tinkerbell | cut -d"/" -f 4-) -type f -name '*.go')
 
 out/tinkerbell: $(generated_go_files) $(TINKERBELL_SOURCES) ## Compile Tinkerbell for the current architecture
-	${FLAGS} CGO_ENABLED=0 go build -ldflags="-s -w" -tags "${GO_TAGS}" -v -o $@ ./cmd/tinkerbell
+	${FLAGS} CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -extldflags '-static'" -tags "${GO_TAGS}" -v -o $@ ./cmd/tinkerbell
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
 cross-compile: $(crossbinaries) ## Compile for all architectures
@@ -143,7 +151,7 @@ embeddedbinaries := out/tinkerbell-embedded-linux-amd64 out/tinkerbell-embedded-
 out/tinkerbell-embedded-linux-amd64: FLAGS=GOARCH=amd64
 out/tinkerbell-embedded-linux-arm64: FLAGS=GOARCH=arm64
 out/tinkerbell-embedded-linux-amd64 out/tinkerbell-embedded-linux-arm64: $(generated_go_files) $(TINKERBELL_SOURCES)
-	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -tags "embedded" -ldflags="-s -w" -v -o $@ ./cmd/tinkerbell
+	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -trimpath -tags "embedded" -ldflags="-s -w -extldflags '-static'" -v -o $@ ./cmd/tinkerbell
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
 cross-compile-embedded: $(embeddedbinaries) ## Compile Tinkerbell for all architectures with embedded tags
@@ -158,11 +166,11 @@ crossbinaries-agent := out/tink-agent-linux-amd64 out/tink-agent-linux-arm64
 out/tink-agent-linux-amd64: FLAGS=GOARCH=amd64
 out/tink-agent-linux-arm64: FLAGS=GOARCH=arm64
 out/tink-agent-linux-amd64 out/tink-agent-linux-arm64: $(AGENT_SOURCES)
-	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -tags "${GO_TAGS}" -ldflags="-s -w" -v -o $@ ./cmd/agent
+	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -trimpath -tags "${GO_TAGS}" -ldflags="-s -w -extldflags '-static'" -v -o $@ ./cmd/agent
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
 out/tink-agent: $(AGENT_SOURCES) ## Compile Tink Agent for the current architecture
-	${FLAGS} CGO_ENABLED=0 go build -ldflags="-s -w" -tags "${GO_TAGS}" -v -o $@ ./cmd/agent
+	${FLAGS} CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -extldflags '-static'" -tags "${GO_TAGS}" -v -o $@ ./cmd/agent
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
 cross-compile-agent: $(crossbinaries-agent) ## Compile Tink Agent for all architectures
@@ -210,6 +218,14 @@ helm-template: ## Helm template for Tinkerbell
 ######### Helm charts - end   #########
 
 ######### Build container images - start #########
+.PHONY: apko-base-image
+apko-base-image: ## Build the base image with apko
+	apko build apko.yaml tinkerbell-base:latest tinkerbell-base.tar --arch amd64,arm64
+
+.PHONY: apko-base-image-load
+apko-base-image-load: apko-base-image ## Build and load the apko base image into Docker
+	docker load < tinkerbell-base.tar
+
 .PHONY: prepare-buildx
 prepare-buildx: ## Prepare the buildx environment.
 ## the "|| true" is to avoid failing if the builder already exists.
@@ -271,10 +287,19 @@ $(BUF_FQP):
 
 $(UPX_FQP):
 	mkdir -p $(TOOLS_DIR)
+ifeq ($(shell uname),Darwin)
+	@echo "Downloading UPX for macOS (using amd64 with Rosetta 2 compatibility)..."
+	(cd $(TOOLS_DIR); curl -sSfLO https://github.com/upx/upx/releases/download/v$(UPX_VER)/upx-$(UPX_VER)-amd64_linux.tar.xz)
+	(cd $(TOOLS_DIR); tar -xf upx-$(UPX_VER)-amd64_linux.tar.xz)
+	@chmod +x $(TOOLS_DIR)/upx-$(UPX_VER)-amd64_linux/upx
+	@mv $(TOOLS_DIR)/upx-$(UPX_VER)-amd64_linux/upx $(UPX_FQP)
+	@rm -rf $(TOOLS_DIR)/upx-$(UPX_VER)-amd64_linux*
+else
 	(cd $(TOOLS_DIR); curl -sSfLO https://github.com/upx/upx/releases/download/v$(UPX_VER)/upx-$(UPX_VER)-$(LOCAL_ARCH_ALT)_linux.tar.xz)
-	(cd $(TOOLS_DIR); tar -xvf upx-$(UPX_VER)-$(LOCAL_ARCH_ALT)_linux.tar.xz)
+	(cd $(TOOLS_DIR); tar -xf upx-$(UPX_VER)-$(LOCAL_ARCH_ALT)_linux.tar.xz)
 	@mv $(TOOLS_DIR)/upx-$(UPX_VER)-$(LOCAL_ARCH_ALT)_linux/upx $(UPX_FQP)
 	@rm -rf $(TOOLS_DIR)/upx-$(UPX_VER)-$(LOCAL_ARCH_ALT)_linux*
+endif
 
 $(GODEPGRAPH_FQP):
 	GOBIN=$(TOOLS_DIR) go install github.com/kisielk/godepgraph@$(GODEPGRAPH_VER)

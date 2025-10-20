@@ -26,6 +26,10 @@ type Config struct {
 	OCIRepository string
 	// OCIReference is the image tag or digest (e.g., "latest", "v1.2.3", "sha256:...")
 	OCIReference string
+	// OCIUsername is the optional username for OCI registry authentication
+	OCIUsername string
+	// OCIPassword is the optional password for OCI registry authentication
+	OCIPassword string
 	// PullTimeout for pulling OCI images
 	PullTimeout time.Duration
 	// HTTPAddr is the address to bind the HTTP server to
@@ -64,6 +68,18 @@ func WithOCIReference(reference string) Option {
 func WithPullTimeout(timeout time.Duration) Option {
 	return func(c *Config) {
 		c.PullTimeout = timeout
+	}
+}
+
+func WithOCIUsername(username string) Option {
+	return func(c *Config) {
+		c.OCIUsername = username
+	}
+}
+
+func WithOCIPassword(password string) Option {
+	return func(c *Config) {
+		c.OCIPassword = password
 	}
 }
 
@@ -215,12 +231,25 @@ func (s *service) doPullOCIImage(ctx context.Context) error {
 		return fmt.Errorf("failed to create repository: %w", err)
 	}
 
-	// Use anonymous auth (can be extended to support credentials)
-	repo.Client = &auth.Client{
-		Client: &http.Client{
+	// Configure authentication only if credentials are provided
+	if s.config.OCIUsername != "" || s.config.OCIPassword != "" {
+		log.Info("using authenticated registry access")
+		repo.Client = &auth.Client{
+			Client: &http.Client{
+				Timeout: s.config.PullTimeout,
+			},
+			Cache: auth.NewCache(),
+			Credential: auth.StaticCredential(s.config.OCIRegistry, auth.Credential{
+				Username: s.config.OCIUsername,
+				Password: s.config.OCIPassword,
+			}),
+		}
+	} else {
+		// Use default client without authentication
+		log.Info("using unauthenticated registry access")
+		repo.Client = &http.Client{
 			Timeout: s.config.PullTimeout,
-		},
-		Cache: auth.NewCache(),
+		}
 	}
 
 	// Copy from remote repository to local file store

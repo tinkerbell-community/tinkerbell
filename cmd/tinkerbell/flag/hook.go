@@ -16,6 +16,8 @@ func RegisterHookFlags(fs *Set, hc *HookConfig) {
 	fs.Register(HookOCIRegistry, ffval.NewValueDefault(&hc.Config.OCIRegistry, hc.Config.OCIRegistry))
 	fs.Register(HookOCIRepository, ffval.NewValueDefault(&hc.Config.OCIRepository, hc.Config.OCIRepository))
 	fs.Register(HookOCIReference, ffval.NewValueDefault(&hc.Config.OCIReference, hc.Config.OCIReference))
+	fs.Register(HookOCIUsername, ffval.NewValueDefault(&hc.Config.OCIUsername, hc.Config.OCIUsername))
+	fs.Register(HookOCIPassword, ffval.NewValueDefault(&hc.Config.OCIPassword, hc.Config.OCIPassword))
 	fs.Register(HookPullTimeout, ffval.NewValueDefault(&hc.Config.PullTimeout, hc.Config.PullTimeout))
 	fs.Register(HookHTTPAddr, &ntip.AddrPort{AddrPort: &hc.Config.HTTPAddr})
 	fs.Register(HookEnableHTTPServer, ffval.NewValueDefault(&hc.Config.EnableHTTPServer, hc.Config.EnableHTTPServer))
@@ -40,6 +42,16 @@ var HookOCIRepository = Config{
 var HookOCIReference = Config{
 	Name:  "hook-oci-reference",
 	Usage: "[hook] OCI image reference - tag or digest (e.g., latest, v1.2.3, sha256:...)",
+}
+
+var HookOCIUsername = Config{
+	Name:  "hook-oci-username",
+	Usage: "[hook] optional username for OCI registry authentication",
+}
+
+var HookOCIPassword = Config{
+	Name:  "hook-oci-password",
+	Usage: "[hook] optional password for OCI registry authentication",
 }
 
 var HookPullTimeout = Config{
