@@ -59,8 +59,8 @@ func (c *ConfigTFTP) ServeTFTP(ctx context.Context, addr string, handlers Handle
 }
 
 // handleWrite handles TFTP PUT requests. It will always return an error. This library does not support PUT.
-func (h ConfigTFTP) handleWrite(filename string, _ io.WriterTo) error {
+func (c ConfigTFTP) handleWrite(filename string, _ io.WriterTo) error {
 	err := fmt.Errorf("access_violation: %w", os.ErrPermission)
-	h.Logger.Error(err, "tftp write request rejected", "filename", filename)
+	c.Logger.Error(err, "tftp write request rejected", "filename", filename)
 	return err
 }

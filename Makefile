@@ -132,10 +132,10 @@ smee/internal/syslog/severity_string.go: smee/internal/syslog/message.go
 
 TINKERBELL_SOURCES := $(shell find $(go list -deps ./cmd/tinkerbell | grep -i tinkerbell | cut -d"/" -f 4-) -type f -name '*.go')
 
-crossbinaries := out/tinkerbell-linux-amd64 out/tinkerbell-linux-arm64
-out/tinkerbell-linux-amd64: FLAGS=GOARCH=amd64
-out/tinkerbell-linux-arm64: FLAGS=GOARCH=arm64
-out/tinkerbell-linux-amd64 out/tinkerbell-linux-arm64: $(generated_go_files) $(TINKERBELL_SOURCES)
+crossbinaries := out/tinkerbell_linux_amd64_v1/tinkerbell out/tinkerbell_linux_arm64_v8.0/tinkerbell
+out/tinkerbell_linux_amd64_v1/tinkerbell: FLAGS=GOARCH=amd64
+out/tinkerbell_linux_arm64_v8.0/tinkerbell: FLAGS=GOARCH=arm64
+out/tinkerbell_linux_amd64_v1/tinkerbell out/tinkerbell_linux_arm64_v8.0/tinkerbell: $(generated_go_files) $(TINKERBELL_SOURCES)
 	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -extldflags '-static'" -tags "${GO_TAGS}" -v -o $@ ./cmd/tinkerbell
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
@@ -147,25 +147,25 @@ out/tinkerbell: $(generated_go_files) $(TINKERBELL_SOURCES) ## Compile Tinkerbel
 
 cross-compile: $(crossbinaries) ## Compile for all architectures
 
-embeddedbinaries := out/tinkerbell-embedded-linux-amd64 out/tinkerbell-embedded-linux-arm64
-out/tinkerbell-embedded-linux-amd64: FLAGS=GOARCH=amd64
-out/tinkerbell-embedded-linux-arm64: FLAGS=GOARCH=arm64
-out/tinkerbell-embedded-linux-amd64 out/tinkerbell-embedded-linux-arm64: $(generated_go_files) $(TINKERBELL_SOURCES)
+embeddedbinaries := out/tinkerbell-embedded_linux_amd64_v1/tinkerbell out/tinkerbell-embedded_linux_arm64_v8.0/tinkerbell
+out/tinkerbell-embedded_linux_amd64_v1/tinkerbell: FLAGS=GOARCH=amd64
+out/tinkerbell-embedded_linux_arm64_v8.0/tinkerbell: FLAGS=GOARCH=arm64
+out/tinkerbell-embedded_linux_amd64_v1/tinkerbell out/tinkerbell-embedded_linux_arm64_v8.0/tinkerbell: $(generated_go_files) $(TINKERBELL_SOURCES)
 	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -trimpath -tags "embedded" -ldflags="-s -w -extldflags '-static'" -v -o $@ ./cmd/tinkerbell
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
 cross-compile-embedded: $(embeddedbinaries) ## Compile Tinkerbell for all architectures with embedded tags
 
 checksums-embedded: out/checksums-embedded.txt ## Generate checksums for the cross-compiled binaries
-out/checksums-embedded.txt: out/tinkerbell-embedded-linux-amd64 out/tinkerbell-embedded-linux-arm64
+out/checksums-embedded.txt: out/tinkerbell-embedded_linux_amd64_v1/tinkerbell out/tinkerbell-embedded_linux_arm64_v8.0/tinkerbell
 	(cd out; sha256sum tinkerbell-embedded-linux-amd64 tinkerbell-embedded-linux-arm64 > checksums-embedded.txt)
 
 AGENT_SOURCES := $(shell find $(go list -deps ./cmd/agent | grep -i tinkerbell | cut -d"/" -f 4-) -type f -name '*.go')
 
-crossbinaries-agent := out/tink-agent-linux-amd64 out/tink-agent-linux-arm64
-out/tink-agent-linux-amd64: FLAGS=GOARCH=amd64
-out/tink-agent-linux-arm64: FLAGS=GOARCH=arm64
-out/tink-agent-linux-amd64 out/tink-agent-linux-arm64: $(AGENT_SOURCES)
+crossbinaries-agent := out/tink-agent_linux_amd64_v1/tinkerbell out/tink-agent_linux_arm64_v8.0/tinkerbell
+out/tink-agent_linux_amd64_v1/tinkerbell: FLAGS=GOARCH=amd64
+out/tink-agent_linux_arm64_v8.0/tinkerbell: FLAGS=GOARCH=arm64
+out/tink-agent_linux_amd64_v1/tinkerbell out/tink-agent_linux_arm64_v8.0/tinkerbell: $(AGENT_SOURCES)
 	${FLAGS} CGO_ENABLED=0 GOOS=linux go build -trimpath -tags "${GO_TAGS}" -ldflags="-s -w -extldflags '-static'" -v -o $@ ./cmd/agent
 	if [ "${COMPRESS}" = "true" ]; then $(MAKE) $(UPX_FQP) && $(UPX_FQP) --best --lzma $@; fi
 
@@ -251,11 +251,11 @@ build-push-image-agent: ## Build and push the container image for both Amd64 and
 
 .PHONY: clean
 clean: ## Remove all cross compiled Tinkerbell binaries
-	rm -f out/tinkerbell out/tinkerbell-linux-amd64 out/tinkerbell-linux-arm64
+	rm -f out/tinkerbell out/tinkerbell_linux_amd64_v1/tinkerbell out/tinkerbell_linux_arm64_v8.0/tinkerbell
 
 .PHONY: clean-agent
 clean-agent: ## Remove all cross compiled Tink Agent binaries
-	rm -f out/tink-agent out/tink-agent-linux-amd64 out/tink-agent-linux-arm64
+	rm -f out/tink-agent out/tink-agent_linux_amd64_v1/tinkerbell out/tink-agent_linux_arm64_v8.0/tinkerbell
 
 .PHONY: clean-tools
 clean-tools: ## Remove all tools
