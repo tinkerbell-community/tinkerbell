@@ -1,140 +1,71 @@
 package binary
 
 import (
+	"bytes"
 	"context"
-	"fmt"
+	"errors"
 	"io"
-	"net"
-	"net/netip"
-	"os"
-	"time"
 
 	"github.com/go-logr/logr"
-	"github.com/pin/tftp/v3"
-	"github.com/tinkerbell/tinkerbell/pkg/data"
-	tftpmux "github.com/tinkerbell/tinkerbell/smee/internal/tftp"
-	tftpHook "github.com/tinkerbell/tinkerbell/smee/internal/tftp/hook"
-	"github.com/tinkerbell/tinkerbell/smee/internal/tftp/pxelinux"
+	binary "github.com/tinkerbell/tinkerbell/smee/internal/ipxe/binary/file"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
-// BackendReader is an interface that defines the method to read data from a backend.
-type BackendReader interface {
-	// Read data (from a backend) based on a mac address
-	// and return DHCP headers and options, including netboot info.
-	GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, error)
-}
+// HandleTFTP implements the TFTP read function handler.
+func (h Handler) HandleTFTP(filename string, rf io.ReaderFrom) error {
+	log := h.Log.WithValues("event", "ipxe_binary", "filename", filename)
+	log.Info("handling iPXE binary file request")
 
-// TFTP config settings.
-type TFTP struct {
-	// Backend is the backend to use for getting DHCP data.
-	Backend BackendReader
+	// Create tracing context
+	tracer := otel.Tracer("TFTP-Binary")
+	_, span := tracer.Start(context.Background(), "TFTP binary serve",
+		trace.WithSpanKind(trace.SpanKindServer))
+	defer span.End()
 
-	Log                  logr.Logger
-	EnableTFTPSinglePort bool
-	Addr                 netip.AddrPort
-	Timeout              time.Duration
-	Patch                []byte
-	BlockSize            int
-	Anticipate           uint
-
-	// CacheDir is the directory where hook images are stored and served from
-	CacheDir string
-
-	// Tinkerbell server configuration for cmdline.txt generation
-	PublicSyslogFQDN      string // Public syslog FQDN
-	TinkServerTLS         bool   // TLS enabled for Tink server
-	TinkServerInsecureTLS bool   // Allow insecure TLS
-	TinkServerGRPCAddr    string // Tink server gRPC address
-	ExtraKernelParams     []string
-}
-
-// ListenAndServe will listen and serve files over TFTP using the shared handler system.
-func (h *TFTP) ListenAndServe(ctx context.Context) error {
-	// Create the shared TFTP server
-	mux := tftpmux.NewServeMux(h.Log)
-
-	// Register iPXE binary handler
-	binaryConfig := Config{
-		Patch: h.Patch,
-	}
-	binaryHandler := NewHandler(binaryConfig, h.Log)
-	// Match common iPXE binary names - this should be more specific based on actual binary names
-	mux.HandleFunc(`\.(efi|kpxe|pxe)$`, binaryHandler)
-
-	// Register PXELinux handler for pxelinux.cfg files
-	pxeConfig := pxelinux.Config{
-		PublicSyslogFQDN:      h.PublicSyslogFQDN,
-		TinkServerTLS:         h.TinkServerTLS,
-		TinkServerInsecureTLS: h.TinkServerInsecureTLS,
-		TinkServerGRPCAddr:    h.TinkServerGRPCAddr,
-		ExtraKernelParams:     h.ExtraKernelParams,
-	}
-	pxeHandler := pxelinux.NewHandler(h.Backend, pxeConfig, h.Log)
-	mux.HandleFunc(`^(pxelinux\.cfg/)`, pxeHandler)
-
-	// Register hook file handler for initramfs and vmlinuz files
-	hookConfig := tftpHook.Config{
-		CacheDir: h.CacheDir,
-	}
-	hookHandler := tftpHook.NewHandler(hookConfig, h.Log)
-	mux.HandleFunc(`^(initramfs-|vmlinuz-|dtb|/dtb)`, hookHandler)
-
-	// Create the underlying TFTP server
-	server := tftp.NewServer(mux.ServeTFTP, h.HandleWrite)
-	server.SetTimeout(h.Timeout)
-	server.SetBlockSize(h.BlockSize)
-	server.SetAnticipate(h.Anticipate)
-
-	// Add logging middleware
-	loggingMiddleware := &tftpLoggingHook{log: h.Log}
-	server.SetHook(loggingMiddleware)
-
-	if h.EnableTFTPSinglePort {
-		server.EnableSinglePort()
+	// Check if binary exists in embedded files
+	content, ok := binary.Files[filename]
+	if !ok {
+		log.Info("iPXE binary not found", "filename", filename)
+		span.SetStatus(codes.Error, "file not found")
+		return ErrNotFound
 	}
 
-	go func() {
-		<-ctx.Done()
-		server.Shutdown()
-	}()
+	// Apply patch if configured
+	if len(h.Patch) > 0 {
+		var err error
+		content, err = binary.Patch(content, h.Patch)
+		if err != nil {
+			log.Error(err, "failed to patch binary")
+			span.SetStatus(codes.Error, err.Error())
+			return err
+		}
+	}
 
-	return server.ListenAndServe(h.Addr.String())
+	log.Info("successfully loaded iPXE binary", "size", len(content))
+
+	// Serve the content
+	return serveContent(content, rf, log, span, filename)
 }
 
-// HandleWrite handles TFTP PUT requests. It will always return an error. This library does not support PUT.
-func (h TFTP) HandleWrite(filename string, _ io.WriterTo) error {
-	err := fmt.Errorf("access_violation: %w", os.ErrPermission)
-	h.Log.Error(err, "tftp write request rejected", "filename", filename)
-	return err
+func serveContent(content []byte, rf io.ReaderFrom, log logr.Logger, span trace.Span, filename string) error {
+	if transfer, ok := rf.(interface{ SetSize(int64) }); ok {
+		transfer.SetSize(int64(len(content)))
+	}
+
+	reader := bytes.NewReader(content)
+	bytesRead, err := rf.ReadFrom(reader)
+	if err != nil {
+		log.Error(err, "file serve failed", "bytesRead", bytesRead, "contentSize", len(content))
+		span.SetStatus(codes.Error, err.Error())
+		return err
+	}
+
+	log.Info("file served", "bytesSent", bytesRead, "contentSize", len(content))
+	span.SetStatus(codes.Ok, filename)
+	return nil
 }
 
-// tftpLoggingHook implements tftp.Hook interface for logging TFTP transfer statistics.
-type tftpLoggingHook struct {
-	log logr.Logger
-}
-
-// OnSuccess logs successful TFTP transfers.
-func (h *tftpLoggingHook) OnSuccess(stats tftp.TransferStats) {
-	h.log.Info("tftp transfer successful",
-		"filename", stats.Filename,
-		"remoteAddr", stats.RemoteAddr.String(),
-		"duration", stats.Duration.String(),
-		"datagramsSent", stats.DatagramsSent,
-		"datagramsAcked", stats.DatagramsAcked,
-		"mode", stats.Mode,
-		"tid", stats.Tid,
-	)
-}
-
-// OnFailure logs failed TFTP transfers.
-func (h *tftpLoggingHook) OnFailure(stats tftp.TransferStats, err error) {
-	h.log.Error(err, "tftp transfer failed",
-		"filename", stats.Filename,
-		"remoteAddr", stats.RemoteAddr.String(),
-		"duration", stats.Duration.String(),
-		"datagramsSent", stats.DatagramsSent,
-		"datagramsAcked", stats.DatagramsAcked,
-		"mode", stats.Mode,
-		"tid", stats.Tid,
-	)
-}
+// ErrNotFound represents a file not found error
+var ErrNotFound = errors.New("file not found")

@@ -14,24 +14,18 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-// Config holds the configuration needed for hook file serving.
-type Config struct {
+// Handler holds the configuration needed for hook file serving.
+type Handler struct {
+	Logger   logr.Logger
 	CacheDir string
 }
 
-// NewHandler creates a new hook file handler with the given configuration.
-func NewHandler(config Config, log logr.Logger) func(filename string, rf io.ReaderFrom) error {
-	return func(filename string, rf io.ReaderFrom) error {
-		return handleHookFile(filename, rf, config, log)
-	}
-}
-
-func handleHookFile(filename string, rf io.ReaderFrom, config Config, log logr.Logger) error {
-	log = log.WithValues("event", "hook_file", "filename", filename)
+func (h Handler) ServeTFTP(filename string, rf io.ReaderFrom) error {
+	log := h.Logger.WithValues("event", "hook_file", "filename", filename)
 	log.Info("handling hook file request")
 
 	// Check if cache directory is configured
-	if config.CacheDir == "" {
+	if h.CacheDir == "" {
 		return fmt.Errorf("cache directory not configured")
 	}
 
@@ -42,10 +36,10 @@ func handleHookFile(filename string, rf io.ReaderFrom, config Config, log logr.L
 	defer span.End()
 
 	// Construct the full file path
-	filePath := filepath.Join(config.CacheDir, filename)
+	filePath := filepath.Join(h.CacheDir, filename)
 
 	// Security check - ensure the file is within the configured directory
-	if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(config.CacheDir)) {
+	if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(h.CacheDir)) {
 		err := fmt.Errorf("invalid file path: %s", filename)
 		span.SetStatus(codes.Error, err.Error())
 		return err
