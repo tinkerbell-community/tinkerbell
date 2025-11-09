@@ -52,10 +52,11 @@ RUN file src/ipmitool.static && \
 
 FROM scratch
 
+ARG BINARY
 ARG TARGETOS
 ARG TARGETARCH
 
-COPY ${TARGETOS}/${TARGETARCH}/tinkerbell /tinkerbell
+COPY ${TARGETOS}/${TARGETARCH}/${BINARY:-tinkerbell} /tinkerbell
 COPY --from=ipmitool /build/src/ipmitool.static /usr/sbin/ipmitool
 COPY --from=ipmitool /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 ENTRYPOINT [ "/tinkerbell" ]

@@ -69,8 +69,10 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 			EnableETCD:          (embeddedEtcdExecute != nil),
 		},
 		BackendKubeOptions: flag.BackendKubeOptions{
-			QPS:   defaultQPS,   // Default QPS value. A negative value disables client-side ratelimiting.
-			Burst: defaultBurst, // Default burst value.
+			QPS:                         defaultQPS,      // Default QPS value. A negative value disables client-side ratelimiting.
+			Burst:                       defaultBurst,    // Default burst value.
+			APIServerHealthTimeout:      2 * time.Minute, // Default timeout: 2 minutes to prevent permanent error loops
+			APIServerHealthPollInterval: 2 * time.Second, // Default poll interval: check every 2 seconds
 		},
 	}
 
@@ -278,6 +280,19 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 			return nil
 		}
 		if embeddedApiserverExecute != nil {
+			// Configure API server with global TLS and bind address before starting
+			bindAddr := ""
+			if globals.BindAddr.IsValid() {
+				bindAddr = globals.BindAddr.String()
+			}
+			if err := SetKubeAPIServerConfigFromGlobals(bindAddr, globals.TLS.CertFile, globals.TLS.KeyFile); err != nil {
+				return fmt.Errorf("failed to configure kube-apiserver from globals: %w", err)
+			}
+			cliLog.Info("configured kube-apiserver", 
+				"bindAddr", bindAddr, 
+				"tlsCertFile", globals.TLS.CertFile, 
+				"tlsKeyFile", globals.TLS.KeyFile)
+			
 			if err := retry.Do(func() error {
 				if err := embeddedApiserverExecute(ctx, log.WithName("kube-apiserver")); err != nil {
 					return fmt.Errorf("API server error: %w", err)
@@ -306,7 +321,8 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 				return fmt.Errorf("failed to create kube backend with no indexes: %w", err)
 			}
 			// Wait for the API server to be healthy and ready.
-			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, 20*time.Second, 5*time.Second, nil); err != nil {
+			// Use configurable timeout and poll interval to prevent permanent error loops on first boot.
+			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, globals.BackendKubeOptions.APIServerHealthTimeout, globals.BackendKubeOptions.APIServerHealthPollInterval, nil); err != nil {
 				return fmt.Errorf("failed to wait for API server health: %w", err)
 			}
 

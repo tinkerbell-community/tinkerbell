@@ -2,6 +2,7 @@ package flag
 
 import (
 	"net/netip"
+	"time"
 
 	"github.com/peterbourgon/ff/v4/ffval"
 	ntip "github.com/tinkerbell/tinkerbell/pkg/flag/netip"
@@ -37,8 +38,10 @@ type EmbeddedGlobalConfig struct {
 }
 
 type BackendKubeOptions struct {
-	QPS   float32
-	Burst int
+	QPS                         float32
+	Burst                       int
+	APIServerHealthTimeout      time.Duration
+	APIServerHealthPollInterval time.Duration
 }
 
 type TLSConfig struct {
@@ -53,6 +56,8 @@ func RegisterGlobal(fs *Set, gc *GlobalConfig) {
 	fs.Register(BackendKubeConfig, ffval.NewValueDefault(&gc.BackendKubeConfig, gc.BackendKubeConfig))
 	fs.Register(BackendKubeNamespace, ffval.NewValueDefault(&gc.BackendKubeNamespace, gc.BackendKubeNamespace))
 	fs.Register(KubeQPS, ffval.NewValueDefault(&gc.BackendKubeOptions.QPS, gc.BackendKubeOptions.QPS))
+	fs.Register(KubeAPIServerHealthTimeout, ffval.NewValueDefault(&gc.BackendKubeOptions.APIServerHealthTimeout, gc.BackendKubeOptions.APIServerHealthTimeout))
+	fs.Register(KubeAPIServerHealthPollInterval, ffval.NewValueDefault(&gc.BackendKubeOptions.APIServerHealthPollInterval, gc.BackendKubeOptions.APIServerHealthPollInterval))
 	fs.Register(BindAddr, &ntip.Addr{Addr: &gc.BindAddr})
 	fs.Register(EnableSmee, ffval.NewValueDefault(&gc.EnableSmee, gc.EnableSmee))
 	fs.Register(EnableTootles, ffval.NewValueDefault(&gc.EnableTootles, gc.EnableTootles))
@@ -113,6 +118,16 @@ var KubeQPS = Config{
 var KubeBurst = Config{
 	Name:  "backend-kube-burst",
 	Usage: "[kube] maximum burst for throttle in the Kubernetes client. A 0 value equates to 10 (client sdk constraint). A negative value disables client-side burst limiting.",
+}
+
+var KubeAPIServerHealthTimeout = Config{
+	Name:  "backend-kube-apiserver-health-timeout",
+	Usage: "[kube] maximum time to wait for the API server to become healthy during startup. This prevents permanent error loops on first boot with embedded API server.",
+}
+
+var KubeAPIServerHealthPollInterval = Config{
+	Name:  "backend-kube-apiserver-health-poll-interval",
+	Usage: "[kube] interval between API server health checks during startup.",
 }
 
 // OTEL flags.

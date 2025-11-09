@@ -58,6 +58,7 @@ upx:
   - enabled: true
     ids:
       - tinkerbell
+      - tinkerbell-embedded
       - tink-agent
     compress: best
     lzma: true
@@ -87,6 +88,24 @@ dockers_v2:
       "org.opencontainers.image.name": "{{.ProjectName}}"
       "org.opencontainers.image.revision": "{{.FullCommit}}"
       "org.opencontainers.image.version": "v{{.Version}}"
+      "org.opencontainers.image.source": "{{.GitURL}}"
+
+  - id: tinkerbell-embedded
+    dockerfile: Dockerfile.tinkerbell
+    build_args:
+      BINARY: tinkerbell-embedded
+    images:
+      - '{{ .Env.REGISTRY }}/{{ envOrDefault "IMAGE_NAME" (trimsuffix (trimprefix .GitURL "https://github.com/") ".git") }}'
+    tags:
+      - '{{ if eq .Env.IS_RELEASE "true" }}v{{ .Version }}-embedded{{ end }}'
+      - "{{ if .IsNightly }}edge-embedded{{ end }}"
+      - "{{ if not .IsNightly }}latest-embedded{{ end }}"
+      - '{{ if eq .Branch "main" }}embedded-sha-{{ .ShortCommit }}{{ end }}'
+    labels:
+      "org.opencontainers.image.created": "{{.Date}}"
+      "org.opencontainers.image.name": "{{.ProjectName}}"
+      "org.opencontainers.image.revision": "{{.FullCommit}}"
+      "org.opencontainers.image.version": "v{{.Version}}-embedded"
       "org.opencontainers.image.source": "{{.GitURL}}"
 
   - id: tink-agent
