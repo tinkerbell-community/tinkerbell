@@ -16,8 +16,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const pxeLinuxPrefix = "pxelinux.cfg/"
-
 // pxeLinuxPattern matches pxelinux.cfg/<hwtype>-<mac> where hwtype is 2-digit hex (e.g., "01" for Ethernet)
 // Per RFC 2132 and syslinux specification: hardware type is specified as 2-digit hexadecimal
 var pxeLinuxPattern = regexp.MustCompile(`^pxelinux\.cfg/([0-9a-fA-F]{2})-(.+)$`)
