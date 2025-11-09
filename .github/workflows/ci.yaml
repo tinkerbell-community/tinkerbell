@@ -140,6 +140,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IS_RELEASE: ${{ startsWith(github.ref, 'refs/tags/v') }}
 
   package-publish-helm-chart:
     runs-on: ubuntu-latest
