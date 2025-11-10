@@ -55,14 +55,6 @@ func ConfigAndFlags(disableLogging *bool) (*pflag.FlagSet, func(context.Context,
 
 		if disableLogging != nil && *disableLogging {
 			log = logr.Discard()
-		} else {
-			// Log startup configuration to help with debugging
-			log.Info("starting kube-apiserver with configuration",
-				"securePort", completedOptions.SecureServing.BindPort,
-				"bindAddress", completedOptions.SecureServing.BindAddress,
-				"certFile", completedOptions.SecureServing.ServerCert.CertKey.CertFile,
-				"keyFile", completedOptions.SecureServing.ServerCert.CertKey.KeyFile,
-			)
 		}
 		klog.SetLogger(log)
 		return apiapp.Run(ctx, completedOptions)
