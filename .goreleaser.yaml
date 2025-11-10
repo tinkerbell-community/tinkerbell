@@ -35,7 +35,7 @@ builds:
       - embedded
     no_unique_dist_dir: false
     ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}} -X main.builtBy=goreleaser -tags=embedded
       - -extldflags '-static'
     skip: false
 
