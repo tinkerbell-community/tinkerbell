@@ -320,11 +320,19 @@ func wrapNonNil(err error, format string) error {
 }
 
 // PxeLinuxConfigFileOption returns the PXE Linux config file option (option 209).
+// The format is "pxelinux.cfg/<hardware-type>-<mac-address>" where hardware-type
+// is a two-digit hex value from the DHCP packet's HWType field (e.g., "01" for Ethernet).
+// See RFC 2132 and https://www.syslinux.org/wiki/index.php?title=PXELINUX for details.
 func (i Info) PxeLinuxConfigFileOption(mac net.HardwareAddr) dhcpv4.Option {
 	if mac == nil {
 		mac = i.Mac
 	}
-	filename := fmt.Sprintf("pxelinux.cfg/01-%s", macAddrFormat(mac, constant.MacAddrFormatDash))
+	// Default to Ethernet (01) if packet is not available
+	hwType := uint16(1)
+	if i.Pkt != nil {
+		hwType = uint16(i.Pkt.HWType)
+	}
+	filename := fmt.Sprintf("pxelinux.cfg/%02x-%s", hwType, macAddrFormat(mac, constant.MacAddrFormatDash))
 	return dhcpv4.OptGeneric(dhcpv4.OptionPXELinuxConfigFile, []byte(filename))
 }
 

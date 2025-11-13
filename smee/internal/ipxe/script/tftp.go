@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"regexp"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -15,7 +16,11 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const pxeLinuxPrefix = "pxelinux.cfg/01-"
+const pxeLinuxPrefix = "pxelinux.cfg/"
+
+// pxeLinuxPattern matches pxelinux.cfg/<hwtype>-<mac> where hwtype is 2-digit hex (e.g., "01" for Ethernet)
+// Per RFC 2132 and syslinux specification: hardware type is specified as 2-digit hexadecimal
+var pxeLinuxPattern = regexp.MustCompile(`^pxelinux\.cfg/([0-9a-fA-F]{2})-(.+)$`)
 
 // pxeTemplate is the PXE extlinux.conf script template used to boot a machine via TFTP.
 // IMPORTANT: U-Boot's PXE implementation requires RELATIVE paths for kernel/initrd.
@@ -26,7 +31,10 @@ default deploy
 
 label deploy
 		kernel {{ .Kernel }}
-		append console=tty1 console=ttyAMA0,115200 loglevel=7 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory {{- if ne .VLANID "" }} vlan_id={{ .VLANID }} {{- end }} facility={{ .Facility }} syslog_host={{ .SyslogHost }} grpc_authority={{ .TinkGRPCAuthority }} tinkerbell_tls={{ .TinkerbellTLS }} tinkerbell_insecure_tls={{ .TinkerbellInsecureTLS }} worker_id={{ .WorkerID }} hw_addr={{ .HWAddr }} modules=loop,squashfs,sd-mod,usb-storage intel_iommu=on iommu=pt {{- range .ExtraKernelParams}} {{.}} {{- end}}
+		append console=tty1 console=ttyAMA0,115200 loglevel=7 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory \
+		net.ifnames=0 {{- if ne .VLANID "" }} vlan_id={{ .VLANID }} {{- end }} facility={{ .Facility }} syslog_host={{ .SyslogHost }} grpc_authority={{ .TinkGRPCAuthority }} \
+		tinkerbell_tls={{ .TinkerbellTLS }} tinkerbell_insecure_tls={{ .TinkerbellInsecureTLS }} worker_id={{ .WorkerID }} hw_addr={{ .HWAddr }} \
+		modules=loop,squashfs,sd-mod,usb-storage intel_iommu=on iommu=pt {{- range .ExtraKernelParams}} {{.}} {{- end}}
 		initrd {{ .Initrd }}
 		ipappend 2
 
@@ -38,13 +46,16 @@ label local
 
 // HandleTFTP implements the TFTP read function handler.
 func (h Handler) HandleTFTP(filename string, rf io.ReaderFrom) error {
-	// Extract MAC address from pxelinux.cfg/01-XX:XX:XX:XX:XX:XX format
-	if !strings.HasPrefix(filename, pxeLinuxPrefix) {
-		return fmt.Errorf("invalid pxelinux config filename: %s", filename)
+	// Extract hardware type and MAC address from pxelinux.cfg/<hwtype>-<mac> format
+	// Per RFC 2132 and syslinux: hardware type is 2-digit hex (e.g., "01" for Ethernet)
+	matches := pxeLinuxPattern.FindStringSubmatch(filename)
+	if matches == nil || len(matches) != 3 {
+		return fmt.Errorf("invalid pxelinux config filename format: %s (expected: pxelinux.cfg/<hwtype>-<mac>)", filename)
 	}
 
-	macStr := strings.TrimPrefix(filename, pxeLinuxPrefix)
-	log := h.Logger.WithValues("event", "pxelinux", "filename", filename, "macStr", macStr)
+	hwTypeStr := matches[1]
+	macStr := matches[2]
+	log := h.Logger.WithValues("event", "pxelinux", "filename", filename, "hwType", hwTypeStr, "macStr", macStr)
 
 	// Parse MAC address
 	mac, err := net.ParseMAC(macStr)
