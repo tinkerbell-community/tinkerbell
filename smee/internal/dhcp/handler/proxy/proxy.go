@@ -196,6 +196,8 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp dhcp.Pac
 	// see https://datatracker.ietf.org/doc/html/rfc2131#section-2
 	// without this the pxe client will try to broadcast a request message to port 4011 for the ipxe script.
 	reply.ServerIPAddr = ns
+	reply.UpdateOption(dhcpv4.Option{Code: dhcpv4.OptionPXELinuxConfigFile, Value: dhcpv4.String(fmt.Sprintf("pxelinux.cfg/01-%s", i.Mac.String()))})
+	reply.UpdateOption(dhcpv4.OptTFTPServerName(ns.String()))
 
 	// set sname header
 	// see https://datatracker.ietf.org/doc/html/rfc2131#section-2

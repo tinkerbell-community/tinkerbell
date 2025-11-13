@@ -280,19 +280,19 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 			return nil
 		}
 		if embeddedApiserverExecute != nil {
-			// Configure kube-apiserver from global config before starting
+			// Configure API server with global TLS and bind address before starting
 			bindAddr := ""
 			if globals.BindAddr.IsValid() {
 				bindAddr = globals.BindAddr.String()
 			}
-			if err := ConfigureKubeAPIServerFromGlobals(bindAddr, globals.TLS.CertFile, globals.TLS.KeyFile); err != nil {
+			if err := SetKubeAPIServerConfigFromGlobals(bindAddr, globals.TLS.CertFile, globals.TLS.KeyFile); err != nil {
 				return fmt.Errorf("failed to configure kube-apiserver from globals: %w", err)
 			}
-			cliLog.Info("configured kube-apiserver from global flags",
-				"bindAddr", bindAddr,
-				"tlsCertFile", globals.TLS.CertFile,
+			cliLog.Info("configured kube-apiserver", 
+				"bindAddr", bindAddr, 
+				"tlsCertFile", globals.TLS.CertFile, 
 				"tlsKeyFile", globals.TLS.KeyFile)
-
+			
 			if err := retry.Do(func() error {
 				if err := embeddedApiserverExecute(ctx, log.WithName("kube-apiserver")); err != nil {
 					return fmt.Errorf("API server error: %w", err)

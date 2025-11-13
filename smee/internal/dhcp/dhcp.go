@@ -19,6 +19,7 @@ import (
 const (
 	PXEClient  ClientType = "PXEClient"
 	HTTPClient ClientType = "HTTPClient"
+	UBoot      ClientType = "U-Boot"
 )
 
 // known user-class types. must correspond to DHCP option 77 - User-Class
@@ -276,8 +277,8 @@ func IsNetbootClient(pkt *dhcpv4.DHCPv4) error {
 	}
 	// option 60 must start with PXEClient or HTTPClient
 	opt60 := pkt.GetOneOption(dhcpv4.OptionClassIdentifier)
-	if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) {
-		err = wrapNonNil(err, "option 60 not PXEClient or HTTPClient")
+	if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) && !strings.HasPrefix(string(opt60), string(UBoot)) {
+		err = wrapNonNil(err, fmt.Sprintf("option 60 not PXEClient or HTTPClient or U-Boot: got %q", string(opt60)))
 	}
 
 	// option 93 must be set
