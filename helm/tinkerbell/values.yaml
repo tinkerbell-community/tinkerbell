@@ -30,6 +30,7 @@ deployment:
       enableCRDMigrations: true
       enableRufioController: true
       enableSecondstar: true
+      enableHook: true
       enableSmee: true
       enableTootles: true
       enableTinkServer: true
@@ -54,6 +55,10 @@ deployment:
       hostKeyPath: ""
       ipmitoolPath: "/usr/sbin/ipmitool"
       idleTimeout: "15m"
+      logLevel: 0
+    hook:
+      bindAddr: ""
+      bindPort: 7173
       logLevel: 0
     smee:
       dhcpBindAddr: ""
@@ -195,6 +200,10 @@ service:
     httpTootles:
       name: http-tootles
       port: 7172
+      protocol: TCP
+    httpHook:
+      name: http-hook
+      port: 7173
       protocol: TCP
     ssh:
       name: ssh
