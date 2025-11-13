@@ -19,6 +19,7 @@ import (
 const (
 	PXEClient  ClientType = "PXEClient"
 	HTTPClient ClientType = "HTTPClient"
+	UBoot      ClientType = "U-Boot"
 )
 
 // known user-class types. must correspond to DHCP option 77 - User-Class
@@ -276,8 +277,8 @@ func IsNetbootClient(pkt *dhcpv4.DHCPv4) error {
 	}
 	// option 60 must start with PXEClient or HTTPClient
 	opt60 := pkt.GetOneOption(dhcpv4.OptionClassIdentifier)
-	if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) {
-		err = wrapNonNil(err, "option 60 not PXEClient or HTTPClient")
+	if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) && !strings.HasPrefix(string(opt60), string(UBoot)) {
+		err = wrapNonNil(err, fmt.Sprintf("option 60 not PXEClient or HTTPClient or U-Boot: got %q", string(opt60)))
 	}
 
 	// option 93 must be set
@@ -316,6 +317,15 @@ func wrapNonNil(err error, format string) error {
 	}
 
 	return fmt.Errorf("%w: %v", err, format)
+}
+
+// PxeLinuxConfigFileOption returns the PXE Linux config file option (option 209).
+func (i Info) PxeLinuxConfigFileOption(mac net.HardwareAddr) dhcpv4.Option {
+	if mac == nil {
+		mac = i.Mac
+	}
+	filename := fmt.Sprintf("pxelinux.cfg/01-%s", macAddrFormat(mac, constant.MacAddrFormatDash))
+	return dhcpv4.OptGeneric(dhcpv4.OptionPXELinuxConfigFile, []byte(filename))
 }
 
 // Bootfile returns the calculated dhcp header: "file" value. see https://datatracker.ietf.org/doc/html/rfc2131#section-2 .
