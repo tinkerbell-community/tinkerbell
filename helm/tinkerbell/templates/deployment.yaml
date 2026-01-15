@@ -330,6 +330,42 @@ spec:
             {{- end }}
           {{- end }}
           resources: {{ toYaml .Values.deployment.resources | nindent 12 }}
+          {{- if and .Values.deployment.probes.liveness.enabled .Values.deployment.envs.globals.enableSmee }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.deployment.probes.liveness.httpGet.path }}
+              port: {{ .Values.deployment.probes.liveness.httpGet.port }}
+              scheme: {{ .Values.deployment.probes.liveness.httpGet.scheme }}
+            initialDelaySeconds: {{ .Values.deployment.probes.liveness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.probes.liveness.periodSeconds }}
+            timeoutSeconds: {{ .Values.deployment.probes.liveness.timeoutSeconds }}
+            failureThreshold: {{ .Values.deployment.probes.liveness.failureThreshold }}
+            successThreshold: {{ .Values.deployment.probes.liveness.successThreshold }}
+          {{- end }}
+          {{- if and .Values.deployment.probes.readiness.enabled .Values.deployment.envs.globals.enableSmee }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.deployment.probes.readiness.httpGet.path }}
+              port: {{ .Values.deployment.probes.readiness.httpGet.port }}
+              scheme: {{ .Values.deployment.probes.readiness.httpGet.scheme }}
+            initialDelaySeconds: {{ .Values.deployment.probes.readiness.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.probes.readiness.periodSeconds }}
+            timeoutSeconds: {{ .Values.deployment.probes.readiness.timeoutSeconds }}
+            failureThreshold: {{ .Values.deployment.probes.readiness.failureThreshold }}
+            successThreshold: {{ .Values.deployment.probes.readiness.successThreshold }}
+          {{- end }}
+          {{- if and .Values.deployment.probes.startup.enabled .Values.deployment.envs.globals.enableSmee }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.deployment.probes.startup.httpGet.path }}
+              port: {{ .Values.deployment.probes.startup.httpGet.port }}
+              scheme: {{ .Values.deployment.probes.startup.httpGet.scheme }}
+            initialDelaySeconds: {{ .Values.deployment.probes.startup.initialDelaySeconds }}
+            periodSeconds: {{ .Values.deployment.probes.startup.periodSeconds }}
+            timeoutSeconds: {{ .Values.deployment.probes.startup.timeoutSeconds }}
+            failureThreshold: {{ .Values.deployment.probes.startup.failureThreshold }}
+            successThreshold: {{ .Values.deployment.probes.startup.successThreshold }}
+          {{- end }}
           securityContext:
             capabilities:
               add:

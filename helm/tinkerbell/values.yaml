@@ -159,6 +159,45 @@ deployment:
   selector: {}
   strategy:
     type: RollingUpdate
+  # Kubernetes probes configuration
+  # Uses Smee's /healthcheck endpoint on the HTTP script server port (7171)
+  probes:
+    # Liveness probe - restarts the container if it fails
+    liveness:
+      enabled: true
+      httpGet:
+        path: /healthcheck
+        port: http-smee
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    # Readiness probe - removes pod from service endpoints if it fails
+    readiness:
+      enabled: true
+      httpGet:
+        path: /healthcheck
+        port: http-smee
+        scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    # Startup probe - gives the container time to start before liveness kicks in
+    startup:
+      enabled: true
+      httpGet:
+        path: /healthcheck
+        port: http-smee
+        scheme: HTTP
+      initialDelaySeconds: 0
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 30
+      successThreshold: 1
   tolerations: []
   # Additional volumes on the output Deployment definition.
   volumes: []
