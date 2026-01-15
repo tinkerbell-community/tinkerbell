@@ -217,6 +217,8 @@ publicIP:
 rbac:
   name: tinkerbell
   type: ClusterRole # or Role
+  secrets:
+    enabled: true
 service:
   annotations: {}
   labels:
