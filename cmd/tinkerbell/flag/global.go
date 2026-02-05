@@ -26,6 +26,7 @@ type GlobalConfig struct {
 	EnableRufio          bool
 	EnableSecondStar     bool
 	EnableHook           bool
+	EnableUI             bool
 	EnableCRDMigrations  bool
 	EmbeddedGlobalConfig EmbeddedGlobalConfig
 	BackendKubeOptions   BackendKubeOptions
@@ -66,6 +67,7 @@ func RegisterGlobal(fs *Set, gc *GlobalConfig) {
 	fs.Register(EnableRufioController, ffval.NewValueDefault(&gc.EnableRufio, gc.EnableRufio))
 	fs.Register(EnableSecondStar, ffval.NewValueDefault(&gc.EnableSecondStar, gc.EnableSecondStar))
 	fs.Register(EnableHook, ffval.NewValueDefault(&gc.EnableHook, gc.EnableHook))
+	fs.Register(EnableUI, ffval.NewValueDefault(&gc.EnableUI, gc.EnableUI))
 	fs.Register(EnableCRDMigrations, ffval.NewValueDefault(&gc.EnableCRDMigrations, gc.EnableCRDMigrations))
 	fs.Register(LogLevelConfig, ffval.NewValueDefault(&gc.LogLevel, gc.LogLevel))
 	fs.Register(OTELEndpoint, ffval.NewValueDefault(&gc.OTELEndpoint, gc.OTELEndpoint))
@@ -180,6 +182,11 @@ var EnableRufioController = Config{
 var EnableSecondStar = Config{
 	Name:  "enable-secondstar",
 	Usage: "enable SecondStar service",
+}
+
+var EnableUI = Config{
+	Name:  "enable-ui",
+	Usage: "enable UI service",
 }
 
 var EnableKubeAPIServer = Config{
