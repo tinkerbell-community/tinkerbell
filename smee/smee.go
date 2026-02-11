@@ -31,6 +31,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/smee/internal/ipxe/script"
 	"github.com/tinkerbell/tinkerbell/smee/internal/iso"
 	"github.com/tinkerbell/tinkerbell/smee/internal/metric"
+	"github.com/tinkerbell/tinkerbell/smee/internal/netif"
 	"github.com/tinkerbell/tinkerbell/smee/internal/syslog"
 	"github.com/tinkerbell/tinkerbell/smee/internal/tftp"
 	"golang.org/x/sync/errgroup"
@@ -263,8 +264,6 @@ type NetIf struct {
 	InterfaceType InterfaceType
 	// EnableLeaderElection determines if leader election is enabled.
 	EnableLeaderElection bool
-	// KubeConfig is the Kubernetes client configuration for leader election.
-	KubeConfig *rest.Config
 	// LeaderElectionNamespace is the namespace for the leader election lock.
 	LeaderElectionNamespace string
 	// LeaderElectionLockName is the name of the leader election lock.
@@ -538,7 +537,6 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 			InterfaceType:           netif.InterfaceType(c.NetIf.InterfaceType),
 			Enabled:                 c.NetIf.Enabled,
 			EnableLeaderElection:    c.NetIf.EnableLeaderElection,
-			KubeConfig:              c.NetIf.KubeConfig,
 			LeaderElectionNamespace: c.NetIf.LeaderElectionNamespace,
 			LeaderElectionLockName:  c.NetIf.LeaderElectionLockName,
 			LeaderElectionIdentity:  c.NetIf.LeaderElectionIdentity,

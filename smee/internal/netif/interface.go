@@ -14,9 +14,9 @@ import (
 	"golang.org/x/sys/unix"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/leaderelection"
 	"k8s.io/client-go/tools/leaderelection/resourcelock"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 )
 
 // InterfaceType represents the type of network interface to create.
@@ -44,7 +44,7 @@ type Config struct {
 	// EnableLeaderElection determines if leader election is enabled.
 	EnableLeaderElection bool
 	// KubeConfig is the Kubernetes client configuration for leader election.
-	KubeConfig *rest.Config
+	KubeConfig string
 	// LeaderElectionNamespace is the namespace for the leader election lock.
 	LeaderElectionNamespace string
 	// LeaderElectionLockName is the name of the leader election lock.
@@ -127,7 +127,7 @@ func NewManager(cfg Config) (*Manager, error) {
 
 // setupLeaderElection configures and creates a leader elector.
 func (m *Manager) setupLeaderElection(cfg Config, log logr.Logger) (*leaderelection.LeaderElector, error) {
-	if cfg.KubeConfig == nil {
+	if cfg.KubeConfig == "" {
 		return nil, fmt.Errorf("kubernetes config required for leader election")
 	}
 
@@ -156,7 +156,7 @@ func (m *Manager) setupLeaderElection(cfg Config, log logr.Logger) (*leaderelect
 	}
 
 	// Create Kubernetes client
-	clientset, err := kubernetes.NewForConfig(cfg.KubeConfig)
+	clientset, err := kubernetes.NewForConfig(config.GetConfigOrDie())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
