@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/go-logr/logr"
@@ -13,6 +14,11 @@ import (
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
+
+// rpiPrefixPattern matches Raspberry Pi netboot path prefixes: <serial-or-mac>/
+// Raspberry Pi firmware prepends the serial number (8-12 hex chars) or MAC address (dash-separated)
+// to all TFTP file requests during netboot.
+var rpiPrefixPattern = regexp.MustCompile(`^([0-9a-fA-F]{8,12}|[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2})/{1,2}(.+)$`)
 
 // Handler holds the configuration needed for hook file serving.
 type Handler struct {
@@ -35,8 +41,17 @@ func (h Handler) ServeTFTP(filename string, rf io.ReaderFrom) error {
 		trace.WithSpanKind(trace.SpanKindServer))
 	defer span.End()
 
+	// Strip Raspberry Pi netboot prefix (serial or MAC) from the filename.
+	// RPi firmware prepends its serial/MAC to all TFTP requests during netboot,
+	// e.g. "dc-a6-32-01-02-03/vmlinuz-aarch64" or "abcdef01/initramfs-aarch64".
+	cleanName := filename
+	if matches := rpiPrefixPattern.FindStringSubmatch(filename); matches != nil {
+		cleanName = matches[2]
+		log.Info("stripped RPi netboot prefix from filename", "original", filename, "cleaned", cleanName)
+	}
+
 	// Construct the full file path
-	filePath := filepath.Join(h.CacheDir, filename)
+	filePath := filepath.Join(h.CacheDir, cleanName)
 
 	// Security check - ensure the file is within the configured directory
 	if !strings.HasPrefix(filepath.Clean(filePath), filepath.Clean(h.CacheDir)) {

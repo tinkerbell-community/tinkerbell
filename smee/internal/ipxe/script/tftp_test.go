@@ -149,12 +149,12 @@ func TestHandleTFTP_ErrorMessages(t *testing.T) {
 		{
 			name:          "missing hardware type",
 			filename:      "pxelinux.cfg/00:11:22:33:44:55",
-			wantErrSubstr: "invalid pxelinux config filename format",
+			wantErrSubstr: "filename does not match expected patterns",
 		},
 		{
 			name:          "wrong prefix",
 			filename:      "ipxe.cfg/01-00:11:22:33:44:55",
-			wantErrSubstr: "invalid pxelinux config filename format",
+			wantErrSubstr: "filename does not match expected patterns",
 		},
 		{
 			name:          "invalid MAC with valid format",

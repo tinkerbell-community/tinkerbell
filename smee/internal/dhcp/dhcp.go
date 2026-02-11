@@ -278,19 +278,35 @@ func IsNetbootClient(pkt *dhcpv4.DHCPv4) error {
 		err = wrapNonNil(err, "option 60 not set")
 	}
 	// option 60 must start with PXEClient or HTTPClient
-	opt60 := pkt.GetOneOption(dhcpv4.OptionClassIdentifier)
-	if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) && !strings.HasPrefix(string(opt60), string(UBoot)) {
-		err = wrapNonNil(err, fmt.Sprintf("option 60 not PXEClient or HTTPClient or U-Boot: got %q", string(opt60)))
+	// opt60 := pkt.GetOneOption(dhcpv4.OptionClassIdentifier)
+	// if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) && !strings.HasPrefix(string(opt60), string(UBoot)) {
+	// 	err = wrapNonNil(err, fmt.Sprintf("option 60 not PXEClient or HTTPClient or U-Boot: got %q", string(opt60)))
+	// }
+
+	// Setting default Raspberry Pi options.
+	if opt60 := pkt.GetOneOption(dhcpv4.OptionClassIdentifier); pkt.Options.Has(dhcpv4.OptionClassIdentifier) &&
+		opt60 != nil && bytes.HasPrefix(opt60, []byte(PXEClient)) && bytes.HasSuffix(opt60, []byte("002001")) {
+		pkt.Options.Update(dhcpv4.OptGeneric(dhcpv4.OptionClientSystemArchitectureType, []byte{0o0, 0o0}))
+		pkt.Options.Update(dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0o1, 0o2, 0o1}))
 	}
 
 	// option 93 must be set
 	if !pkt.Options.Has(dhcpv4.OptionClientSystemArchitectureType) {
+		if !IsRaspberryPI(pkt.ClientHWAddr) {
+			err = wrapNonNil(err, "option 94 not set")
+		} else {
+			pkt.Options.Update(dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0o1, 0o2, 0o1}))
+		}
 		err = wrapNonNil(err, "option 93 not set")
 	}
 
 	// option 94 must be set
 	if !pkt.Options.Has(dhcpv4.OptionClientNetworkInterfaceIdentifier) {
-		err = wrapNonNil(err, "option 94 not set")
+		if !IsRaspberryPI(pkt.ClientHWAddr) {
+			err = wrapNonNil(err, "option 94 not set")
+		} else {
+			pkt.Options.Update(dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0o1, 0o2, 0o1}))
+		}
 	}
 
 	// option 97 must be have correct length or not be set

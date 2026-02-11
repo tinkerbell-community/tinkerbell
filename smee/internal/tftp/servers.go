@@ -10,7 +10,6 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/pin/tftp/v3"
 	"github.com/tinkerbell/tinkerbell/smee/internal/tftp/hook"
-	"github.com/tinkerbell/tinkerbell/smee/internal/tftp/rpi"
 )
 
 // ConfigTFTP is the configuration for the TFTP server.
@@ -29,14 +28,6 @@ type ConfigTFTP struct {
 func (c *ConfigTFTP) ServeTFTP(ctx context.Context, addr string, handlers HandlerMapping) error {
 	mux := NewServeMux()
 	mux.log = logr.FromContextOrDiscard(ctx)
-
-	// Register Raspberry Pi handler for native RPi netboot paths
-	// Pattern matches: <serial-or-mac>/<filename> where serial/mac is 8-12 hex chars or MAC with dashes
-	// Examples: b827eb123456/config.txt, b8-27-eb-12-34-56/cmdline.txt
-	mux.Handle(`^([0-9a-fA-F]{8,12}|[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2}-[0-9a-fA-F]{2})/.*$`, rpi.Handler{
-		Logger:   c.Logger,
-		CacheDir: c.CacheDir,
-	})
 
 	for pattern, handler := range handlers {
 		mux.Handle(pattern, handler)

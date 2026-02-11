@@ -68,7 +68,7 @@ const (
 
 	IPXEBinaryPattern = `\.(efi|kpxe|pxe)$`
 	IPXEBinaryURI     = "/ipxe/binary/"
-	IPXEScriptPattern = `^(pxelinux\.cfg/)`
+	IPXEScriptPattern = `(^pxelinux\.cfg/|(config|cmdline)\.txt$)`
 	IPXEScriptURI     = "/ipxe/script/"
 	ISOURI            = "/iso/"
 	HealthCheckURI    = "/healthcheck"
