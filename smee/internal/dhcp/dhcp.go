@@ -163,6 +163,7 @@ func IsRaspberryPI(mac net.HardwareAddr) bool {
 		{0x28, 0xcd, 0xc1}, // 28:CD:C1
 		{0xd8, 0x3a, 0xdd}, // D8:3A:DD
 		{0x2c, 0xcf, 0x67}, // 2C:CF:67
+		{0x88, 0xa2, 0x9e}, // 88:A2:9E
 	}
 	for _, prefix := range prefixes {
 		if bytes.HasPrefix(mac, prefix) {
