@@ -65,6 +65,32 @@ func RegisterSmeeFlags(fs *Set, sc *SmeeConfig) {
 	// HTTPS flags
 	fs.Register(HTTPSBindPort, ffval.NewValueDefault(&sc.Config.HTTP.BindHTTPSPort, sc.Config.HTTP.BindHTTPSPort))
 
+	// Network Interface Management flags
+	fs.Register(NetIfEnabled, ffval.NewValueDefault(&sc.Config.NetIf.Enabled, sc.Config.NetIf.Enabled))
+	fs.Register(NetIfSrcInterface, ffval.NewValueDefault(&sc.Config.NetIf.SrcInterface, sc.Config.NetIf.SrcInterface))
+	fs.Register(NetIfInterfaceType, &ffval.Enum[smee.InterfaceType]{
+		ParseFunc: func(s string) (smee.InterfaceType, error) {
+			switch s {
+			case "macvlan":
+				return smee.InterfaceTypeMacvlan, nil
+			case "ipvlan":
+				return smee.InterfaceTypeIPvlan, nil
+			default:
+				return "", fmt.Errorf("invalid interface type %q, must be macvlan or ipvlan", s)
+			}
+		},
+		Valid:   []smee.InterfaceType{smee.InterfaceTypeMacvlan, smee.InterfaceTypeIPvlan},
+		Pointer: &sc.Config.NetIf.InterfaceType,
+		Default: smee.InterfaceTypeMacvlan,
+	})
+	fs.Register(NetIfLeaderElectionEnabled, ffval.NewValueDefault(&sc.Config.NetIf.EnableLeaderElection, sc.Config.NetIf.EnableLeaderElection))
+	fs.Register(NetIfLeaderElectionNamespace, ffval.NewValueDefault(&sc.Config.NetIf.LeaderElectionNamespace, sc.Config.NetIf.LeaderElectionNamespace))
+	fs.Register(NetIfLeaderElectionLockName, ffval.NewValueDefault(&sc.Config.NetIf.LeaderElectionLockName, sc.Config.NetIf.LeaderElectionLockName))
+	fs.Register(NetIfLeaderElectionIdentity, ffval.NewValueDefault(&sc.Config.NetIf.LeaderElectionIdentity, sc.Config.NetIf.LeaderElectionIdentity))
+	fs.Register(NetIfLeaderElectionLeaseDuration, ffval.NewValueDefault(&sc.Config.NetIf.LeaseDuration, sc.Config.NetIf.LeaseDuration))
+	fs.Register(NetIfLeaderElectionRenewDeadline, ffval.NewValueDefault(&sc.Config.NetIf.RenewDeadline, sc.Config.NetIf.RenewDeadline))
+	fs.Register(NetIfLeaderElectionRetryPeriod, ffval.NewValueDefault(&sc.Config.NetIf.RetryPeriod, sc.Config.NetIf.RetryPeriod))
+
 	// IPXE flags
 	fs.Register(IPXEArchMapping, &ffval.Value[map[iana.Arch]constant.IPXEBinary]{
 		ParseFunc: func(s string) (map[iana.Arch]constant.IPXEBinary, error) {
@@ -490,4 +516,55 @@ var DHCPEnableNetbootOptions = Config{
 var HTTPSBindPort = Config{
 	Name:  "https-bind-port",
 	Usage: "[https] local port to listen on for HTTPS requests",
+}
+
+// Network Interface Management flags for DHCP proxy mode
+var NetIfEnabled = Config{
+	Name:  "smee-netif-enabled",
+	Usage: "[netif] enable network interface management for DHCP proxy mode",
+}
+
+var NetIfSrcInterface = Config{
+	Name:  "smee-netif-src-interface",
+	Usage: "[netif] source/parent interface to attach to (default: auto-detect from default gateway)",
+}
+
+var NetIfInterfaceType = Config{
+	Name:  "smee-netif-interface-type",
+	Usage: "[netif] type of interface to create (macvlan or ipvlan, default: macvlan)",
+}
+
+var NetIfLeaderElectionEnabled = Config{
+	Name:  "smee-netif-leader-election-enabled",
+	Usage: "[netif] enable leader election for interface management",
+}
+
+var NetIfLeaderElectionNamespace = Config{
+	Name:  "smee-netif-leader-election-namespace",
+	Usage: "[netif] namespace for leader election lock",
+}
+
+var NetIfLeaderElectionLockName = Config{
+	Name:  "smee-netif-leader-election-lock-name",
+	Usage: "[netif] name of the leader election lock (default: smee-dhcp-proxy)",
+}
+
+var NetIfLeaderElectionIdentity = Config{
+	Name:  "smee-netif-leader-election-identity",
+	Usage: "[netif] unique identity for leader election (default: pod hostname)",
+}
+
+var NetIfLeaderElectionLeaseDuration = Config{
+	Name:  "smee-netif-leader-election-lease-duration",
+	Usage: "[netif] leader election lease duration",
+}
+
+var NetIfLeaderElectionRenewDeadline = Config{
+	Name:  "smee-netif-leader-election-renew-deadline",
+	Usage: "[netif] leader election renew deadline",
+}
+
+var NetIfLeaderElectionRetryPeriod = Config{
+	Name:  "smee-netif-leader-election-retry-period",
+	Usage: "[netif] leader election retry period",
 }

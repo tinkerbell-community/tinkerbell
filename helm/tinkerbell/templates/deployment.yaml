@@ -1,5 +1,3 @@
-{{- $publicIP := .Values.publicIP }}
-{{- $trustedProxies := .Values.trustedProxies }}
 {{- $sourceInterface := .Values.deployment.init.sourceInterface }}
 {{- $dhcpInterfaceType := .Values.deployment.init.interfaceMode }}
 {{- if .Values.deployment.daemonSet.enabled }}
@@ -11,17 +9,16 @@ kind: Deployment
 {{- end }}
 metadata:
   labels:
-    app: {{ .Values.name }}
-  name: {{ .Values.name }}
-  namespace: {{ .Release.Namespace | quote }}
+    {{- include "tinkerbell.labels" . | nindent 4 }}
+  name: {{ include "tinkerbell.fullname" . }}
+  namespace: {{ include "tinkerbell.namespace" . }}
 spec:
   {{- if not .Values.deployment.daemonSet.enabled }}
   replicas: {{ .Values.deployment.replicas }}
   {{- end }}
   selector:
     matchLabels:
-      app: {{ .Values.name }}
-      stack: tinkerbell
+      {{- include "tinkerbell.selectorLabels" . | nindent 6 }}
       {{- with .Values.deployment.selector }}
       {{- toYaml . | nindent 6 }}
       {{- end }}
@@ -37,7 +34,7 @@ spec:
         {{- end }}
       labels:
         app: {{ .Values.name }}
-        stack: tinkerbell
+        {{- include "tinkerbell.selectorLabels" . | nindent 8 }}
         {{- with .Values.deployment.selector }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -375,7 +372,7 @@ spec:
           {{- toYaml . | nindent 10 }}
           {{- end }}
       hostNetwork: {{ .Values.deployment.hostNetwork }}
-      serviceAccountName: {{ .Values.rbac.name }}-service-account
+      serviceAccountName: {{ include "tinkerbell.serviceAccountName" . }}
       volumes:
       {{- if .Values.deployment.init.enabled }}
       - name: script

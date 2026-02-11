@@ -116,6 +116,8 @@ type Config struct {
 	HTTP HTTP
 	// TLS is the configuration for TLS.
 	TLS TLS
+	// NetIf is the configuration for network interface management (DHCP proxy mode).
+	NetIf NetIf
 }
 
 type HTTP struct {
@@ -239,6 +241,42 @@ type TinkServer struct {
 
 type TLS struct {
 	Certs []tls.Certificate
+}
+
+// InterfaceType represents the type of network interface to create for DHCP proxy mode.
+type InterfaceType string
+
+const (
+	// InterfaceTypeMacvlan creates a macvlan interface in bridge mode.
+	InterfaceTypeMacvlan InterfaceType = "macvlan"
+	// InterfaceTypeIPvlan creates an ipvlan interface in L2 mode.
+	InterfaceTypeIPvlan InterfaceType = "ipvlan"
+)
+
+type NetIf struct {
+	// Enabled determines if network interface management is enabled for DHCP proxy mode.
+	Enabled bool
+	// SrcInterface is the source/parent interface to attach to (e.g., "eth0").
+	// If empty, the default gateway interface will be used.
+	SrcInterface string
+	// InterfaceType is the type of interface to create (macvlan or ipvlan).
+	InterfaceType InterfaceType
+	// EnableLeaderElection determines if leader election is enabled.
+	EnableLeaderElection bool
+	// KubeConfig is the Kubernetes client configuration for leader election.
+	KubeConfig *rest.Config
+	// LeaderElectionNamespace is the namespace for the leader election lock.
+	LeaderElectionNamespace string
+	// LeaderElectionLockName is the name of the leader election lock.
+	LeaderElectionLockName string
+	// LeaderElectionIdentity is the unique identity of this instance.
+	LeaderElectionIdentity string
+	// LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership.
+	LeaseDuration time.Duration
+	// RenewDeadline is the duration the leader will retry refreshing leadership before giving up.
+	RenewDeadline time.Duration
+	// RetryPeriod is the duration the LeaderElector clients should wait between tries of actions.
+	RetryPeriod time.Duration
 }
 
 // NewConfig is a constructor for the Config struct. It will set default values for the Config struct.
@@ -491,6 +529,32 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 				return ts.ServeTFTP(ctx, addrPort.String(), tftpHandlers)
 			})
 		}
+	}
+
+	// Network interface management for DHCP proxy mode
+	if c.NetIf.Enabled {
+		ifMgr, err := netif.NewManager(netif.Config{
+			SrcInterface:            c.NetIf.SrcInterface,
+			InterfaceType:           netif.InterfaceType(c.NetIf.InterfaceType),
+			Enabled:                 c.NetIf.Enabled,
+			EnableLeaderElection:    c.NetIf.EnableLeaderElection,
+			KubeConfig:              c.NetIf.KubeConfig,
+			LeaderElectionNamespace: c.NetIf.LeaderElectionNamespace,
+			LeaderElectionLockName:  c.NetIf.LeaderElectionLockName,
+			LeaderElectionIdentity:  c.NetIf.LeaderElectionIdentity,
+			LeaseDuration:           c.NetIf.LeaseDuration,
+			RenewDeadline:           c.NetIf.RenewDeadline,
+			RetryPeriod:             c.NetIf.RetryPeriod,
+			Logger:                  log.WithName("netif"),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create interface manager: %w", err)
+		}
+		defer ifMgr.Close()
+
+		g.Go(func() error {
+			return ifMgr.Start(ctx)
+		})
 	}
 
 	// dhcp serving
