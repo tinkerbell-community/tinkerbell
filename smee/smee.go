@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"path"
@@ -27,7 +28,6 @@ import (
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/handler/proxy"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/handler/reservation"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/server"
-	"github.com/tinkerbell/tinkerbell/smee/internal/http"
 	"github.com/tinkerbell/tinkerbell/smee/internal/ipxe/binary"
 	"github.com/tinkerbell/tinkerbell/smee/internal/ipxe/script"
 	"github.com/tinkerbell/tinkerbell/smee/internal/iso"
@@ -312,11 +312,9 @@ func NewConfig(c Config, publicIP netip.Addr) *Config {
 	return defaults
 }
 
-// Start will run Smee services. Enabling and disabling services is controlled by the Config struct.
-func (c *Config) Start(ctx context.Context, log logr.Logger) error {
-	if c.Backend == nil {
-		return errors.New("no backend provided")
-	}
+// Init initializes OpenTelemetry and Prometheus metrics for Smee.
+// It should be called before constructing HTTP handlers.
+func (c *Config) Init(ctx context.Context, log logr.Logger) (context.Context, func(), error) {
 	oCfg := otel.Config{
 		Servicename: "smee",
 		Endpoint:    c.OTEL.Endpoint,
@@ -325,16 +323,95 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 	}
 	ctx, otelShutdown, err := otel.Init(ctx, oCfg)
 	if err != nil {
-		return fmt.Errorf("failed to initialize OpenTelemetry: %w", err)
+		return ctx, nil, fmt.Errorf("failed to initialize OpenTelemetry: %w", err)
 	}
-	defer otelShutdown()
 	metric.Init()
+	return ctx, otelShutdown, nil
+}
+
+// InitMetrics initializes only Smee's Prometheus metrics (DHCP counters,
+// discover/job histograms, etc.) without initializing OpenTelemetry.
+// Use this when OTel has already been initialized at a higher level (e.g.
+// by the consolidated tinkerbell binary) to avoid overwriting the global
+// tracer provider.
+func (c *Config) InitMetrics() {
+	metric.Init()
+}
+
+// BinaryHandler returns an http.Handler that serves iPXE binaries.
+// Returns nil if the iPXE HTTP binary server is disabled.
+func (c *Config) BinaryHandler(log logr.Logger) http.Handler {
+	if !c.IPXE.HTTPBinaryServer.Enabled {
+		return nil
+	}
+	return http.HandlerFunc(binary.Handler{Log: log, Patch: []byte(c.IPXE.EmbeddedScriptPatch)}.Handle)
+}
+
+// ScriptHandler returns an http.Handler that serves iPXE scripts.
+// Returns nil if the iPXE HTTP script server is disabled.
+func (c *Config) ScriptHandler(log logr.Logger) http.Handler {
+	if !c.IPXE.HTTPScriptServer.Enabled {
+		return nil
+	}
+	jh := script.Handler{
+		Logger:                log,
+		Backend:               c.Backend,
+		OSIEURL:               c.IPXE.HTTPScriptServer.OSIEURL.String(),
+		ExtraKernelParams:     c.IPXE.HTTPScriptServer.ExtraKernelArgs,
+		PublicSyslogFQDN:      c.DHCP.SyslogIP.String(),
+		TinkServerTLS:         c.TinkServer.UseTLS,
+		TinkServerInsecureTLS: c.TinkServer.InsecureTLS,
+		TinkServerGRPCAddr:    c.TinkServer.AddrPort,
+		IPXEScriptRetries:     c.IPXE.HTTPScriptServer.Retries,
+		IPXEScriptRetryDelay:  c.IPXE.HTTPScriptServer.RetryDelay,
+		StaticIPXEEnabled:     (c.DHCP.Mode == DHCPModeAutoProxy),
+	}
+	return jh.HandlerFunc()
+}
+
+// ISOHandler returns an http.Handler that serves patched ISO images.
+// Returns nil, nil if the ISO server is disabled.
+func (c *Config) ISOHandler(log logr.Logger) (http.Handler, error) {
+	if !c.ISO.Enabled {
+		return nil, nil
+	}
+	ih := iso.Handler{
+		Logger:  log,
+		Backend: c.Backend,
+		Patch: iso.Patch{
+			KernelParams: iso.KernelParams{
+				ExtraParams:        c.IPXE.HTTPScriptServer.ExtraKernelArgs,
+				Syslog:             c.DHCP.SyslogIP.String(),
+				TinkServerTLS:      c.TinkServer.UseTLS,
+				TinkServerGRPCAddr: c.TinkServer.AddrPort,
+			},
+			MagicString: func() string {
+				if c.ISO.PatchMagicString == "" {
+					return isoMagicString
+				}
+				return c.ISO.PatchMagicString
+			}(),
+			SourceISO:         c.ISO.UpstreamURL.String(),
+			StaticIPAMEnabled: c.ISO.StaticIPAMEnabled,
+		},
+	}
+	h, err := ih.HandlerFunc()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create iso handler: %w", err)
+	}
+	return h, nil
+}
+
+// Start will run Smee non-HTTP services (DHCP, TFTP, syslog).
+// HTTP serving is handled externally by the HTTP server.
+func (c *Config) Start(ctx context.Context, log logr.Logger) error {
+	if c.Backend == nil {
+		return errors.New("no backend provided")
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	// syslog
 	if c.Syslog.Enabled {
-		// 1. data validation
-		// 2. start the syslog server
 		addr := netip.AddrPortFrom(c.Syslog.BindAddr, c.Syslog.BindPort)
 		if !addr.IsValid() {
 			return fmt.Errorf("invalid syslog bind address: IP: %v, Port: %v", addr.Addr(), addr.Port())
@@ -353,8 +430,6 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 
 	// tftp
 	if c.TFTP.Enabled {
-		// 1. data validation
-		// 2. start the tftp server
 		addrPort := netip.AddrPortFrom(c.TFTP.BindAddr, c.TFTP.BindPort)
 		if !addrPort.IsValid() {
 			return fmt.Errorf("invalid TFTP bind address: IP: %v, Port: %v", addrPort.Addr(), addrPort.Port())
@@ -368,7 +443,6 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 			BlockSize:            c.TFTP.BlockSize,
 		}
 
-		// start the ipxe binary tftp server
 		log.Info("starting tftp server", "bindAddr", addrPort.String())
 		g.Go(func() error {
 			return tftpHandler.ListenAndServe(ctx)
