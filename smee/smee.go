@@ -22,8 +22,10 @@ import (
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/otel"
+	tftphandler "github.com/tinkerbell/tinkerbell/pkg/tftp/handler"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/handler/proxy"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/handler/reservation"
+	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/network"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/server"
 	"github.com/tinkerbell/tinkerbell/smee/internal/ipxe/binary"
 	"github.com/tinkerbell/tinkerbell/smee/internal/ipxe/script"
@@ -31,6 +33,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/smee/internal/metric"
 	"github.com/tinkerbell/tinkerbell/smee/internal/syslog"
 	"golang.org/x/sync/errgroup"
+	"k8s.io/client-go/rest"
 )
 
 // BackendReader is the interface for getting data from a backend.
@@ -54,11 +57,16 @@ const (
 	DefaultTFFTPBlockSize  = 512
 	DefaultTFFTPSinglePort = true
 	DefaultTFFTPTimeout    = 10 * time.Second
-	DefaultDHCPPort        = 67
-	DefaultSyslogPort      = 514
-	DefaultHTTPPort        = 7171
-	DefaultHTTPSPort       = 7272
-	DefaultTinkServerPort  = 42113
+	DefaultTFFTPAnticipate = uint(1)
+
+	DefaultDHCPPort       = 67
+	DefaultSyslogPort     = 514
+	DefaultHTTPPort       = 7171
+	DefaultHTTPSPort      = 7272
+	DefaultTinkServerPort = 42113
+
+	IPXEBinaryPattern = `\.(efi|kpxe|pxe)$`
+	IPXEScriptPattern = `(^pxelinux\.cfg/|(config|cmdline)\.txt$)`
 
 	IPXEBinaryURI  = "/ipxe/binary/"
 	IPXEScriptURI  = "/ipxe/script/"
@@ -109,6 +117,8 @@ type Config struct {
 	HTTP HTTP
 	// TLS is the configuration for TLS.
 	TLS TLS
+	// DHCPInterface is the configuration for DHCP proxy interface management.
+	DHCPInterface DHCPInterface
 }
 
 type HTTP struct {
@@ -134,6 +144,8 @@ type TFTP struct {
 	BlockSize int
 	// SinglePort configures whether to use single-port TFTP mode.
 	SinglePort bool
+	// Anticipate is the number of packets to send before the first ACK. (Experimental)
+	Anticipate uint
 	// Timeout is the timeout for each serving each TFTP request.
 	Timeout time.Duration
 	// Enabled is a flag to enable or disable the TFTP server.
@@ -230,6 +242,25 @@ type TLS struct {
 	Certs []tls.Certificate
 }
 
+// DHCPInterface holds configuration for DHCP proxy interface management.
+// In proxy and auto-proxy modes the service automatically creates a macvlan
+// interface so it can receive broadcast DHCP packets from the host network.
+// When leader election is enabled, only the elected leader creates the interface,
+// aligning with the Kubernetes Service leader pod (e.g. Cilium L2 advertisements).
+type DHCPInterface struct {
+	// Enabled controls whether the DHCP proxy interface manager is active.
+	// When true, a macvlan interface is automatically created in proxy/auto-proxy
+	// mode so the service can receive broadcast DHCP packets.
+	Enabled bool
+	// EnableLeaderElection determines if leader election is enabled.
+	EnableLeaderElection bool
+	// LeaderElectionNamespace is the namespace for the leader election Lease resource.
+	// Defaults to "default" if empty.
+	LeaderElectionNamespace string
+	// RestConfig is the Kubernetes client config for leader election.
+	RestConfig *rest.Config
+}
+
 // NewConfig is a constructor for the Config struct. It will set default values for the Config struct.
 // Boolean fields are not set-able via c. To set boolean, modify the returned Config struct.
 func NewConfig(c Config, publicIP netip.Addr) *Config {
@@ -295,6 +326,7 @@ func NewConfig(c Config, publicIP netip.Addr) *Config {
 			BlockSize:  DefaultTFFTPBlockSize,
 			SinglePort: DefaultTFFTPSinglePort,
 			Timeout:    DefaultTFFTPTimeout,
+			Anticipate: DefaultTFFTPAnticipate,
 			Enabled:    true,
 		},
 		TinkServer: TinkServer{},
@@ -367,6 +399,38 @@ func (c *Config) ScriptHandler(log logr.Logger) http.Handler {
 	return jh.HandlerFunc()
 }
 
+// BinaryTFTPHandler returns a TFTP handler that serves iPXE binaries.
+// Returns nil if the iPXE HTTP binary server is disabled.
+func (c *Config) BinaryTFTPHandler(log logr.Logger) tftphandler.Handler {
+	if !c.IPXE.HTTPBinaryServer.Enabled {
+		return nil
+	}
+	bh := binary.Handler{Log: log, Patch: []byte(c.IPXE.EmbeddedScriptPatch)}
+	return tftphandler.HandlerFunc(bh.HandleTFTP)
+}
+
+// ScriptTFTPHandler returns a TFTP handler that serves iPXE/pxelinux scripts.
+// Returns nil if the iPXE HTTP script server is disabled.
+func (c *Config) ScriptTFTPHandler(log logr.Logger) tftphandler.Handler {
+	if !c.IPXE.HTTPScriptServer.Enabled {
+		return nil
+	}
+	jh := script.Handler{
+		Logger:                log,
+		Backend:               c.Backend,
+		OSIEURL:               c.IPXE.HTTPScriptServer.OSIEURL.String(),
+		ExtraKernelParams:     c.IPXE.HTTPScriptServer.ExtraKernelArgs,
+		PublicSyslogFQDN:      c.DHCP.SyslogIP.String(),
+		TinkServerTLS:         c.TinkServer.UseTLS,
+		TinkServerInsecureTLS: c.TinkServer.InsecureTLS,
+		TinkServerGRPCAddr:    c.TinkServer.AddrPort,
+		IPXEScriptRetries:     c.IPXE.HTTPScriptServer.Retries,
+		IPXEScriptRetryDelay:  c.IPXE.HTTPScriptServer.RetryDelay,
+		StaticIPXEEnabled:     (c.DHCP.Mode == DHCPModeAutoProxy),
+	}
+	return tftphandler.HandlerFunc(jh.HandleTFTP)
+}
+
 // ISOHandler returns an http.Handler that serves patched ISO images.
 // Returns nil, nil if the ISO server is disabled.
 func (c *Config) ISOHandler(log logr.Logger) (http.Handler, error) {
@@ -408,6 +472,27 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
+
+	// ifReady is closed once the DHCP proxy interface is configured and ready to
+	// receive packets. The DHCP server goroutine blocks on this channel to
+	// guarantee the interface exists before binding, mirroring the init-container
+	// ordering guarantee from host-interface-config-map.yaml.
+	ifReady := make(chan struct{})
+
+	// DHCP proxy interface management (macvlan with optional leader election).
+	// Automatically enabled in proxy/auto-proxy mode when no explicit bind interface
+	// is configured. Privileges are verified upfront with a clear error if missing.
+	if c.DHCPInterface.Enabled && c.DHCP.BindInterface == "" {
+		if err := network.CheckNetworkPrivileges(); err != nil {
+			return err
+		}
+		g.Go(func() error {
+			return c.startDHCPInterface(ctx, log.WithName("dhcpif"), ifReady)
+		})
+	} else {
+		close(ifReady)
+	}
+
 	// syslog
 	if c.Syslog.Enabled {
 		addr := netip.AddrPortFrom(c.Syslog.BindAddr, c.Syslog.BindPort)
@@ -426,27 +511,6 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 		})
 	}
 
-	// tftp
-	if c.TFTP.Enabled {
-		addrPort := netip.AddrPortFrom(c.TFTP.BindAddr, c.TFTP.BindPort)
-		if !addrPort.IsValid() {
-			return fmt.Errorf("invalid TFTP bind address: IP: %v, Port: %v", addrPort.Addr(), addrPort.Port())
-		}
-		tftpHandler := binary.TFTP{
-			Log:                  log,
-			EnableTFTPSinglePort: c.TFTP.SinglePort,
-			Addr:                 addrPort,
-			Timeout:              c.TFTP.Timeout,
-			Patch:                []byte(c.IPXE.EmbeddedScriptPatch),
-			BlockSize:            c.TFTP.BlockSize,
-		}
-
-		log.Info("starting tftp server", "bindAddr", addrPort.String())
-		g.Go(func() error {
-			return tftpHandler.ListenAndServe(ctx)
-		})
-	}
-
 	// dhcp serving
 	if c.DHCP.Enabled {
 		dh, err := c.dhcpHandler(log)
@@ -459,6 +523,14 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 		}
 		log.Info("starting dhcp server", "bindAddr", dhcpAddrPort)
 		g.Go(func() error {
+			// Wait for the DHCP proxy interface to be ready before binding.
+			// This mirrors the init-container ordering guarantee: interface is
+			// fully configured before the DHCP server starts receiving packets.
+			select {
+			case <-ifReady:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 			conn, err := server4.NewIPv4UDPConn(c.DHCP.BindInterface, net.UDPAddrFromAddrPort(dhcpAddrPort))
 			if err != nil {
 				return err
@@ -478,6 +550,45 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 	}
 	log.Info("smee is shutting down", "reason", ctx.Err())
 	return nil
+}
+
+// startDHCPInterface manages the macvlan interface lifecycle for DHCP proxy mode.
+// When leader election is enabled, the interface is only created on the elected leader,
+// ensuring alignment with the Kubernetes Service leader pod (e.g. Cilium L2
+// advertisements). The ready channel is closed once the interface is configured so
+// the DHCP server can start binding.
+func (c *Config) startDHCPInterface(ctx context.Context, log logr.Logger, ready chan<- struct{}) error {
+	if c.DHCPInterface.EnableLeaderElection {
+		lm, err := network.NewLeaderManager(network.LeaderConfig{
+			RestConfig: c.DHCPInterface.RestConfig,
+			Namespace:  c.DHCPInterface.LeaderElectionNamespace,
+		}, log)
+		if err != nil {
+			return fmt.Errorf("creating leader-elected interface manager: %w", err)
+		}
+		defer lm.Close()
+		// For leader election the interface is set up asynchronously when leadership
+		// is acquired. Allow the DHCP server to start so it is ready to accept packets
+		// once the interface appears; it will not receive any until the macvlan is in place.
+		close(ready)
+		return lm.Start(ctx)
+	}
+
+	// No leader election: set up interface immediately, then signal ready.
+	ifMgr, err := network.NewNetworkManager(log)
+	if err != nil {
+		return fmt.Errorf("creating interface manager: %w", err)
+	}
+	defer ifMgr.Close()
+
+	if err := ifMgr.Setup(ctx); err != nil {
+		return fmt.Errorf("setting up DHCP proxy interface: %w", err)
+	}
+	// Interface is ready; allow the DHCP server to start.
+	close(ready)
+
+	<-ctx.Done()
+	return ifMgr.Cleanup()
 }
 
 func (c *Config) dhcpHandler(log logr.Logger) (server.Handler, error) {

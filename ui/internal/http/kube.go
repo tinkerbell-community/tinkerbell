@@ -26,6 +26,7 @@ const (
 	DefaultItemsPerPage = 10
 	MaxItemsPerPage     = 100
 	statusUnknown       = "Unknown"
+	statusPending       = "Pending"
 	statusCompleted     = "Completed"
 	statusFailed        = "Failed"
 	statusRunning       = "Running"
@@ -445,6 +446,7 @@ func GetSelectedNamespace(c *gin.Context, namespaces []string) string {
 
 // GetBMCJobStatus determines the status of a BMC job from its conditions.
 func GetBMCJobStatus(conditions []bmcv1alpha1.JobCondition) string {
+	status := statusPending
 	for _, condition := range conditions {
 		if condition.Status != bmcv1alpha1.ConditionTrue {
 			continue
@@ -455,8 +457,8 @@ func GetBMCJobStatus(conditions []bmcv1alpha1.JobCondition) string {
 		case bmcv1alpha1.JobFailed:
 			return statusFailed
 		case bmcv1alpha1.JobRunning:
-			return statusRunning
+			status = statusRunning
 		}
 	}
-	return statusUnknown
+	return status
 }

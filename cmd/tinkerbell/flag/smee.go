@@ -142,6 +142,11 @@ func RegisterSmeeFlags(fs *Set, sc *SmeeConfig) {
 	fs.Register(TFTPTimeout, ffval.NewValueDefault(&sc.Config.TFTP.Timeout, sc.Config.TFTP.Timeout))
 	fs.Register(TFTPBlockSize, ffval.NewValueDefault(&sc.Config.TFTP.BlockSize, sc.Config.TFTP.BlockSize))
 	fs.Register(TFTPSinglePort, ffval.NewValueDefault(&sc.Config.TFTP.SinglePort, sc.Config.TFTP.SinglePort))
+
+	// DHCP Interface Management Flags
+	fs.Register(DHCPInterfaceEnabled, ffval.NewValueDefault(&sc.Config.DHCPInterface.Enabled, sc.Config.DHCPInterface.Enabled))
+	fs.Register(DHCPInterfaceLeaderElectionEnabled, ffval.NewValueDefault(&sc.Config.DHCPInterface.EnableLeaderElection, sc.Config.DHCPInterface.EnableLeaderElection))
+	fs.Register(DHCPInterfaceLeaderElectionNamespace, ffval.NewValueDefault(&sc.Config.DHCPInterface.LeaderElectionNamespace, sc.Config.DHCPInterface.LeaderElectionNamespace))
 }
 
 // Convert CLI specific fields to smee.Config fields.
@@ -484,4 +489,19 @@ var DHCPEnableNetbootOptions = Config{
 var HTTPSBindPort = Config{
 	Name:  "https-bind-port",
 	Usage: "[https] local port to listen on for HTTPS requests",
+}
+
+var DHCPInterfaceEnabled = Config{
+	Name:  "dhcp-interface-enabled",
+	Usage: "[dhcp-interface] enable automatic DHCP proxy interface (macvlan) management",
+}
+
+var DHCPInterfaceLeaderElectionEnabled = Config{
+	Name:  "dhcp-interface-leader-election-enabled",
+	Usage: "[dhcp-interface] enable leader election so only the service leader pod creates the interface",
+}
+
+var DHCPInterfaceLeaderElectionNamespace = Config{
+	Name:  "dhcp-interface-leader-election-namespace",
+	Usage: "[dhcp-interface] namespace for leader election lease",
 }

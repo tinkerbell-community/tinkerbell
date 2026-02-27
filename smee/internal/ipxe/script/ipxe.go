@@ -12,6 +12,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
+	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
 	"github.com/tinkerbell/tinkerbell/smee/internal/metric"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -288,7 +289,8 @@ func (h *Handler) serveBootScript(ctx context.Context, w http.ResponseWriter, na
 	}
 }
 
-func (h *Handler) defaultScript(span trace.Span, hw info) (string, error) {
+// buildHook constructs a Hook struct from hardware info and handler configuration.
+func (h *Handler) buildHook(span trace.Span, hw info) Hook {
 	mac := hw.MACAddress
 	arch := hw.Arch
 	if arch == "" {
@@ -298,6 +300,14 @@ func (h *Handler) defaultScript(span trace.Span, hw info) (string, error) {
 	wID := mac.String()
 	if hw.WorkflowID != "" {
 		wID = hw.WorkflowID
+	}
+
+	// Set board-specific kernel/initrd defaults for Raspberry Pi.
+	// RPi uses Armbian BCM2711 kernel which supports both BCM2711 (RPi4) and BCM2712 (RPi5).
+	var defaultKernel, defaultInitrd string
+	if dhcp.IsRaspberryPI(mac) {
+		defaultKernel = "vmlinuz-armbian-bcm2711-current"
+		defaultInitrd = "initramfs-armbian-bcm2711-current"
 	}
 
 	auto := Hook{
@@ -315,6 +325,8 @@ func (h *Handler) defaultScript(span trace.Span, hw info) (string, error) {
 		WorkerID:              wID,
 		Retries:               h.IPXEScriptRetries,
 		RetryDelay:            h.IPXEScriptRetryDelay,
+		Kernel:                defaultKernel,
+		Initrd:                defaultInitrd,
 	}
 	if hw.OSIE.BaseURL != nil && hw.OSIE.BaseURL.String() != "" {
 		auto.DownloadURL = hw.OSIE.BaseURL.String()
@@ -329,6 +341,11 @@ func (h *Handler) defaultScript(span trace.Span, hw info) (string, error) {
 		auto.TraceID = span.SpanContext().TraceID().String()
 	}
 
+	return auto
+}
+
+func (h *Handler) defaultScript(span trace.Span, hw info) (string, error) {
+	auto := h.buildHook(span, hw)
 	return GenerateTemplate(auto, HookScript)
 }
 

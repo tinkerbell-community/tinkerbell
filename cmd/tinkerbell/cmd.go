@@ -6,12 +6,14 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/netip"
 	"path"
 	"strings"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/avast/retry-go/v4"
 	"github.com/go-logr/logr"
 	"github.com/peterbourgon/ff/v4"
@@ -19,12 +21,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tinkerbell/tinkerbell/cmd/tinkerbell/flag"
 	"github.com/tinkerbell/tinkerbell/crd"
+	"github.com/tinkerbell/tinkerbell/hook"
 	"github.com/tinkerbell/tinkerbell/pkg/backend/kube"
 	"github.com/tinkerbell/tinkerbell/pkg/build"
 	"github.com/tinkerbell/tinkerbell/pkg/http/handler"
 	"github.com/tinkerbell/tinkerbell/pkg/http/middleware"
 	httpserver "github.com/tinkerbell/tinkerbell/pkg/http/server"
 	"github.com/tinkerbell/tinkerbell/pkg/otel"
+	tftpserver "github.com/tinkerbell/tinkerbell/pkg/tftp/server"
 	"github.com/tinkerbell/tinkerbell/rufio"
 	"github.com/tinkerbell/tinkerbell/secondstar"
 	"github.com/tinkerbell/tinkerbell/smee"
@@ -32,6 +36,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/tink/server"
 	"github.com/tinkerbell/tinkerbell/tootles"
 	"github.com/tinkerbell/tinkerbell/ui"
+	"go.uber.org/automaxprocs/maxprocs"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/credentials"
 	"k8s.io/client-go/rest"
@@ -54,6 +59,8 @@ const (
 	routeISO                         = smee.ISOURI
 	routeIPXEBinary                  = smee.IPXEBinaryURI
 	routeIPXEScript                  = smee.IPXEScriptURI
+	patternIPXEBinary                = smee.IPXEBinaryPattern
+	patternIPXEScript                = smee.IPXEScriptPattern
 )
 
 var (
@@ -79,13 +86,17 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 		HTTPPort:             defaultHTTPPort,
 		HTTPSPort:            defaultHTTPSPort,
 		BindAddr:             detectPublicIPv4(),
+		MaxprocsEnable:       true,
+		MemlimitRatio:        0.9,
 		EmbeddedGlobalConfig: flag.EmbeddedGlobalConfig{
 			EnableKubeAPIServer: (embeddedApiserverExecute != nil),
 			EnableETCD:          (embeddedEtcdExecute != nil),
 		},
 		BackendKubeOptions: flag.BackendKubeOptions{
-			QPS:   defaultQPS,   // Default QPS value. A negative value disables client-side ratelimiting.
-			Burst: defaultBurst, // Default burst value.
+			QPS:                         defaultQPS,      // Default QPS value. A negative value disables client-side ratelimiting.
+			Burst:                       defaultBurst,    // Default burst value.
+			APIServerHealthTimeout:      2 * time.Minute, // Default timeout: 2 minutes to prevent permanent error loops
+			APIServerHealthPollInterval: 2 * time.Second, // Default poll interval: check every 2 seconds
 		},
 	}
 
@@ -129,6 +140,18 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 		},
 	}
 
+	hookOpts := []hook.Option{
+		hook.WithURLPrefix(hook.DefaultURLPrefix),
+		hook.WithImagePath("/var/lib/hook"),
+		hook.WithOCIRegistry("ghcr.io"),
+		hook.WithOCIRepository("tinkerbell/hook"),
+		hook.WithOCIReference("latest"),
+		hook.WithPullTimeout(10 * time.Minute),
+	}
+	hc := &flag.HookConfig{
+		Config: hook.NewConfig(hookOpts...),
+	}
+
 	uiOpts := []ui.Option{
 		ui.WithURLPrefix("/"),
 	}
@@ -147,7 +170,8 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 	cfs := ff.NewFlagSet("tink controller - Workflow controller").SetParent(tfs)
 	rfs := ff.NewFlagSet("rufio - BMC controller").SetParent(cfs)
 	ssfs := ff.NewFlagSet("secondstar - SSH over serial service").SetParent(rfs)
-	uifs := ff.NewFlagSet("ui - UI service").SetParent(ssfs)
+	hookfs := ff.NewFlagSet("hook - Hook image service").SetParent(ssfs)
+	uifs := ff.NewFlagSet("ui - UI service").SetParent(hookfs)
 	gfs := ff.NewFlagSet("globals").SetParent(uifs)
 	flag.RegisterSmeeFlags(&flag.Set{FlagSet: sfs}, s)
 	flag.RegisterTootlesFlags(&flag.Set{FlagSet: hfs}, h)
@@ -155,6 +179,7 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 	flag.RegisterTinkControllerFlags(&flag.Set{FlagSet: cfs}, tc)
 	flag.RegisterRufioFlags(&flag.Set{FlagSet: rfs}, rc)
 	flag.RegisterSecondStarFlags(&flag.Set{FlagSet: ssfs}, ssc)
+	flag.RegisterHookFlags(&flag.Set{FlagSet: hookfs}, hc)
 	flag.RegisterUIFlags(&flag.Set{FlagSet: uifs}, uic)
 	flag.RegisterGlobal(&flag.Set{FlagSet: gfs}, globals)
 	if embeddedApiserverExecute != nil && embeddedFlagSet != nil {
@@ -179,6 +204,24 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 	}
 
 	log := getLogger(globals.LogLevel)
+
+	// Configure Go runtime tuning before service startup.
+	if globals.MaxprocsEnable {
+		if _, err := maxprocs.Set(maxprocs.Logger(func(f string, a ...any) {
+			log.WithName("automaxprocs").Info(fmt.Sprintf(f, a...))
+		})); err != nil {
+			log.WithName("automaxprocs").Error(err, "failed to set GOMAXPROCS automatically")
+		}
+	}
+	if globals.MemlimitRatio > 0 {
+		if _, err := memlimit.SetGoMemLimitWithOpts(
+			memlimit.WithRatio(globals.MemlimitRatio),
+			memlimit.WithProvider(memlimit.ApplyFallback(memlimit.FromCgroup, memlimit.FromSystem)),
+		); err != nil {
+			log.WithName("automemlimit").Error(err, "failed to set GOMEMLIMIT automatically")
+		}
+	}
+
 	cliLog := log.WithName("cli")
 	cliLog.Info("starting tinkerbell",
 		"version", build.GitRevision(),
@@ -259,6 +302,9 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 		rc.Config.ProbeAddr = netip.AddrPortFrom(globals.BindAddr, rc.Config.ProbeAddr.Port())
 	}
 
+	// Smee DHCP Interface
+	s.Config.DHCPInterface.LeaderElectionNamespace = leaderElectionNamespace(inCluster(), s.Config.DHCPInterface.EnableLeaderElection, s.Config.DHCPInterface.LeaderElectionNamespace)
+
 	// Second star
 	if err := ssc.Convert(); err != nil {
 		return fmt.Errorf("failed to convert secondstar config: %w", err)
@@ -332,7 +378,8 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 				return fmt.Errorf("failed to create kube backend with no indexes: %w", err)
 			}
 			// Wait for the API server to be healthy and ready.
-			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, 20*time.Second, 5*time.Second, nil); err != nil {
+			// Use configurable timeout and poll interval to prevent permanent error loops on first boot.
+			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, globals.BackendKubeOptions.APIServerHealthTimeout, globals.BackendKubeOptions.APIServerHealthPollInterval, nil); err != nil {
 				return fmt.Errorf("failed to wait for API server health: %w", err)
 			}
 
@@ -358,6 +405,7 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 		tc.Config.DynamicClient = b
 		rc.Config.Client = b.ClientConfig
 		ssc.Config.Backend = b
+		s.Config.DHCPInterface.RestConfig = b.ClientConfig
 		if uic.Config.EnableAutoLogin {
 			uic.Config.AutoLoginRestConfig = b.ClientConfig
 			uic.Config.AutoLoginNamespace = globals.BackendKubeNamespace
@@ -390,7 +438,7 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 		return nil
 	})
 
-	// Smee (non-HTTP services: DHCP, TFTP, syslog)
+	// Smee (non-HTTP services: DHCP, syslog)
 	g.Go(func() error {
 		if !globals.EnableSmee {
 			cliLog.Info("smee service is disabled")
@@ -470,6 +518,27 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 			)
 		}
 
+		// Hook
+		if globals.EnableHook {
+			ll := ternary((hc.LogLevel != 0), hc.LogLevel, globals.LogLevel)
+			hlog := getLogger(ll).WithName("hook")
+
+			hookHandler, err := hc.Config.Handler(hlog)
+			if err != nil {
+				return fmt.Errorf("failed to start hook service: %w", err)
+			}
+			if hookHandler != nil {
+				hlog.Info("Hook HTTP handler enabled", "urlPrefix", hc.Config.URLPrefix)
+				routeHook := normalizeURLPrefix(hc.Config.URLPrefix)
+				routeList.Register(routeHook,
+					middleware.WithLogLevel(middleware.LogLevelAlways, hookHandler),
+					"Hook handler",
+					httpserver.WithHTTPSEnabled(true),
+					httpserver.WithRewriteHTTPToHTTPS(true),
+				)
+			}
+		}
+
 		// UI HTTP handler
 		if globals.EnableUI {
 			ll := ternary((uic.LogLevel != 0), uic.LogLevel, globals.LogLevel)
@@ -529,6 +598,50 @@ func Execute(ctx context.Context, cancel context.CancelFunc, args []string) erro
 		}
 		httpLog.Info("starting HTTP server", kvs...)
 		return srv.Serve(ctx, httpLog, httpHandler, httpsHandler)
+	})
+
+	// TFTP server
+	g.Go(func() error {
+		if !globals.EnableSmee || !s.Config.TFTP.Enabled {
+			cliLog.Info("tftp service is disabled")
+			return nil
+		}
+		ll := ternary((s.LogLevel != 0), s.LogLevel, globals.LogLevel)
+		tftpLog := getLogger(ll).WithName("tftp")
+
+		routeList := &tftpserver.Routes{}
+
+		// Smee TFTP handlers
+		if h := s.Config.BinaryTFTPHandler(tftpLog); h != nil {
+			routeList.Register(patternIPXEBinary, h, "smee iPXE binary TFTP handler")
+		}
+		if h := s.Config.ScriptTFTPHandler(tftpLog); h != nil {
+			routeList.Register(patternIPXEScript, h, "smee iPXE script TFTP handler")
+		}
+
+		addrPort := netip.AddrPortFrom(s.Config.TFTP.BindAddr, s.Config.TFTP.BindPort)
+		if !addrPort.IsValid() {
+			return fmt.Errorf("invalid TFTP bind address: IP: %v, Port: %v", addrPort.Addr(), addrPort.Port())
+		}
+
+		mux := routeList.Mux(tftpLog)
+
+		// Hook TFTP handler (serves Hook OS files as the default/fallback handler)
+		if globals.EnableHook {
+			ll := ternary((hc.LogLevel != 0), hc.LogLevel, globals.LogLevel)
+			hookLog := getLogger(ll).WithName("hook")
+			mux.SetDefaultHandler(hc.Config.TFTPHandler(hookLog))
+		}
+
+		srv := &tftpserver.Config{
+			Anticipate:       s.Config.TFTP.Anticipate,
+			BlockSize:        s.Config.TFTP.BlockSize,
+			EnableSinglePort: s.Config.TFTP.SinglePort,
+			Timeout:          s.Config.TFTP.Timeout,
+		}
+
+		tftpLog.Info("starting TFTP server", "addr", addrPort.String(), "registeredRoutes", routeList)
+		return srv.Serve(ctx, tftpLog, addrPort.String(), mux)
 	})
 
 	// Tink Server
@@ -617,6 +730,9 @@ func numEnabled(globals *flag.GlobalConfig) int {
 	if globals.EnableSecondStar {
 		n++
 	}
+	if globals.EnableHook {
+		n++
+	}
 	if globals.EnableUI {
 		n++
 	}
@@ -630,19 +746,13 @@ func enabledIndexes(smeeEnabled, tootlesEnabled, tinkServerEnabled, secondStarEn
 		idxs = flag.KubeIndexesSmee
 	}
 	if tootlesEnabled {
-		for k, v := range flag.KubeIndexesTootles {
-			idxs[k] = v
-		}
+		maps.Copy(idxs, flag.KubeIndexesTootles)
 	}
 	if tinkServerEnabled {
-		for k, v := range flag.KubeIndexesTinkServer {
-			idxs[k] = v
-		}
+		maps.Copy(idxs, flag.KubeIndexesTinkServer)
 	}
 	if secondStarEnabled {
-		for k, v := range flag.KubeIndexesSecondStar {
-			idxs[k] = v
-		}
+		maps.Copy(idxs, flag.KubeIndexesSecondStar)
 	}
 
 	return idxs
