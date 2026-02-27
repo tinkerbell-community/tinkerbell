@@ -25,8 +25,6 @@ const (
 
 // Config holds the configuration for the web UI service.
 type Config struct {
-	BindAddr    string
-	BindPort    int
 	DebugMode   bool
 	TLSCertFile string
 	TLSKeyFile  string

@@ -26,6 +26,8 @@ go.work.sum
 
 # local binaries
 out/
+bin/
+dist/
 
 # Go coverage profile
 coverage.txt
@@ -48,3 +50,6 @@ ui/node_modules/
 ui/out/
 .DS_Store
 Thumbs.db
+
+# Github
+.github/instructions/*.md
