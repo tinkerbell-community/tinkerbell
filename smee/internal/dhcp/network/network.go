@@ -2,9 +2,6 @@
 // DHCP proxy server to receive broadcast DHCP packets from the host network.
 // In proxy mode the DHCP server needs a Layer 2 interface attached to the
 // host network namespace to see uncast/broadcast DHCP traffic.
-//
-// For eBPF mode, a veth pair + TC BPF program redirects DHCP packets from
-// the host's physical NIC into the container namespace instead.
 package network
 
 import (
@@ -36,8 +33,6 @@ const (
 	interfaceTypeMacvlan interfaceType = "macvlan"
 	// interfaceTypeIPvlan creates an ipvlan interface in L2 mode.
 	interfaceTypeIPvlan interfaceType = "ipvlan"
-	// interfaceTypeEBPF uses eBPF TC to redirect DHCP packets from host to container.
-	interfaceTypeEBPF interfaceType = "ebpf"
 
 	// dhcpIfAddr is the IP assigned to the created interface.
 	dhcpIfAddr = "127.1.1.1/32"
@@ -58,7 +53,7 @@ const (
 )
 
 // networkInterfaceManager is the common interface for all DHCP proxy interface
-// lifecycle managers (macvlan, ipvlan, eBPF).
+// lifecycle managers (macvlan, ipvlan).
 type networkInterfaceManager interface {
 	Setup(ctx context.Context) error
 	Cleanup() error
@@ -85,7 +80,7 @@ type LeaderConfig struct {
 	Namespace string
 }
 
-// LeaderManager coordinates macvlan/ipvlan/eBPF interface lifecycle with
+// LeaderManager coordinates macvlan/ipvlan interface lifecycle with
 // Kubernetes leader election. Only the elected leader creates the DHCP proxy
 // interface, ensuring a single pod receives broadcast DHCP packets.
 type LeaderManager struct {
@@ -142,8 +137,6 @@ To resolve, ensure your pod spec includes:
       - securityContext:
           capabilities:
             add: ["NET_ADMIN"]
-          seccompProfile:
-            type: Unconfined   # required for eBPF mode
 
 If you have already configured a network interface in the container (e.g. via
 an init container), set the DHCP bind interface explicitly to skip automatic

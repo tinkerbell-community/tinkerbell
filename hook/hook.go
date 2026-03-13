@@ -126,12 +126,11 @@ func NewConfig(opts ...Option) *Config {
 
 // service manages hook image downloads and serving
 type service struct {
-	config     *Config
-	log        logr.Logger
-	pullOnce   sync.Once
-	mutex      sync.RWMutex
-	ready      bool
-	httpServer *http.Server
+	config   *Config
+	log      logr.Logger
+	pullOnce sync.Once
+	mutex    sync.RWMutex
+	ready    bool
 }
 
 // Handler returns an http.Handler that serves Hook OS files from the filesystem.

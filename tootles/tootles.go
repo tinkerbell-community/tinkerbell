@@ -37,7 +37,7 @@ func (c *Config) SetBackendFromFilterer(filterer HardwareFilterer) {
 	c.BackendHack = b
 }
 
-func NewConfig(c Config, addrPort string) *Config {
+func NewConfig(c Config) *Config {
 	defaults := &Config{
 		DebugMode: false,
 	}

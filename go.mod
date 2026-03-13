@@ -70,7 +70,6 @@ require (
 
 require (
 	github.com/KimMachineGun/automemlimit v0.7.5
-	github.com/cilium/ebpf v0.20.0
 	github.com/vishvananda/netns v0.0.5
 	go.uber.org/automaxprocs v1.6.0
 	oras.land/oras-go/v2 v2.6.0

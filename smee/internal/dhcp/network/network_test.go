@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-logr/logr"
 )
@@ -66,13 +65,6 @@ type mockNetworkInterfaceManager struct {
 	onCleanup chan struct{}
 }
 
-func newMockNetworkInterfaceManager() *mockNetworkInterfaceManager {
-	return &mockNetworkInterfaceManager{
-		onSetup:   make(chan struct{}, 10),
-		onCleanup: make(chan struct{}, 10),
-	}
-}
-
 func (m *mockNetworkInterfaceManager) Setup(_ context.Context) error {
 	m.setupCalls++
 	m.onSetup <- struct{}{}
@@ -88,14 +80,4 @@ func (m *mockNetworkInterfaceManager) Cleanup() error {
 func (m *mockNetworkInterfaceManager) Close() error {
 	m.closeCalls++
 	return nil
-}
-
-// waitForChan waits for a channel signal or fails the test after timeout.
-func waitForChan(t *testing.T, ch <-chan struct{}, timeout time.Duration, msg string) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(timeout):
-		t.Fatalf("timed out waiting for %s", msg)
-	}
 }

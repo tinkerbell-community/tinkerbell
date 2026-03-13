@@ -19,9 +19,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
 	"github.com/insomniacslk/dhcp/iana"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
-	"github.com/tinkerbell/tinkerbell/pkg/build"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/otel"
@@ -397,6 +395,8 @@ func (c *Config) ScriptHandler(log logr.Logger) http.Handler {
 		IPXEScriptRetries:     c.IPXE.HTTPScriptServer.Retries,
 		IPXEScriptRetryDelay:  c.IPXE.HTTPScriptServer.RetryDelay,
 		StaticIPXEEnabled:     (c.DHCP.Mode == DHCPModeAutoProxy),
+		KernelName:            c.IPXE.HTTPScriptServer.KernelName,
+		InitrdName:            c.IPXE.HTTPScriptServer.InitrdName,
 	}
 	return jh.HandlerFunc()
 }
@@ -429,6 +429,8 @@ func (c *Config) ScriptTFTPHandler(log logr.Logger) tftphandler.Handler {
 		IPXEScriptRetries:     c.IPXE.HTTPScriptServer.Retries,
 		IPXEScriptRetryDelay:  c.IPXE.HTTPScriptServer.RetryDelay,
 		StaticIPXEEnabled:     (c.DHCP.Mode == DHCPModeAutoProxy),
+		KernelName:            c.IPXE.HTTPScriptServer.KernelName,
+		InitrdName:            c.IPXE.HTTPScriptServer.InitrdName,
 	}
 	return tftphandler.HandlerFunc(jh.HandleTFTP)
 }
@@ -511,127 +513,6 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 			log.Info("syslog server stopped")
 			return nil
 		})
-	}
-
-	// tftp
-	if c.TFTP.Enabled {
-		addrPort := netip.AddrPortFrom(c.TFTP.BindAddr, c.TFTP.BindPort)
-		if !addrPort.IsValid() {
-			return fmt.Errorf("invalid TFTP bind address: IP: %v, Port: %v", addrPort.Addr(), addrPort.Port())
-		}
-		tftpHandler := binary.TFTP{
-			Log:                  log,
-			EnableTFTPSinglePort: c.TFTP.SinglePort,
-			Addr:                 addrPort,
-			Timeout:              c.TFTP.Timeout,
-			Patch:                []byte(c.IPXE.EmbeddedScriptPatch),
-			BlockSize:            c.TFTP.BlockSize,
-		}
-
-		log.Info("starting tftp server", "bindAddr", addrPort.String())
-		g.Go(func() error {
-			return tftpHandler.ListenAndServe(ctx)
-		})
-	}
-
-	handlers := http.HandlerMapping{}
-	// http ipxe binaries
-	if c.IPXE.HTTPBinaryServer.Enabled {
-		// 1. data validation
-		// 2. start the http server for ipxe binaries
-		// serve ipxe binaries from the "/ipxe/" URI.
-		handlers[IPXEBinaryURI] = binary.Handler{Log: log, Patch: []byte(c.IPXE.EmbeddedScriptPatch)}.Handle
-	}
-
-	// http ipxe script
-	if c.IPXE.HTTPScriptServer.Enabled {
-		jh := script.Handler{
-			Logger:                log,
-			Backend:               c.Backend,
-			OSIEURL:               c.IPXE.HTTPScriptServer.OSIEURL.String(),
-			ExtraKernelParams:     c.IPXE.HTTPScriptServer.ExtraKernelArgs,
-			PublicSyslogFQDN:      c.DHCP.SyslogIP.String(),
-			TinkServerTLS:         c.TinkServer.UseTLS,
-			TinkServerInsecureTLS: c.TinkServer.InsecureTLS,
-			TinkServerGRPCAddr:    c.TinkServer.AddrPort,
-			IPXEScriptRetries:     c.IPXE.HTTPScriptServer.Retries,
-			IPXEScriptRetryDelay:  c.IPXE.HTTPScriptServer.RetryDelay,
-			StaticIPXEEnabled:     (c.DHCP.Mode == DHCPModeAutoProxy),
-			KernelName:            c.IPXE.HTTPScriptServer.KernelName,
-			InitrdName:            c.IPXE.HTTPScriptServer.InitrdName,
-		}
-
-		// serve ipxe script from the "/" URI.
-		handlers[IPXEScriptURI] = jh.HandlerFunc()
-	}
-
-	if c.ISO.Enabled {
-		// 1. data validation
-		// 2. start the http server for iso images
-		ih := iso.Handler{
-			Logger:  log,
-			Backend: c.Backend,
-			Patch: iso.Patch{
-				KernelParams: iso.KernelParams{
-					ExtraParams:        c.IPXE.HTTPScriptServer.ExtraKernelArgs,
-					Syslog:             c.DHCP.SyslogIP.String(),
-					TinkServerTLS:      c.TinkServer.UseTLS,
-					TinkServerGRPCAddr: c.TinkServer.AddrPort,
-				},
-				MagicString: func() string {
-					if c.ISO.PatchMagicString == "" {
-						return isoMagicString
-					}
-					return c.ISO.PatchMagicString
-				}(),
-				SourceISO:         c.ISO.UpstreamURL.String(),
-				StaticIPAMEnabled: c.ISO.StaticIPAMEnabled,
-			},
-		}
-		isoHandler, err := ih.HandlerFunc()
-		if err != nil {
-			return fmt.Errorf("failed to create iso handler: %w", err)
-		}
-		handlers[ISOURI] = isoHandler
-	}
-
-	if len(handlers) > 0 {
-		// 1. data validation
-		// 2. start the http server for ipxe binaries and scripts
-		// start the http server for ipxe binaries and scripts
-		// Add healthcheck and metrics handlers
-		hc := http.HealthCheck{
-			GitRev:    build.GitRevision(),
-			StartTime: time.Now(),
-		}
-		handlers[HealthCheckURI] = hc.HandlerFunc(log)
-		handlers[MetricsURI] = promhttp.Handler().ServeHTTP
-
-		httpServer := &http.ConfigHTTP{
-			Logger:         log,
-			TrustedProxies: c.IPXE.HTTPScriptServer.TrustedProxies,
-		}
-		bindAddr := netip.AddrPortFrom(c.IPXE.HTTPScriptServer.BindAddr, c.IPXE.HTTPScriptServer.BindPort)
-		if !bindAddr.IsValid() {
-			return fmt.Errorf("invalid HTTP Script Server bind address: IP: %v, Port: %v", bindAddr.Addr(), bindAddr.Port())
-		}
-		log.Info("starting http server", "addr", bindAddr.String(), "trustedProxies", c.IPXE.HTTPScriptServer.TrustedProxies)
-		g.Go(func() error {
-			return httpServer.ServeHTTP(ctx, bindAddr.String(), handlers)
-		})
-		// Enable HTTPS/TLS if certificates are provided
-		if len(c.TLS.Certs) > 0 {
-			ap := netip.AddrPortFrom(c.IPXE.HTTPScriptServer.BindAddr, c.HTTP.BindHTTPSPort).String()
-			log.Info("starting https server", "addr", ap, "trustedProxies", c.IPXE.HTTPScriptServer.TrustedProxies)
-			g.Go(func() error {
-				hs := &http.ConfigHTTPS{
-					Logger:         log,
-					TrustedProxies: c.IPXE.HTTPScriptServer.TrustedProxies,
-					TLSCerts:       c.TLS.Certs,
-				}
-				return hs.ServeHTTPS(ctx, ap, handlers)
-			})
-		}
 	}
 
 	// dhcp serving
