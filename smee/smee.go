@@ -237,6 +237,16 @@ type DHCP struct {
 	BindPort uint16
 	// BindInterface is the local interface to which to bind the DHCP server and listen for DHCP packets.
 	BindInterface string
+	// BindInterfaceProvider, when set, supplies the interface to bind to instead
+	// of BindInterface. It is called immediately before the DHCP socket is bound
+	// and returns the interface's name together with a teardown function, which
+	// runs once the socket has been closed.
+	//
+	// It exists so that an interface created for the DHCP server can live for
+	// exactly as long as the server does. Under leader election that means it is
+	// created on acquiring the Lease and removed on losing it, so an instance
+	// standing by holds no interface. See setupConduit in the cmd package.
+	BindInterfaceProvider func(logr.Logger) (string, func(), error)
 	// IPForPacket is the IP address to use in the DHCP packet for DHCP option 54.
 	IPForPacket netip.Addr
 	// SyslogIP is the IP address to use in the DHCP packet for DHCP option 7.
@@ -641,8 +651,8 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 		}
 		g.Go(func() error {
 			// Leader election ensures only a single Smee instance serves DHCP at a
-			// time. This is compatible with per-pod IPs assigned by CNIs such as
-			// Multus macvlan, requiring no host network interface manipulation.
+			// time. Two servers answering one broadcast domain race each other, and
+			// a client acts on whichever reply arrives first.
 			if c.EnableLeaderElection && c.Client != nil {
 				return c.serveDHCPWithLeaderElection(ctx, log.WithName("leaderelection"), dh, dhcpAddrPort)
 			}
@@ -661,7 +671,21 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 // serveDHCP binds a UDP listener and serves DHCP requests until ctx is
 // cancelled. Cancelling ctx closes the listener and returns cleanly.
 func (c *Config) serveDHCP(ctx context.Context, log logr.Logger, dh server.Handler, addrPort netip.AddrPort) error {
-	conn, err := server4.NewIPv4UDPConn(c.DHCP.BindInterface, net.UDPAddrFromAddrPort(addrPort))
+	iface := c.DHCP.BindInterface
+	if provide := c.DHCP.BindInterfaceProvider; provide != nil {
+		name, teardown, err := provide(log)
+		if err != nil {
+			return fmt.Errorf("preparing the dhcp bind interface: %w", err)
+		}
+		// Deferred so that the interface outlives the listener bound to it and is
+		// removed only once that listener has closed. Under leader election
+		// leadDHCP waits for this function to return before campaigning again, so
+		// the interface is always gone before the next acquisition.
+		defer teardown()
+		iface = name
+	}
+
+	conn, err := server4.NewIPv4UDPConn(iface, net.UDPAddrFromAddrPort(addrPort))
 	if err != nil {
 		return err
 	}
@@ -682,8 +706,9 @@ func (c *Config) serveDHCP(ctx context.Context, log logr.Logger, dh server.Handl
 // whole process into CrashLoopBackOff. This returns only when ctx is cancelled
 // or the DHCP server itself fails.
 //
-// This is compatible with per-pod IPs assigned by CNIs such as Multus macvlan,
-// requiring no host network interface manipulation.
+// Where BindInterfaceProvider is set, the interface it creates is bound to this
+// cycle: made on acquiring the Lease and removed on losing it, so an instance
+// standing by holds no interface on the physical network.
 func (c *Config) serveDHCPWithLeaderElection(ctx context.Context, log logr.Logger, dh server.Handler, addrPort netip.AddrPort) error {
 	namespace := c.LeaderElectionNamespace
 	if namespace == "" {

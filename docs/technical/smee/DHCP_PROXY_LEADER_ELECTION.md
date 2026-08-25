@@ -1,294 +1,80 @@
-# DHCP Proxy Mode with Leader Election
+# DHCP leader election
 
-## Overview
+Two DHCP servers answering the same broadcast domain race each other, and a PXE client will act on whichever reply reaches it first. When Smee runs with more than one replica, leader election makes sure only one of them answers.
 
-When running SMEE in DHCP proxy mode with multiple replicas, only one instance should broadcast DHCP packets to avoid conflicts. This is achieved through leader election and dynamic network interface management.
-
-## Problem
-
-In Kubernetes deployments with multiple SMEE pods running in DHCP proxy mode:
-- All pods receive broadcast DHCP packets
-- Only the first pod to bind to the network interface can respond
-- This creates a race condition where only one pod effectively serves DHCP
-- If that pod fails, DHCP service is interrupted until another pod wins the race
-
-## Solution
-
-SMEE now supports:
-1. **Leader Election**: Using Kubernetes leases, pods elect a leader
-2. **Dynamic Interface Management**: Only the elected leader configures its network interface
-3. **Automatic Failover**: When leadership changes, the new leader configures its interface and the old leader cleans up
-
-## Architecture
-
-### Network Interface Management
-
-The network interface manager (`smee/internal/dhcpif`) handles:
-- Creating macvlan/ipvlan interfaces in the host network namespace
-- Moving the interface into the pod's network namespace
-- Configuring the interface with the appropriate IP address
-- Cleaning up interfaces when losing leadership
-
-### Leader Election
-
-Leader election uses Kubernetes Coordination API (Leases):
-- Each pod competes for leadership
-- Leader renews its lease periodically
-- Non-leaders watch for leadership changes
-- When the leader fails, a new leader is elected
+DHCP is the only leader-elected service in the binary. HTTP, TFTP, syslog, the Tink server and the controllers run on every replica regardless.
 
 ## Configuration
 
-### Environment Variables
-
 ```bash
-# Enable network interface management
-TINKERBELL_SMEE_DHCP_INTERFACE_ENABLED=true
-
-# Interface type: macvlan or ipvlan (default: macvlan)
-TINKERBELL_SMEE_DHCP_INTERFACE_TYPE=macvlan
-
-# Source interface (default: auto-detect from default gateway)
-TINKERBELL_SMEE_DHCP_INTERFACE_SRC_INTERFACE=eth0
-
-# Enable leader election
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_ENABLED=true
-
-# Leader election namespace (default: "default")
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_NAMESPACE=tink-system
-
-# Leader election lock name (default: smee-dhcp-interface)
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_LOCK_NAME=smee-dhcp-interface
-
-# Leader election identity (default: pod hostname)
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_IDENTITY=smee-xyz
-
-# Lease duration (default: 15s)
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_LEASE_DURATION=15s
-
-# Renew deadline (default: 10s)
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_RENEW_DEADLINE=10s
-
-# Retry period (default: 2s)
-TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_RETRY_PERIOD=2s
+--dhcp-enable-leader-election=true     # TINKERBELL_DHCP_ENABLE_LEADER_ELECTION
+--dhcp-leader-election-namespace=tink  # TINKERBELL_DHCP_LEADER_ELECTION_NAMESPACE
 ```
 
-### Command Line Flags
+In the Helm chart these are `deployment.envs.dhcp.enableLeaderElection` (default `true`) and `deployment.envs.dhcp.leaderElectionNamespace`.
 
-```bash
-tinkerbell \
-  --dhcp-interface-enabled=true \
-  --dhcp-interface-type=macvlan \
-  --dhcp-interface-src-interface=eth0 \
-  --dhcp-interface-leader-election-enabled=true \
-  --dhcp-interface-leader-election-namespace=tink-system
-```
+Leader election requires the kube backend and is skipped for the file and none backends, where it would have no API server to hold a Lease in. When the namespace is not set, the pod's own namespace is read from `/var/run/secrets/kubernetes.io/serviceaccount/namespace`.
 
-### Kubernetes Deployment
+## What it does
+
+Instances campaign for a `coordination.k8s.io` Lease named `smee-dhcp.tinkerbell.org`. The holder binds the DHCP socket and serves; everyone else waits.
+
+| Setting | Value |
+|---|---|
+| Lease name | `smee-dhcp.tinkerbell.org` |
+| Lease duration | 15s |
+| Renew deadline | 10s |
+| Retry period | 2s |
+| Identity | `<hostname>_<uuid>` |
+| Release on cancel | yes |
+
+The identity carries a UUID as well as the hostname so that a restarted process is not mistaken for the previous one on the same pod, which may not have fully exited.
+
+The timings match client-go's defaults but are stated explicitly in the code because DHCP correctness depends on the relationship between them: a challenger waits a full lease duration past the last renewal it saw before taking over, while the current holder stops serving at the renew deadline. The gap is what keeps the two from ever answering at once.
+
+### Losing the Lease is not an error
+
+An instance that loses the Lease stops the DHCP server, closes its socket and returns to standby, then campaigns again. It does not exit.
+
+Treating it as fatal would take every other service in the binary down with it, and a Lease that flapped would put the whole process into `CrashLoopBackOff`. Only a genuine DHCP failure — failing to bind, say — stops the process.
+
+### Stopping at the renew deadline rather than on cancellation
+
+client-go cancels the leader context only after its renew loop has given up *and* its release call has returned. That release is a blocking API call, so in the very situation where the Lease is being lost — the API server being unreachable — it can run until the client timeout, carrying the instance well past the point where a challenger takes over.
+
+Smee therefore polls `LeaderElector.Check` with a negative tolerance, which brings the cutoff forward from the lease duration to the renew deadline, and stops serving there.
+
+The socket must also be closed before campaigning again. The DHCP listener sets `SO_REUSEPORT`, so a second bind would otherwise quietly succeed alongside the first and the instance would answer twice. `leadDHCP` waits for `serveDHCP` to return before re-entering the campaign.
+
+## Interaction with the DHCP conduit
+
+When `--dhcp-conduit-enabled` is set, the conduit interface's lifetime follows the DHCP server's: it is created when the Lease is acquired and removed when it is lost, so an instance standing by holds no interface on the physical network at all. It is named `tink-dhcp0` — a fixed name, because under leader election there is only ever meant to be one.
+
+On acquiring the Lease, every interface matching the conduit naming pattern is removed before the new one is created. That clears a conduit left behind by an ungraceful exit: a pod's network namespace outlives its container, so a leftover would otherwise hold exactly the name the next start needs and every restart would fail with `EEXIST`.
+
+See [DHCP boot modes](../DHCP_BOOT_MODES.md) for the conduit itself.
+
+## RBAC
+
+The chart creates a namespaced Role granting the leader election permissions:
 
 ```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: smee
-  namespace: tink-system
-spec:
-  replicas: 3
-  selector:
-    matchLabels:
-      app: smee
-  template:
-    metadata:
-      labels:
-        app: smee
-    spec:
-      serviceAccountName: smee
-      securityContext:
-        # Required for network namespace operations
-        capabilities:
-          add:
-            - NET_ADMIN
-            - SYS_ADMIN
-      hostNetwork: true  # Required for accessing host network namespace
-      containers:
-      - name: smee
-        image: ghcr.io/tinkerbell/tinkerbell:latest
-        env:
-        - name: TINKERBELL_SMEE_DHCP_ENABLED
-          value: "true"
-        - name: TINKERBELL_SMEE_DHCP_MODE
-          value: "proxy"
-        - name: TINKERBELL_SMEE_DHCP_INTERFACE_ENABLED
-          value: "true"
-        - name: TINKERBELL_SMEE_DHCP_INTERFACE_TYPE
-          value: "macvlan"
-        - name: TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_ENABLED
-          value: "true"
-        - name: TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_NAMESPACE
-          value: "tink-system"
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: smee
-  namespace: tink-system
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: smee-leader-election
-  namespace: tink-system
-rules:
 - apiGroups: ["coordination.k8s.io"]
   resources: ["leases"]
-  verbs: ["get", "create", "update"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: smee-leader-election
-  namespace: tink-system
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: smee-leader-election
-subjects:
-- kind: ServiceAccount
-  name: smee
-  namespace: tink-system
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["events"]
+  verbs: ["create", "patch"]
 ```
 
-## Interface Types
-
-### macvlan (Recommended)
-
-- **Mode**: Bridge
-- **Use Case**: Most common DHCP proxy deployments
-- **Advantages**: 
-  - Well-tested and stable
-  - Works with most network configurations
-  - Separate MAC address per interface
-- **Requirements**:
-  - Parent interface must be in promiscuous mode (usually automatic)
-
-### ipvlan
-
-- **Mode**: L2
-- **Use Case**: Environments where MAC address uniqueness is problematic
-- **Advantages**:
-  - Shares MAC address with parent interface
-  - Lower resource usage
-- **Disadvantages**:
-  - Requires broadcast workaround (automatically handled)
-  - May not work with all network configurations
-- **Requirements**:
-  - Kernel support for ipvlan
-
-## Migration from Shell Script Approach
-
-The previous approach used an init container with a shell script to configure the interface. This has been replaced with Go-based management integrated with leader election.
-
-### Before (Shell Script in ConfigMap)
-
-```yaml
-initContainers:
-- name: init-interface
-  image: registry.k8s.io/pause:latest
-  command: ["/bin/sh", "/scripts/host_interface.sh"]
-  volumeMounts:
-  - name: host-interface-script
-    mountPath: /scripts
-  securityContext:
-    privileged: true
-volumes:
-- name: host-interface-script
-  configMap:
-    name: host-interface-script
-```
-
-### After (Built-in Leader Election)
-
-```yaml
-containers:
-- name: smee
-  env:
-  - name: TINKERBELL_SMEE_DHCP_INTERFACE_ENABLED
-    value: "true"
-  - name: TINKERBELL_SMEE_DHCP_INTERFACE_LEADER_ELECTION_ENABLED
-    value: "true"
-  securityContext:
-    capabilities:
-      add:
-        - NET_ADMIN
-        - SYS_ADMIN
-```
-
-## Troubleshooting
-
-### Check Leader Election Status
+## Observing it
 
 ```bash
-# View the current leader
-kubectl get lease smee-dhcp-interface -n tink-system -o yaml
+# Who currently holds the Lease
+kubectl get lease smee-dhcp.tinkerbell.org -n tink -o yaml
 
-# Check logs for leader election events
-kubectl logs -n tink-system -l app=smee --tail=100 | grep "leader"
+# Acquisition and loss are logged by the "leaderelection" logger
+kubectl logs -n tink deploy/tinkerbell | grep -i leadership
 ```
 
-### Common Issues
-
-1. **Interface not created**
-   - Check pod has NET_ADMIN and SYS_ADMIN capabilities
-   - Verify hostNetwork: true is set
-   - Check logs for interface creation errors
-
-2. **Leader election not working**
-   - Verify ServiceAccount has appropriate RBAC permissions
-   - Check lease resource exists and is being updated
-   - Verify namespace is correct
-
-3. **Broadcast packets not received (ipvlan)**
-   - Ensure workaround is being applied (check logs)
-   - Try switching to macvlan mode
-
-4. **Multiple pods responding to DHCP**
-   - Check only one pod is leader
-   - Verify leader election is enabled
-   - Check for network configuration issues
-
-### Debug Commands
-
-```bash
-# Check interface in pod
-kubectl exec -n tink-system smee-xyz -- ip link show
-
-# Check interface in host namespace (requires nsenter)
-kubectl exec -n tink-system smee-xyz -- nsenter -t1 -n ip link show
-
-# Watch leader election events
-kubectl get events -n tink-system --watch | grep lease
-
-# Check DHCP traffic
-kubectl exec -n tink-system smee-xyz -- tcpdump -i macvlan0 -n port 67 or port 68
-```
-
-## Performance Considerations
-
-- **Leader Election Overhead**: Minimal, uses efficient Kubernetes lease mechanism
-- **Failover Time**: Typically 15-30 seconds (configurable via lease parameters)
-- **Resource Usage**: Negligible additional CPU/memory for leader election
-- **Network Overhead**: Only leader responds to DHCP packets
-
-## Security Considerations
-
-- Requires elevated privileges (NET_ADMIN, SYS_ADMIN) for network namespace operations
-- Leader election uses Kubernetes RBAC for authorization
-- Interface is isolated to pod's network namespace
-- Cleanup ensures interfaces are removed when pod terminates
-
-## References
-
-- [Kubernetes Leader Election](https://kubernetes.io/docs/concepts/cluster-administration/networking/#network-plugins)
-- [Linux Network Namespaces](https://man7.org/linux/man-pages/man7/network_namespaces.7.html)
-- [macvlan Documentation](https://developers.redhat.com/blog/2018/10/22/introduction-to-linux-interfaces-for-virtual-networking#macvlan)
-- [ipvlan Documentation](https://developers.redhat.com/blog/2018/10/22/introduction-to-linux-interfaces-for-virtual-networking#ipvlan)
+Expect `acquired dhcp leadership, starting dhcp server` on the holder and nothing on the others until a handover.

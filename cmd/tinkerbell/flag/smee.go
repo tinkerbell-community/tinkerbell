@@ -26,14 +26,13 @@ type SmeeConfig struct {
 	// The cmd package is responsible for putting the fields back together into a url.URL for use in service package configs.
 	DHCPIPXEScript URLBuilder
 	LogLevel       int
-	// MacvlanEnabled enables native macvlan interface setup at startup.
-	// When true the binary creates a macvlan interface in the host netns and
-	// moves it into the pod netns before starting the DHCP server.
-	// Requires CAP_NET_ADMIN + CAP_SYS_ADMIN and hostPID=true.
-	MacvlanEnabled bool
-	// MacvlanSourceInterface is the host parent interface for the macvlan.
-	// When empty the host's default-route interface is used.
-	MacvlanSourceInterface string
+	// ConduitEnabled creates a layer 2 only ipvlan interface for the DHCP server
+	// to bind to, attached to one of the host's physical interfaces and living in
+	// the pod's network namespace. Requires CAP_NET_ADMIN.
+	ConduitEnabled bool
+	// ConduitInterface is the host interface the conduit attaches to. When empty
+	// a single physical host interface that is up with carrier is looked for.
+	ConduitInterface string
 }
 
 var KubeIndexesSmee = map[kube.IndexType]kube.Index{
@@ -57,8 +56,8 @@ func RegisterSmeeFlags(fs *Set, sc *SmeeConfig) {
 	fs.Register(DHCPModeFlag, &sc.Config.DHCP.Mode)
 	fs.Register(DHCPBindAddr, &ntip.Addr{Addr: &sc.Config.DHCP.BindAddr})
 	fs.Register(DHCPBindInterface, ffval.NewValueDefault(&sc.Config.DHCP.BindInterface, sc.Config.DHCP.BindInterface))
-	fs.Register(DHCPMacvlanEnabled, ffval.NewValueDefault(&sc.MacvlanEnabled, sc.MacvlanEnabled))
-	fs.Register(DHCPMacvlanSourceInterface, ffval.NewValueDefault(&sc.MacvlanSourceInterface, sc.MacvlanSourceInterface))
+	fs.Register(DHCPConduitEnabled, ffval.NewValueDefault(&sc.ConduitEnabled, sc.ConduitEnabled))
+	fs.Register(DHCPConduitInterface, ffval.NewValueDefault(&sc.ConduitInterface, sc.ConduitInterface))
 	fs.Register(DHCPIPForPacket, &ntip.Addr{Addr: &sc.Config.DHCP.IPForPacket})
 	fs.Register(DHCPSyslogIP, &ntip.Addr{Addr: &sc.Config.DHCP.SyslogIP})
 	fs.Register(DHCPTftpIP, &ntip.Addr{Addr: &sc.Config.DHCP.TFTPIP})
@@ -296,14 +295,14 @@ var DHCPBindInterface = Config{
 	Usage: "[dhcp] DHCP server bind interface",
 }
 
-var DHCPMacvlanEnabled = Config{
-	Name:  "dhcp-macvlan-enabled",
-	Usage: "[dhcp] create a per-pod layer 2 only macvlan interface at startup (no IP, no routes) and bind the DHCP server to it; requires CAP_NET_ADMIN, CAP_SYS_ADMIN and hostPID=true. Disabling IPv6 on the interface additionally needs a writable /proc/sys (a privileged container); without it a router advertisement on the physical network can add an IPv6 default route to the pod",
+var DHCPConduitEnabled = Config{
+	Name:  "dhcp-conduit-enabled",
+	Usage: "[dhcp] carry DHCP over a layer 2 only ipvlan interface (no IP, no routes, MTU 1279 so it has no IPv6 stack) attached to a host interface and bound by the DHCP server; requires CAP_NET_ADMIN only. ipvlan shares its parent's MAC, so unlike a macvlan it does not force the parent NIC into promiscuous mode. The parent cannot already carry a macvlan, as a netdev has one rx_handler slot",
 }
 
-var DHCPMacvlanSourceInterface = Config{
-	Name:  "dhcp-macvlan-source-interface",
-	Usage: "[dhcp] host parent interface for the macvlan (empty = auto-detect from host default route)",
+var DHCPConduitInterface = Config{
+	Name:  "dhcp-conduit-interface",
+	Usage: "[dhcp] host interface the DHCP conduit attaches to (empty = auto-detect the single physical host interface that is up with carrier)",
 }
 
 var DHCPIPForPacket = Config{

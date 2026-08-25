@@ -60,7 +60,7 @@ spec:
             {{- include "tinkerbell.generateEnvVars" .Values.deployment.envs | nindent 12 }}
           {{- end }}
           {{- /* Open env: when using configmap but extra downward-API vars are needed */}}
-          {{- $needsExtraEnv := or .Values.deployment.hostNetwork .Values.deployment.envs.dhcp.macvlanEnabled .Values.deployment.additionalEnvs true }}
+          {{- $needsExtraEnv := or .Values.deployment.hostNetwork .Values.deployment.envs.dhcp.conduitEnabled .Values.deployment.additionalEnvs true }}
           {{- if and .Values.createConfigmap $needsExtraEnv }}
           env:
           {{- end }}
@@ -70,7 +70,7 @@ spec:
                 fieldRef:
                   fieldPath: status.hostIP
           {{- end }}
-          {{- if .Values.deployment.envs.dhcp.macvlanEnabled }}
+          {{- if .Values.deployment.envs.dhcp.conduitEnabled }}
             - name: MY_POD_UID
               valueFrom:
                 fieldRef:
@@ -161,24 +161,19 @@ spec:
             failureThreshold: {{ .Values.deployment.probes.startup.failureThreshold }}
             successThreshold: {{ .Values.deployment.probes.startup.successThreshold }}
           {{- end }}
+          {{- if .Values.deployment.envs.dhcp.conduitEnabled }}
           securityContext:
-            {{- if and .Values.deployment.envs.dhcp.macvlanEnabled .Values.deployment.envs.dhcp.macvlanPrivileged }}
-            # Only needed to disable IPv6 on the macvlan, which has no netlink
-            # equivalent and so needs a writable /proc/sys. See dhcp.macvlanPrivileged.
-            privileged: true
-            {{- end }}
             capabilities:
               add:
-                # NET_RAW is required for the DHCP server to send broadcast replies.
-                # DHCP serving is gated by leader election (see dhcp.enableLeaderElection),
-                # so no host network interface management privileges are needed.
-                - NET_RAW
-                {{- if .Values.deployment.envs.dhcp.macvlanEnabled }}
-                # NET_ADMIN + SYS_ADMIN are required for native macvlan setup: netlink
-                # link and devconf operations, and setns to enter the host netns.
+                # The DHCP conduit is created, configured and removed entirely over
+                # netlink, which needs CAP_NET_ADMIN and nothing more. It names the
+                # host's network namespace by the id the kernel already recorded on
+                # the interface the CNI moved in, so it never has to enter that
+                # namespace (CAP_SYS_ADMIN) or reach a handle on it through
+                # /proc/1/ns/net (hostPID). Its MTU denies it an IPv6 stack, so
+                # nothing needs a writable /proc/sys either.
                 - NET_ADMIN
-                - SYS_ADMIN
-                {{- end }}
+          {{- end }}
           volumeMounts:
           - name: captain-artifacts
             mountPath: {{ .Values.deployment.envs.osie.imagePath }}
@@ -210,9 +205,6 @@ spec:
       {{- with .Values.deployment.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- if .Values.deployment.envs.dhcp.macvlanEnabled }}
-      hostPID: true
       {{- end }}
       {{- with .Values.deployment.initContainers }}
       initContainers:
