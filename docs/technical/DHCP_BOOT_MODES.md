@@ -41,73 +41,67 @@ This mode is used to disable all DHCP functionality in Tinkerbell. In this mode,
 
 To enable this mode set the CLI flag `--dhcp-enabled-v4=false` or the environment variable `TINKERBELL_DHCP_ENABLED_V4=false`.
 
-## DHCP Proxy Interface Management
+## Reaching the DHCP broadcast domain
 
-In `proxy` and `auto-proxy` modes, Tinkerbell automatically creates a macvlan interface so it can receive broadcast DHCP packets from the host network. When running multiple replicas, the interface should only be active on the pod that is currently serving the Kubernetes Service (i.e. the Service endpoint leader). Tinkerbell supports three interface management modes:
+A DHCP client that has no address yet broadcasts to 255.255.255.255, and a limited broadcast is never forwarded by a router. Smee therefore has to be on the same layer 2 segment as the machines it boots. There are three ways to arrange that.
 
-| Mode | When to use |
-|---|---|
-| **Lease-watch** | Multi-replica with Cilium L2 announcements (or any LB that uses a Lease for leader selection) |
-| **Leader election** | Multi-replica without an external Lease to follow |
-| **Static** | Single replica, no HA |
+### DHCP relay (no special privileges)
 
-### Aligning with Cilium L2 Announcements
+Point an `ip helper-address` on the provisioning VLAN at Smee. The relay rewrites each request as routable unicast with `giaddr` set, and Smee answers it through the ordinary pod network. Nothing below needs to be enabled, the pod needs no added capabilities, and the CNI datapath is used throughout. Prefer this where the network equipment allows it.
 
-When using [Cilium L2 announcements](https://docs.cilium.io/en/stable/network/l2-announcements/) for the Tinkerbell Service, Cilium maintains a Lease object that tracks which node is the current L2 leader. Tinkerbell can watch this Lease and activate the DHCP proxy interface only on the matching node, ensuring the DHCP interface is always co-located with the Service endpoint.
+### DHCP conduit
 
-Cilium L2 announcement Leases follow the naming convention `cilium-l2announce-<service-namespace>-<service-name>` and are created in the `kube-system` namespace. For example, a Service named `tinkerbell` in the `default` namespace produces the Lease `cilium-l2announce-default-tinkerbell`.
-
-#### Configuration
-
-Set the following CLI flags or environment variables:
+Where no relay is available, Smee can give itself an interface directly on the physical segment: an ipvlan in layer 2 mode, attached to one of the host's interfaces and created inside the pod's own network namespace.
 
 ```bash
---dhcp-interface-lease-watch-name=cilium-l2announce-default-tinkerbell
---dhcp-interface-lease-watch-namespace=kube-system
---dhcp-interface-node-name=<this-node-name>
+--dhcp-conduit-enabled=true
+--dhcp-conduit-interface=eth0   # optional; auto-detected when the host has one physical NIC
 ```
 
 Or equivalently:
 
 ```bash
-TINKERBELL_SMEE_DHCP_INTERFACE_LEASE_WATCH_NAME=cilium-l2announce-default-tinkerbell
-TINKERBELL_SMEE_DHCP_INTERFACE_LEASE_WATCH_NAMESPACE=kube-system
-TINKERBELL_SMEE_DHCP_INTERFACE_NODE_NAME=<this-node-name>
+TINKERBELL_DHCP_CONDUIT_ENABLED=true
+TINKERBELL_DHCP_CONDUIT_INTERFACE=eth0
 ```
 
-The node name is typically injected via the Kubernetes downward API. In a Helm values file or pod spec:
+The interface holds no IP address and installs no route, so the pod's routing table stays exactly as the CNI left it. Its MTU is set below `IPV6_MIN_MTU`, which makes the kernel decline to give it an IPv6 stack at all — no link-local address, no all-nodes multicast membership, and so nothing that could act on a router advertisement and install an IPv6 default route around the CNI. ARP is switched off for it with `arp_ignore=8`, so the pod never answers for its cluster address on the physical segment.
 
-```yaml
-containers:
-- name: tinkerbell
-  env:
-  - name: NODE_NAME
-    valueFrom:
-      fieldRef:
-        fieldPath: spec.nodeName
-  - name: TINKERBELL_SMEE_DHCP_INTERFACE_LEASE_WATCH_NAME
-    value: "cilium-l2announce-default-tinkerbell"
-  - name: TINKERBELL_SMEE_DHCP_INTERFACE_LEASE_WATCH_NAMESPACE
-    value: "kube-system"
-  - name: TINKERBELL_SMEE_DHCP_INTERFACE_NODE_NAME
-    valueFrom:
-      fieldRef:
-        fieldPath: spec.nodeName
-  securityContext:
-    capabilities:
-      add: ["NET_ADMIN"]
+Requirements and constraints:
+
+- `CAP_NET_ADMIN`, and nothing else. Not a privileged container, not `CAP_SYS_ADMIN`, not `hostPID`. The Helm chart adds the capability automatically when `deployment.envs.dhcp.conduitEnabled` is true.
+- The pod must be on a CNI that hands it one end of a veth pair (Cilium, Calico and flannel all do). That is what records the host's network namespace against the pod's interface, which is how the conduit names the host's namespace without entering it. It does not work with `hostNetwork: true` — but then the host's interfaces are already available directly.
+- **The parent interface must not already carry a macvlan.** A netdev has a single `rx_handler` slot, so an ipvlan and a macvlan cannot share a parent; the second one fails with `EBUSY`. A Multus macvlan `NetworkAttachmentDefinition` on the same NIC is the usual cause and has to be removed.
+
+An ipvlan is used rather than a macvlan because it shares its parent's MAC address. A macvlan gets its own, and a NIC that cannot filter on more than one unicast address can only receive it by being put into promiscuous mode. The Cadence GEM (`macb`) behind the Raspberry Pi 5's RP1 is such a NIC, and going promiscuous also turns off its hardware RX checksum offload.
+
+### Interface naming and leader election
+
+Leader election gates DHCP serving so that only one instance answers at a time:
+
+```bash
+--dhcp-enable-leader-election=true          # TINKERBELL_DHCP_ENABLE_LEADER_ELECTION
+--dhcp-leader-election-namespace=tink       # TINKERBELL_DHCP_LEADER_ELECTION_NAMESPACE
 ```
 
-> **Note:** The pod must have `hostPID: true` and `CAP_NET_ADMIN` for macvlan interface creation. When `lease-watch-name` is set it takes precedence over `--dhcp-interface-leader-election-enabled`.
+It requires the kube backend and is ignored for the file and none backends. Losing the Lease stops the DHCP server and returns that instance to standby; it is not treated as fatal, because DHCP is the only leader-elected service in the binary.
 
-#### How it works
+The conduit's lifetime follows the DHCP server's, and so its name follows the leader-election setting:
 
-1. Tinkerbell performs a Kubernetes list+watch on the configured Lease object.
-2. When the Lease's `holderIdentity` matches the configured node name, the macvlan interface is created and the DHCP server begins serving.
-3. When the holder changes to a different node (or the Lease is deleted), the interface is torn down and the DHCP server stops.
-4. If the watch connection drops, it reconnects automatically.
+| Leader election | Interface name | Lifetime |
+|---|---|---|
+| Enabled | `tink-dhcp0` | Created when the Lease is acquired, removed when it is lost. An instance standing by holds no interface on the physical network. |
+| Disabled | `tink-dhcp<6 hex of pod UID>` | Created at startup, removed at shutdown. The per-pod suffix keeps replicas on one node from colliding. |
 
-This ensures that broadcast DHCP packets are always received by the same pod that Cilium has selected to answer unicast traffic for the Tinkerbell Service.
+Under leader election the conduit is a singleton, so every interface matching either pattern is removed before the new one is created. That also clears a conduit left behind by an ungraceful exit: the pod's network namespace outlives the container, so without the sweep a leftover would hold the name the next start needs and every restart would fail with `EEXIST`.
+
+### Binding to an existing interface
+
+If an interface on the segment is already present in the pod — placed there by Multus, for example — skip the conduit and name it directly:
+
+```bash
+--dhcp-bind-interface=net1
+```
 
 ## Interoperability with other DHCP servers
 

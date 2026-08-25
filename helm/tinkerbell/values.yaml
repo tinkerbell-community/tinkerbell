@@ -20,8 +20,8 @@ deployment:
   # It is not set because in the deployment.yaml a coalesce is used with this value
   # and the .Chart.AppVersion. This allows CI and the release process to set the value properly.
   agentImageTag:
-  captainImage: ghcr.io/rpardini/captain/artifacts
-  captainImageTag: v0.0.0-0ab6603-trixie-full
+  captainImage: ghcr.io/tinkerbell-community/captain/artifacts
+  captainImageTag: v0.0.0-d1fdd9d-trixie
   annotations: {}
   daemonSet:
     enabled: false
@@ -92,44 +92,48 @@ deployment:
       tftpIP: ""
       tftpPort: 69
       # Leader election ensures only a single Smee instance serves DHCP at a time.
-      # This replaces host network interface (macvlan) management and is compatible
-      # with per-pod IPs assigned by CNIs such as Multus macvlan. Requires the kube
-      # backend; ignored for file/none backends.
+      # Two servers answering one broadcast domain race each other, and a client
+      # acts on whichever reply arrives first. It also governs the DHCP conduit
+      # below: with leader election on, the conduit belongs to the Lease holder.
+      # Requires the kube backend; ignored for file/none backends.
       enableLeaderElection: true
       leaderElectionNamespace: '{{ include "tinkerbell.namespace" . }}'
-      # macvlanEnabled enables native macvlan interface setup inside the tinkerbell
-      # binary (no init container required). The binary creates a per-pod macvlan
-      # interface (mv<13-hex-chars-of-pod-UID>) in the host netns and moves it into
-      # the pod netns before starting the DHCP server.
+      # conduitEnabled gives the DHCP server an interface of its own on the physical
+      # network: an ipvlan in layer 2 mode, attached to one of the host's interfaces
+      # and living in the pod's network namespace. DHCP broadcasts from the segment
+      # arrive on it and replies go back out of the same physical port. It is created
+      # by the tinkerbell binary itself, so no init container or CNI plugin is needed.
       #
-      # The interface is brought up as a layer 2 receiver only: no IP address and no
-      # routes, so the pod's routing table stays exactly as the CNI left it and all
-      # routed traffic continues to flow through the CNI datapath (Cilium's eBPF
-      # programs on eth0, for example). The DHCP server reaches it via
-      # SO_BINDTODEVICE, which is all the kernel needs to receive limited broadcasts
-      # on an unaddressed interface and to send replies back out of it.
+      # The interface holds no address and installs no route, so the pod's routing
+      # table stays exactly as the CNI left it and all routed traffic continues to
+      # flow through the CNI datapath (Cilium's eBPF programs on eth0, for example).
+      # Its MTU is set below IPV6_MIN_MTU so the kernel gives it no IPv6 stack at all,
+      # which is what stops a router advertisement on the provisioning network
+      # installing an IPv6 default route that bypasses the CNI.
       #
-      # Requires hostPID=true and CAP_NET_ADMIN + CAP_SYS_ADMIN, both added
-      # automatically when this is true.
-      macvlanEnabled: false
-      # macvlanPrivileged additionally runs the container privileged, which is only
-      # needed to harden the macvlan against IPv6 router advertisements.
+      # ipvlan rather than macvlan: an ipvlan shares its parent's MAC address, so
+      # attaching one gives the parent NIC no second address to filter on. A macvlan
+      # gets its own MAC, and a NIC that cannot filter more than one — the Cadence GEM
+      # (macb) behind the Raspberry Pi 5's RP1, for instance — can only receive it by
+      # being put into promiscuous mode, which on that NIC also turns off hardware RX
+      # checksum offload.
       #
-      # The interface is restrained either way: it has no address or routes, IPv6
-      # address generation is off, and the ARP and ICMP redirect settings are applied
-      # over netlink, which needs nothing beyond CAP_NET_ADMIN. Disabling IPv6 on the
-      # interface has no netlink equivalent, so it needs a writable /proc/sys, which
-      # container runtimes provide only to privileged containers.
+      # The parent must not already carry a macvlan. A netdev has a single rx_handler
+      # slot, so a Multus macvlan NetworkAttachmentDefinition on the same interface
+      # makes this fail with EBUSY, and vice versa.
       #
-      # Leave this false unless the provisioning network carries IPv6 router
-      # advertisements. Without it, an advertisement on that network can install an
-      # IPv6 default route in the pod that bypasses the CNI datapath, and SLAAC can
-      # configure a global address on the interface. Smee logs a warning at startup
-      # when it cannot apply these settings.
-      macvlanPrivileged: false
-      # macvlanSourceInterface is the host parent interface for the macvlan.
-      # Leave empty to auto-detect from the host's default route.
-      macvlanSourceInterface: ""
+      # Requires CAP_NET_ADMIN, added automatically when this is true. Nothing else:
+      # no privileged container, no CAP_SYS_ADMIN and no hostPID.
+      #
+      # With leader election enabled the conduit belongs to whichever instance holds
+      # the Lease, created when it is acquired and removed when it is lost, so an
+      # instance standing by holds no interface on the physical network.
+      conduitEnabled: false
+      # conduitInterface is the host interface the conduit attaches to. Leave empty to
+      # auto-detect, which requires the host to have exactly one physical interface
+      # that is up with carrier; set it explicitly on a node with more than one, or
+      # when the provisioning network is reached over a bond, bridge or VLAN.
+      conduitInterface: ""
     smee:
       logLevel: 0
     ipxe:
@@ -139,8 +143,8 @@ deployment:
       httpScriptBindAddr: ""
       httpScriptEnabled: true
       httpScriptExtraKernelArgs: [] # Additional kernel arguments to pass to the OSIE. (k=v k=v) that are appended to the kernel cmdline in the iPXE script
-      httpScriptInitrdName: "initramfs-trixie-full" # name of the initrd file to fetch in the iPXE script, defaults to initramfs, which becomes initramfs-<arch> in the script
-      httpScriptKernelName: "initramfs-trixie-full" # name of the kernel file to fetch in the iPXE script, defaults to vmlinuz, which becomes vmlinuz-<arch> in the script
+      httpScriptInitrdName: "initramfs" # name of the initrd file to fetch in the iPXE script, defaults to initramfs, which becomes initramfs-<arch> in the script
+      httpScriptKernelName: "vmlinuz" # name of the kernel file to fetch in the iPXE script, defaults to vmlinuz, which becomes vmlinuz-<arch> in the script
       httpScriptOsieUrl: ""
       httpScriptRetries: 1
       httpScriptRetryDelay: 1

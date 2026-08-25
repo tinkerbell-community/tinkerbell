@@ -437,8 +437,8 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		}
 		s.Config.Backend = b.RenderedReader()
 		// Wire DHCP leader election to the kube backend so only a single Smee
-		// instance serves DHCP. Compatible with per-pod IPs from CNIs such as
-		// Multus macvlan (no host interface manipulation needed).
+		// instance serves DHCP. It also decides how the DHCP conduit is named and
+		// how long it lives; see conduitIfaceName.
 		s.Config.Client = b.ClientConfig
 		h.Config.SetBackendFromFilterer(b.RenderedReader())
 		ts.Config.SetBackends(b)
@@ -494,17 +494,26 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		ll := ternary((s.LogLevel != 0), s.LogLevel, globals.LogLevel)
 		smeeLog := getLogger(ll).WithName("smee")
 
-		if s.MacvlanEnabled {
-			ifaceName, err := macvlanIfaceName()
+		if s.ConduitEnabled {
+			// Leader election decides whether the conduit is a singleton owned by
+			// whichever instance holds the Lease, or one interface per replica.
+			leaderElected := s.Config.EnableLeaderElection && s.Config.Client != nil
+			ifaceName, err := conduitIfaceName(leaderElected)
 			if err != nil {
-				return fmt.Errorf("macvlan interface name: %w", err)
+				return fmt.Errorf("naming the dhcp conduit: %w", err)
 			}
-			cleanup, err := setupMacvlan(smeeLog, s.MacvlanSourceInterface, ifaceName)
-			if err != nil {
-				return fmt.Errorf("setup macvlan: %w", err)
+			// Tied to the DHCP server's lifetime rather than the process's, so that
+			// under leader election the conduit is created on acquiring the Lease
+			// and removed on losing it. An instance standing by then holds no
+			// interface on the physical network at all.
+			s.Config.DHCP.BindInterfaceProvider = func(log logr.Logger) (string, func(), error) {
+				cleanup, err := setupConduit(log, s.ConduitInterface, ifaceName)
+				if err != nil {
+					return "", nil, fmt.Errorf("setting up the dhcp conduit: %w", err)
+				}
+
+				return ifaceName, cleanup, nil
 			}
-			defer cleanup()
-			s.Config.DHCP.BindInterface = ifaceName
 		} else if s.Config.DHCP.BindInterface == "" {
 			// Bind DHCP to the container's primary interface so the kernel has a
 			// valid (non-loopback) source address when sending 255.255.255.255
