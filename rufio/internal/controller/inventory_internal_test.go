@@ -567,3 +567,132 @@ func TestInventoryJitter(t *testing.T) {
 		t.Errorf("inventoryJitter with zero interval = %v, want 0", got)
 	}
 }
+
+// TestAttributesFromIntelAMTDevice pins the mapping for a device shaped the way
+// bmclib's intelamt provider reports one.
+//
+// AMT is the sparsest inventory source Tinkerbell supports: no drive model or
+// serial, no per-CPU serial, no firmware inventory beyond AMT's own version. The
+// risk is not that the mapping crashes but that it quietly yields components
+// with no identifying field at all, which are indistinguishable from each other
+// once written to Hardware. This asserts the identifiers AMT *does* report
+// survive the trip, and records the fields it genuinely cannot fill.
+func TestAttributesFromIntelAMTDevice(t *testing.T) {
+	now := metav1.Now()
+	device := &common.Device{
+		Common: common.Common{
+			Vendor: "ASUSTeK COMPUTER INC.",
+			Model:  "NUC15CRHV7",
+			Serial: "TBARQK0038327AB",
+		},
+		Mainboard: &common.Mainboard{Common: common.Common{
+			Vendor: "ASUSTeK COMPUTER INC.",
+			Model:  "NUC15CRBV7",
+			Serial: "TBARP10006D0",
+		}},
+		BIOS: &common.BIOS{Common: common.Common{
+			Vendor:   "ASUSTeK COMPUTER INC.",
+			Firmware: &common.Firmware{Installed: "CRARLV57"},
+		}},
+		BMC: &common.BMC{Common: common.Common{
+			Vendor:   "Intel",
+			Model:    "Intel AMT",
+			Firmware: &common.Firmware{Installed: "18.1.18"},
+		}},
+		CPUs: []*common.CPU{{
+			Common:       common.Common{Description: "Managed System CPU", Model: "Managed System CPU"},
+			ID:           "CPU 0",
+			Slot:         "CPU 0",
+			ClockSpeedHz: 5_300_000_000,
+		}},
+		Memory: []*common.Memory{{
+			Common:    common.Common{Vendor: "Corsair", Description: "BANK 0"},
+			Slot:      "BANK 0",
+			SizeBytes: 51539607552,
+		}},
+		NICs: []*common.NIC{{
+			Common:   common.Common{Description: "Wired0"},
+			ID:       "Wired0",
+			NICPorts: []*common.NICPort{{ID: "Wired0", MacAddress: "88:ae:dd:75:3d:a0"}},
+		}},
+		Drives: []*common.Drive{{
+			Common:        common.Common{Description: "MEDIA DEV 0"},
+			ID:            "MEDIA DEV 0",
+			CapacityBytes: 2048408248 * 1024,
+		}},
+	}
+
+	sortDevice(device)
+	attrs := attributesFromDevice(device, "intelamt", &now)
+	if attrs == nil {
+		t.Fatal("attributesFromDevice returned nil; nothing would be written to Hardware")
+	}
+	if attrs.CollectionMethod != "intelamt" {
+		t.Errorf("collectionMethod = %q, want intelamt", attrs.CollectionMethod)
+	}
+
+	if attrs.Product == nil || attrs.Product.Model != "NUC15CRHV7" || attrs.Product.SerialNumber != "TBARQK0038327AB" {
+		t.Errorf("product = %+v", attrs.Product)
+	}
+	if attrs.Baseboard == nil || attrs.Baseboard.Model != "NUC15CRBV7" {
+		t.Errorf("baseboard = %+v", attrs.Baseboard)
+	}
+	if attrs.BIOS == nil || attrs.BIOS.FirmwareVersion != "CRARLV57" {
+		t.Errorf("bios = %+v", attrs.BIOS)
+	}
+
+	// AMT's own version is the BMC's, not the host's. Conflating the two would
+	// report the management engine's version as the machine's firmware.
+	if attrs.BMC == nil || attrs.BMC.FirmwareVersion != "18.1.18" {
+		t.Fatalf("bmc = %+v", attrs.BMC)
+	}
+	if attrs.BIOS.FirmwareVersion == attrs.BMC.FirmwareVersion {
+		t.Error("BIOS and BMC firmware versions must not be the same value")
+	}
+
+	if attrs.CPU == nil || len(attrs.CPU.Sockets) != 1 {
+		t.Fatalf("cpu = %+v", attrs.CPU)
+	}
+	if got := attrs.CPU.Sockets[0].Slot; got != "CPU 0" {
+		t.Errorf("cpu slot = %q, want CPU 0 (the only field distinguishing sockets)", got)
+	}
+	if got := attrs.CPU.Sockets[0].ClockSpeedMHz; got != 5300 {
+		t.Errorf("cpu clock = %d MHz, want 5300", got)
+	}
+
+	if attrs.Memory == nil || len(attrs.Memory.Modules) != 1 {
+		t.Fatalf("memory = %+v", attrs.Memory)
+	}
+	if got := attrs.Memory.Modules[0].Slot; got != "BANK 0" {
+		t.Errorf("memory slot = %q, want BANK 0", got)
+	}
+
+	if len(attrs.NetworkInterfaces) != 1 || len(attrs.NetworkInterfaces[0].Ports) != 1 {
+		t.Fatalf("network interfaces = %+v", attrs.NetworkInterfaces)
+	}
+	port := attrs.NetworkInterfaces[0].Ports[0]
+	if port.MAC != "88:ae:dd:75:3d:a0" {
+		t.Errorf("port mac = %q", port.MAC)
+	}
+	// Without PortID the MAC arrives unlabelled, and a machine with several
+	// interfaces yields ports that cannot be told apart.
+	if port.PortID != "Wired0" {
+		t.Errorf("port id = %q, want Wired0", port.PortID)
+	}
+
+	if len(attrs.BlockDevices) != 1 {
+		t.Fatalf("block devices = %+v", attrs.BlockDevices)
+	}
+	if got := attrs.BlockDevices[0].SizeBytes; got != 2048408248*1024 {
+		t.Errorf("block device size = %d", got)
+	}
+	// AMT reports no model, serial or WWN for storage, so these must stay empty
+	// rather than be filled with the generic element name. Capacity is all this
+	// source can honestly contribute, and BlockDevice has no field for AMT's
+	// device identifier ("MEDIA DEV 0") — so two same-sized drives are
+	// indistinguishable in Hardware. Widening the API is the only fix; guessing
+	// here would put an out-of-band tag in a field documented as in-band.
+	if bd := attrs.BlockDevices[0]; bd.Model != "" || bd.SerialNumber != "" || bd.WWN != "" {
+		t.Errorf("block device identity should be empty for AMT, got %+v", bd)
+	}
+}
