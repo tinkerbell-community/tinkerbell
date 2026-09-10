@@ -16,14 +16,17 @@ ifeq ($(shell uname), Darwin)
   endif
 endif
 
-GIT_TAG := $(shell git describe --tags --exact-match 2>/dev/null || true)
-ifeq ($(GIT_TAG),)
-	GIT_TAG := v0.0.0
-endif
 VERSION ?=
 ifeq ($(VERSION),)
 	VERSION := $(shell go run --buildvcs=true ./script/version/)
 endif
+
+# Docker tags allow [A-Za-z0-9_][A-Za-z0-9._-]* and so cannot carry the '+' that
+# a Go pseudo-version uses for a modified tree (v0.25.1-725c33d1+dirty). Without
+# this translation every image build from a dirty checkout dies on "invalid
+# reference format", which never happens in CI because CI builds a clean tree.
+IMAGE_TAG := $(subst +,-,$(VERSION))
+
 CGO_ENABLED := 0
 export CGO_ENABLED
 COMPRESS := false
@@ -63,9 +66,21 @@ GO_LICENSES_FQP := $(TOOLS_DIR)/go-licenses-$(GO_LICENSES_VER)
 #######################################
 ######### Container images variable #########
 # `?=` will only set the variable if it is not already set by the environment
-IMAGE_NAME       ?= tinkerbell/tinkerbell:latest
-IMAGE_NAME_AGENT ?= tinkerbell/tink-agent:latest
+#
+# These are repositories, NOT full image references: the image targets below
+# append the tags themselves. A tag here produces "repo:latest:v1.2.3", which
+# Docker rejects with "invalid reference format". A registry:port prefix such
+# as localhost:5000/tinkerbell is fine -- only a tag on the final segment is
+# rejected.
+IMAGE_NAME       ?= tinkerbell/tinkerbell
+IMAGE_NAME_AGENT ?= tinkerbell/tink-agent
 DOCKER_CACHE_FROM ?=
+
+# Fail at parse time with an explanation rather than several minutes into a
+# build with Docker's opaque "invalid reference format".
+$(foreach v,IMAGE_NAME IMAGE_NAME_AGENT,\
+  $(if $(findstring :,$(lastword $(subst /, ,$($(v))))),\
+    $(error $(v) must be a repository without a tag, got '$($(v))'. The image targets append ':$$(IMAGE_TAG)' and ':latest' themselves)))
 #############################################
 
 all: help
@@ -284,19 +299,19 @@ prepare-buildx: ## Prepare the buildx environment.
 
 .PHONY: image
 image: cross-compile third-party-licenses ## Build the Tinkerbell container image
-	docker build $(if $(DOCKER_CACHE_FROM),--cache-from $(DOCKER_CACHE_FROM)) -t $(IMAGE_NAME) -f Dockerfile.tinkerbell .
+	docker build $(if $(DOCKER_CACHE_FROM),--cache-from $(DOCKER_CACHE_FROM)) -t $(IMAGE_NAME):latest -f Dockerfile.tinkerbell .
 
 .PHONY: build-push-image
 build-push-image: third-party-licenses ## Build and push the container image for both Amd64 and Arm64 architectures.
-	docker buildx build --build-arg BUILDKIT_INLINE_CACHE=1 --platform linux/amd64,linux/arm64 --push -t $(IMAGE_NAME):$(VERSION) -t $(IMAGE_NAME):latest -f Dockerfile.tinkerbell .
+	docker buildx build --build-arg BUILDKIT_INLINE_CACHE=1 --platform linux/amd64,linux/arm64 --push -t $(IMAGE_NAME):$(IMAGE_TAG) -t $(IMAGE_NAME):latest -f Dockerfile.tinkerbell .
 
 .PHONY: image-agent
 image-agent: cross-compile-agent third-party-licenses ## Build the Tink Agent container image
-	docker build $(if $(DOCKER_CACHE_FROM),--cache-from $(DOCKER_CACHE_FROM)) -t $(IMAGE_NAME_AGENT) -f Dockerfile.agent .
+	docker build $(if $(DOCKER_CACHE_FROM),--cache-from $(DOCKER_CACHE_FROM)) -t $(IMAGE_NAME_AGENT):latest -f Dockerfile.agent .
 
 .PHONY: build-push-image-agent
 build-push-image-agent: third-party-licenses ## Build and push the container image for both Amd64 and Arm64 architectures.
-	docker buildx build --build-arg BUILDKIT_INLINE_CACHE=1 --platform linux/amd64,linux/arm64 --push -t $(IMAGE_NAME_AGENT):$(VERSION) -t $(IMAGE_NAME_AGENT):latest -f Dockerfile.agent .
+	docker buildx build --build-arg BUILDKIT_INLINE_CACHE=1 --platform linux/amd64,linux/arm64 --push -t $(IMAGE_NAME_AGENT):$(IMAGE_TAG) -t $(IMAGE_NAME_AGENT):latest -f Dockerfile.agent .
 
 ######### Build container images - end   #########
 
