@@ -617,10 +617,10 @@ github.com/stretchr/testify v1.12.1 h1:EuwCh5fleGS7H32xRwO3wRGT7DxrDhLAT6FF8MpWD
 github.com/stretchr/testify v1.12.1/go.mod h1:MDEgiDPPsNp5cuIrHPPCyornHKgEVbtFUmoNlxoYthg=
 github.com/tetratelabs/wazero v1.11.0 h1:+gKemEuKCTevU4d7ZTzlsvgd1uaToIDtlQlmNbwqYhA=
 github.com/tetratelabs/wazero v1.11.0/go.mod h1:eV28rsN8Q+xwjogd7f4/Pp4xFxO7uOGbLcD/LzB1wiU=
-github.com/tinkerbell-community/bmclib/v2 v2.0.0-20260910204509-9444d0fd992b h1:3w8nBlrRuAEZ4ZlzRlM4hm1j8AYMww89DJCEm5ijo0o=
-github.com/tinkerbell-community/bmclib/v2 v2.0.0-20260910204509-9444d0fd992b/go.mod h1:+Z5twj/YB9uwAmg4ENWE1dPyetqSPqSXb7/Ss7NNifk=
-github.com/tinkerbell-community/iamt v0.0.0-20260910200131-fe7475ab8fde h1:JP0hOLcaDqN7DKAJjgao8kgTB/firm8Tdm9M8DiBL18=
-github.com/tinkerbell-community/iamt v0.0.0-20260910200131-fe7475ab8fde/go.mod h1:YIRnIMQDMSyh8LzMStYTGI0P1xETz8ry1Efb+Wmtkyg=
+github.com/tinkerbell-community/bmclib/v2 v2.0.0-20260910214435-7baaf88e8399 h1:G+vMXfx3yQWTUdA6dHvFGFHkXhkij1beOhP8QTmaTLI=
+github.com/tinkerbell-community/bmclib/v2 v2.0.0-20260910214435-7baaf88e8399/go.mod h1:73+Ob5JvhfuzUnQV1yo3RFUDudYIyafWlYo7hKWMhfg=
+github.com/tinkerbell-community/iamt v0.0.0-20260910214403-be779a24a30d h1:HaubxmSVjcTQ1xOh5wfn8fwMp2UtWkObJXDN79OPGSg=
+github.com/tinkerbell-community/iamt v0.0.0-20260910214403-be779a24a30d/go.mod h1:YIRnIMQDMSyh8LzMStYTGI0P1xETz8ry1Efb+Wmtkyg=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75 h1:6fotK7otjonDflCTK0BCfls4SPy3NcCVb5dqqmbRknE=
 github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75/go.mod h1:KO6IkyS8Y3j8OdNO85qEYBsRPuteD+YciPomcXdrMnk=
 github.com/twitchyliquid64/golang-asm v0.15.1 h1:SU5vSMR7hnwNxj24w34ZyCi/FmDZTkS4MhqMhdFk5YI=

@@ -407,6 +407,6 @@ replace k8s.io/cri-streaming => k8s.io/cri-streaming v0.36.3
 replace k8s.io/streaming => k8s.io/streaming v0.36.3
 
 replace (
-	github.com/bmc-toolbox/bmclib/v2 => github.com/tinkerbell-community/bmclib/v2 v2.0.0-20260910204509-9444d0fd992b
-	github.com/jacobweinstock/iamt => github.com/tinkerbell-community/iamt v0.0.0-20260910200131-fe7475ab8fde
+	github.com/bmc-toolbox/bmclib/v2 => github.com/tinkerbell-community/bmclib/v2 v2.0.0-20260910214435-7baaf88e8399
+	github.com/jacobweinstock/iamt => github.com/tinkerbell-community/iamt v0.0.0-20260910214403-be779a24a30d
 )
