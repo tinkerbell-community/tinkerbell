@@ -104,8 +104,6 @@ require (
 	github.com/Microsoft/go-winio v0.6.3 // indirect
 	github.com/Microsoft/hcsshim v0.15.0-rc.1 // indirect
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
-	github.com/VictorLowther/simplexml v0.0.0-20180716164440-0bff93621230 // indirect
-	github.com/VictorLowther/soap v0.0.0-20150314151524-8e36fca84b22 // indirect
 	github.com/a-h/parse v0.0.0-20250122154542-74294addb73e // indirect
 	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/andybalholm/brotli v1.2.6 // indirect
@@ -145,6 +143,7 @@ require (
 	github.com/cpuguy83/go-md2man/v2 v2.0.7 // indirect
 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+	github.com/device-management-toolkit/go-wsman-messages/v2 v2.50.3 // indirect
 	github.com/djherbis/times v1.6.0 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
 	github.com/docker/cli v29.9.0+incompatible // indirect
@@ -265,7 +264,6 @@ require (
 	github.com/rs/cors v1.11.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
-	github.com/satori/go.uuid v1.2.0 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -403,3 +401,8 @@ tool (
 replace k8s.io/cri-streaming => k8s.io/cri-streaming v0.36.4
 
 replace k8s.io/streaming => k8s.io/streaming v0.36.4
+
+replace (
+	github.com/bmc-toolbox/bmclib/v2 => github.com/tinkerbell-community/bmclib/v2 v2.0.0-20261105231521-14a83077458c
+	github.com/jacobweinstock/iamt => github.com/tinkerbell-community/iamt v0.0.0-20260910200131-fe7475ab8fde
+)
