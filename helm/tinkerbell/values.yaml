@@ -99,10 +99,11 @@ deployment:
       enableLeaderElection: true
       leaderElectionNamespace: '{{ include "tinkerbell.namespace" . }}'
       # conduitEnabled gives the DHCP server an interface of its own on the physical
-      # network: an ipvlan in layer 2 mode, attached to one of the host's interfaces
-      # and living in the pod's network namespace. DHCP broadcasts from the segment
-      # arrive on it and replies go back out of the same physical port. It is created
-      # by the tinkerbell binary itself, so no init container or CNI plugin is needed.
+      # network: an ipvlan (layer 2 mode) or macvlan (bridge mode), chosen by
+      # conduitType, attached to one of the host's interfaces and living in the pod's
+      # network namespace. DHCP broadcasts from the segment arrive on it and replies
+      # go back out of the same physical port. It is created by the tinkerbell binary
+      # itself, so no init container or CNI plugin is needed.
       #
       # The interface holds no address and installs no route, so the pod's routing
       # table stays exactly as the CNI left it and all routed traffic continues to
@@ -111,24 +112,27 @@ deployment:
       # which is what stops a router advertisement on the provisioning network
       # installing an IPv6 default route that bypasses the CNI.
       #
-      # ipvlan rather than macvlan: an ipvlan shares its parent's MAC address, so
-      # attaching one gives the parent NIC no second address to filter on. A macvlan
-      # gets its own MAC, and a NIC that cannot filter more than one — the Cadence GEM
-      # (macb) behind the Raspberry Pi 5's RP1, for instance — can only receive it by
-      # being put into promiscuous mode, which on that NIC also turns off hardware RX
-      # checksum offload.
-      #
-      # The parent must not already carry a macvlan. A netdev has a single rx_handler
-      # slot, so a Multus macvlan NetworkAttachmentDefinition on the same interface
-      # makes this fail with EBUSY, and vice versa.
-      #
-      # Requires CAP_NET_ADMIN, added automatically when this is true. Nothing else:
-      # no privileged container, no CAP_SYS_ADMIN and no hostPID.
+      # Requires CAP_NET_ADMIN, added automatically when this is true. Nothing else,
+      # for either type: no privileged container, no CAP_SYS_ADMIN and no hostPID.
       #
       # With leader election enabled the conduit belongs to whichever instance holds
       # the Lease, created when it is acquired and removed when it is lost, so an
       # instance standing by holds no interface on the physical network.
       conduitEnabled: false
+      # conduitType is the kind of link the conduit is created as.
+      #
+      # ipvlan (the default) shares its parent's MAC address, so attaching one gives
+      # the parent NIC no second address to filter on. A macvlan gets its own MAC, and
+      # a NIC that cannot filter more than one — the Cadence GEM (macb) behind the
+      # Raspberry Pi 5's RP1, for instance — can only receive it by being put into
+      # promiscuous mode, which on that NIC also turns off hardware RX checksum offload.
+      #
+      # macvlan is for a parent that already carries a macvlan. A netdev has a single
+      # rx_handler slot, so an ipvlan cannot attach to a NIC that hosts a Multus macvlan
+      # NetworkAttachmentDefinition (it fails with EBUSY), whereas macvlans share the
+      # slot with each other and attach alongside it. The reverse holds too: a NIC
+      # that already carries an ipvlan needs the ipvlan type.
+      conduitType: ipvlan
       # conduitInterface is the host interface the conduit attaches to. Leave empty to
       # auto-detect, which requires the host to have exactly one physical interface
       # that is up with carrier; set it explicitly on a node with more than one, or

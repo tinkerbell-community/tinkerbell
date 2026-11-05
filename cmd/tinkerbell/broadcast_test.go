@@ -11,9 +11,13 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/go-logr/logr/funcr"
+	"github.com/tinkerbell/tinkerbell/cmd/tinkerbell/flag"
 	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
+
+// conduitTypes is every conduit type, for tests that must hold for both.
+var conduitTypes = []flag.ConduitType{flag.ConduitTypeIPVlan, flag.ConduitTypeMacvlan}
 
 func TestConduitIfaceName(t *testing.T) {
 	tests := map[string]struct {
@@ -204,50 +208,74 @@ func mustCreateParent(t *testing.T, name string) netlink.Link {
 // is easy to get subtly wrong — a missing IFLA_LINK_NETNSID, the mode in the
 // wrong nesting level — and nothing else in the suite would catch that.
 func TestAddConduitOverNetlink(t *testing.T) {
-	const parentName, conduitName = "tinkparent0", "tink-dhcp0"
+	for _, typ := range conduitTypes {
+		t.Run(string(typ), func(t *testing.T) {
+			parentName := "tinkp0" + string(typ)
 
-	parent := mustCreateParent(t, parentName)
-	nsid := netnsIDForSelf(t)
+			parent := mustCreateParent(t, parentName)
+			link := mustAddConduit(t, typ, parent)
 
-	if err := addConduit(conduitName, parent.Attrs().Index, nsid); err != nil {
-		t.Fatalf("addConduit() error = %v", err)
+			if got := link.Type(); got != string(typ) {
+				t.Errorf("conduit type = %q, want %q", got, typ)
+			}
+
+			parentMAC, conduitMAC := parent.Attrs().HardwareAddr.String(), link.Attrs().HardwareAddr.String()
+			switch l := link.(type) {
+			case *netlink.IPVlan:
+				if l.Mode != netlink.IPVLAN_MODE_L2 {
+					t.Errorf("conduit mode = %v, want IPVLAN_MODE_L2; L3 and L3S drop broadcast and would make the DHCP server deaf", l.Mode)
+				}
+				// Sharing the parent's MAC is the entire reason ipvlan is the
+				// default: it is what stops the kernel escalating the parent to
+				// promiscuous mode.
+				if conduitMAC != parentMAC {
+					t.Errorf("conduit MAC = %s, want the parent's %s", conduitMAC, parentMAC)
+				}
+			case *netlink.Macvlan:
+				if l.Mode != netlink.MACVLAN_MODE_BRIDGE {
+					t.Errorf("conduit mode = %v, want MACVLAN_MODE_BRIDGE", l.Mode)
+				}
+				if conduitMAC == parentMAC {
+					t.Errorf("macvlan conduit has the parent's MAC %s, want one of its own", parentMAC)
+				}
+			default:
+				t.Fatalf("conduit is a %T, want *netlink.IPVlan or *netlink.Macvlan", link)
+			}
+		})
 	}
-	link, err := netlink.LinkByName(conduitName)
+}
+
+// mustAddConduit creates a conduit of the given type on parent, under the
+// leader-elected name, through the same RTM_NEWLINK production sends, and
+// removes it when the test ends.
+func mustAddConduit(t *testing.T, typ flag.ConduitType, parent netlink.Link) netlink.Link {
+	t.Helper()
+
+	const name = conduitLeaderName
+
+	if err := addConduit(name, typ, parent.Attrs().Index, netnsIDForSelf(t)); err != nil {
+		t.Fatalf("addConduit(%q, %s) error = %v", name, typ, err)
+	}
+	link, err := netlink.LinkByName(name)
 	if err != nil {
-		t.Fatalf("conduit not in this netns after creation: %v", err)
+		t.Fatalf("conduit %q not in this netns after creation: %v", name, err)
 	}
-	t.Cleanup(func() { _ = netlink.LinkDel(link) })
+	t.Cleanup(func() {
+		if l, err := netlink.LinkByName(name); err == nil {
+			_ = netlink.LinkDel(l)
+		}
+	})
 
-	if got := link.Type(); got != "ipvlan" {
-		t.Errorf("conduit type = %q, want %q", got, "ipvlan")
-	}
-	if got, ok := link.(*netlink.IPVlan); ok && got.Mode != netlink.IPVLAN_MODE_L2 {
-		t.Errorf("conduit mode = %v, want IPVLAN_MODE_L2; L3 and L3S drop broadcast and would make the DHCP server deaf", got.Mode)
-	}
-
-	// Sharing the parent's MAC is the entire reason for choosing ipvlan: it is
-	// what stops the kernel escalating the parent to promiscuous mode.
-	if got, want := link.Attrs().HardwareAddr.String(), parent.Attrs().HardwareAddr.String(); got != want {
-		t.Errorf("conduit MAC = %s, want the parent's %s", got, want)
-	}
+	return link
 }
 
 // The parent must not end up in promiscuous mode. That escalation is what breaks
 // the Raspberry Pi 5's RP1 NIC, and it is the whole reason this is an ipvlan.
 func TestConduitLeavesParentUnpromiscuous(t *testing.T) {
-	const parentName, conduitName = "tinkparent1", "tink-dhcp0"
+	const parentName = "tinkparent1"
 
 	parent := mustCreateParent(t, parentName)
-	nsid := netnsIDForSelf(t)
-
-	if err := addConduit(conduitName, parent.Attrs().Index, nsid); err != nil {
-		t.Fatalf("addConduit() error = %v", err)
-	}
-	link, err := netlink.LinkByName(conduitName)
-	if err != nil {
-		t.Fatalf("LinkByName(%q) error = %v", conduitName, err)
-	}
-	t.Cleanup(func() { _ = netlink.LinkDel(link) })
+	link := mustAddConduit(t, flag.ConduitTypeIPVlan, parent)
 
 	if err := hardenConduit(logr.Discard(), link); err != nil {
 		t.Fatalf("hardenConduit() error = %v", err)
@@ -272,19 +300,18 @@ func TestConduitLeavesParentUnpromiscuous(t *testing.T) {
 // from disturbing the CNI datapath, all of which must apply with CAP_NET_ADMIN
 // alone and a read-only /proc/sys.
 func TestHardenConduitAppliesOverNetlink(t *testing.T) {
-	const parentName, conduitName = "tinkparent2", "tink-dhcp0"
+	for _, typ := range conduitTypes {
+		t.Run(string(typ), func(t *testing.T) { checkHardenAppliesOverNetlink(t, typ) })
+	}
+}
+
+func checkHardenAppliesOverNetlink(t *testing.T, typ flag.ConduitType) {
+	t.Helper()
+
+	parentName, conduitName := "tinkp2"+string(typ), conduitLeaderName
 
 	parent := mustCreateParent(t, parentName)
-	nsid := netnsIDForSelf(t)
-
-	if err := addConduit(conduitName, parent.Attrs().Index, nsid); err != nil {
-		t.Fatalf("addConduit() error = %v", err)
-	}
-	link, err := netlink.LinkByName(conduitName)
-	if err != nil {
-		t.Fatalf("LinkByName(%q) error = %v", conduitName, err)
-	}
-	t.Cleanup(func() { _ = netlink.LinkDel(link) })
+	link := mustAddConduit(t, typ, parent)
 
 	if err := hardenConduit(logr.Discard(), link); err != nil {
 		t.Fatalf("hardenConduit() error = %v", err)
@@ -335,19 +362,18 @@ func TestHardenConduitAppliesOverNetlink(t *testing.T) {
 // address on it would put the pod on the physical segment and give the kernel a
 // route to install.
 func TestConduitIsUnaddressed(t *testing.T) {
-	const parentName, conduitName = "tinkparent3", "tink-dhcp0"
+	for _, typ := range conduitTypes {
+		t.Run(string(typ), func(t *testing.T) { checkConduitUnaddressed(t, typ) })
+	}
+}
+
+func checkConduitUnaddressed(t *testing.T, typ flag.ConduitType) {
+	t.Helper()
+
+	parentName := "tinkp3" + string(typ)
 
 	parent := mustCreateParent(t, parentName)
-	nsid := netnsIDForSelf(t)
-
-	if err := addConduit(conduitName, parent.Attrs().Index, nsid); err != nil {
-		t.Fatalf("addConduit() error = %v", err)
-	}
-	link, err := netlink.LinkByName(conduitName)
-	if err != nil {
-		t.Fatalf("LinkByName(%q) error = %v", conduitName, err)
-	}
-	t.Cleanup(func() { _ = netlink.LinkDel(link) })
+	link := mustAddConduit(t, typ, parent)
 
 	if err := hardenConduit(logr.Discard(), link); err != nil {
 		t.Fatalf("hardenConduit() error = %v", err)
@@ -389,7 +415,7 @@ func TestPurgeStaleConduits(t *testing.T) {
 	// this instance's conduit has to be the only one.
 	stale := []string{"tink-dhcp0", "tink-dhcpabc123"}
 	for _, name := range stale {
-		if err := addConduit(name, parent.Attrs().Index, nsid); err != nil {
+		if err := addConduit(name, flag.ConduitTypeIPVlan, parent.Attrs().Index, nsid); err != nil {
 			t.Fatalf("addConduit(%q) error = %v", name, err)
 		}
 	}
@@ -496,36 +522,140 @@ func TestDetectHostParentRefusesToGuess(t *testing.T) {
 	}
 }
 
-// A parent already carrying a macvlan must produce a recognisable EBUSY. That is
-// the error an operator with a Multus macvlan NetworkAttachmentDefinition on the
-// same NIC will actually hit, and setupConduit matches on it to explain what
-// happened; a change that stopped errors.Is matching would leave them with a
+// A parent whose rx_handler slot is held by the other link type must produce a
+// recognisable EBUSY. That is the error an operator with a Multus macvlan (or
+// ipvlan) NetworkAttachmentDefinition on the same NIC will actually hit, and
+// setupConduit matches on it to explain what happened and which conduit type
+// would fit; a change that stopped errors.Is matching would leave them with a
 // bare "device or resource busy".
-func TestAddConduitReportsMacvlanConflict(t *testing.T) {
-	const parentName = "tinkbusy0"
-
-	parent := mustCreateParent(t, parentName)
-	nsid := netnsIDForSelf(t)
-
-	if err := netlink.LinkAdd(&netlink.Macvlan{
-		LinkAttrs: netlink.LinkAttrs{Name: "mvconflict", ParentIndex: parent.Attrs().Index},
-		Mode:      netlink.MACVLAN_MODE_BRIDGE,
-	}); err != nil {
-		t.Skipf("cannot create the conflicting macvlan: %v", err)
+func TestAddConduitReportsRxHandlerConflict(t *testing.T) {
+	occupants := map[flag.ConduitType]netlink.Link{
+		// An ipvlan conduit cannot join a parent that carries a macvlan...
+		flag.ConduitTypeIPVlan: &netlink.Macvlan{
+			LinkAttrs: netlink.LinkAttrs{Name: "occupant0"},
+			Mode:      netlink.MACVLAN_MODE_BRIDGE,
+		},
+		// ...and a macvlan conduit cannot join one that carries an ipvlan.
+		flag.ConduitTypeMacvlan: &netlink.IPVlan{
+			LinkAttrs: netlink.LinkAttrs{Name: "occupant0"},
+			Mode:      netlink.IPVLAN_MODE_L2,
+		},
 	}
+
+	for _, typ := range conduitTypes {
+		t.Run(string(typ), func(t *testing.T) {
+			parent := mustCreateParent(t, "tinkbusy"+string(typ))
+			nsid := netnsIDForSelf(t)
+			mustAddOccupant(t, occupants[typ], parent)
+
+			err := addConduit("tink-dhcp0", typ, parent.Attrs().Index, nsid)
+			if err == nil {
+				_ = netlink.LinkDel(mustLink(t, "tink-dhcp0"))
+				t.Fatalf("addConduit(%s) succeeded on a parent that already carries a %s", typ, occupants[typ].Type())
+			}
+			if !errors.Is(err, unix.EBUSY) {
+				t.Fatalf("addConduit(%s) error = %v (%T); errors.Is does not match unix.EBUSY, so the explanatory message would be lost", typ, err, err)
+			}
+		})
+	}
+}
+
+// The macvlan conduit exists for the parent an ipvlan cannot have: one that
+// already carries a macvlan, as a NIC hosting a Multus macvlan attachment does.
+// Macvlans share a parent with each other, so it must attach alongside.
+func TestMacvlanConduitSharesParentWithMacvlan(t *testing.T) {
+	parent := mustCreateParent(t, "tinkshare0")
+	mustAddOccupant(t, &netlink.Macvlan{
+		LinkAttrs: netlink.LinkAttrs{Name: "occupant0"},
+		Mode:      netlink.MACVLAN_MODE_BRIDGE,
+	}, parent)
+
+	link := mustAddConduit(t, flag.ConduitTypeMacvlan, parent)
+	if err := hardenConduit(logr.Discard(), link); err != nil {
+		t.Fatalf("hardenConduit() error = %v", err)
+	}
+	if err := netlink.LinkSetUp(link); err != nil {
+		t.Fatalf("bringing up the conduit: %v", err)
+	}
+
+	// The occupant must be untouched: the conduit joins it, never displaces it.
+	if _, err := netlink.LinkByName("occupant0"); err != nil {
+		t.Errorf("the existing macvlan is gone after the conduit attached: %v", err)
+	}
+}
+
+// Changing --dhcp-conduit-type between runs leaves a conduit of the old type
+// behind in the pod namespace, holding the parent's rx_handler slot. The purge
+// that precedes creation matches conduits by name, whatever their type, so the
+// new type must still attach.
+func TestPurgeClearsConduitOfOtherType(t *testing.T) {
+	for _, typ := range conduitTypes {
+		t.Run(string(typ), func(t *testing.T) {
+			stale, _, err := conduitLinkFor(typ)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wanted := conduitLinks[stale].rival
+
+			parent := mustCreateParent(t, "tinkswap"+string(typ))
+			nsid := netnsIDForSelf(t)
+			if err := addConduit("tink-dhcpabc123", stale, parent.Attrs().Index, nsid); err != nil {
+				t.Fatalf("addConduit(%s) error = %v", stale, err)
+			}
+
+			purgeStaleConduits(logr.Discard(), "tink-dhcp0")
+
+			if _, err := netlink.LinkByName("tink-dhcpabc123"); err == nil {
+				t.Fatalf("stale %s conduit survived the purge", stale)
+			}
+			mustAddConduit(t, wanted, parent)
+		})
+	}
+}
+
+func TestAddConduitRejectsUnknownType(t *testing.T) {
+	for _, typ := range []flag.ConduitType{"", "vlan", "veth", "IPVLAN"} {
+		if err := addConduit("tink-dhcp0", typ, 1, 0); err == nil {
+			t.Errorf("addConduit(%q) = nil, want an error for an unknown type", typ)
+		}
+	}
+}
+
+// An unset type is the default rather than an error, so a configuration that
+// predates --dhcp-conduit-type keeps creating the ipvlan it always did.
+func TestConduitLinkForDefaultsToIPVlan(t *testing.T) {
+	typ, link, err := conduitLinkFor("")
+	if err != nil {
+		t.Fatalf("conduitLinkFor(\"\") error = %v", err)
+	}
+	if typ != flag.ConduitTypeIPVlan || link.kind != "ipvlan" {
+		t.Errorf("conduitLinkFor(\"\") = %q (kind %q), want ipvlan", typ, link.kind)
+	}
+	if _, _, err := conduitLinkFor("vlan"); err == nil {
+		t.Error("conduitLinkFor(\"vlan\") = nil error, want one")
+	}
+	for _, typ := range conduitTypes {
+		if conduitLinks[conduitLinks[typ].rival].rival != typ {
+			t.Errorf("conduit type %s and its rival %s do not name each other", typ, conduitLinks[typ].rival)
+		}
+	}
+}
+
+// mustAddOccupant puts a link that is not a conduit on parent, standing in for
+// a Multus attachment, and removes it when the test ends.
+func mustAddOccupant(t *testing.T, occupant netlink.Link, parent netlink.Link) {
+	t.Helper()
+
+	occupant.Attrs().ParentIndex = parent.Attrs().Index
+	if err := netlink.LinkAdd(occupant); err != nil {
+		t.Skipf("cannot create the occupying %s: %v", occupant.Type(), err)
+	}
+	name := occupant.Attrs().Name
 	t.Cleanup(func() {
-		if l, err := netlink.LinkByName("mvconflict"); err == nil {
+		if l, err := netlink.LinkByName(name); err == nil {
 			_ = netlink.LinkDel(l)
 		}
 	})
-
-	err := addConduit("tink-dhcp0", parent.Attrs().Index, nsid)
-	if err == nil {
-		t.Fatal("addConduit() succeeded on a parent that already carries a macvlan")
-	}
-	if !errors.Is(err, unix.EBUSY) {
-		t.Fatalf("addConduit() error = %v (%T); errors.Is does not match unix.EBUSY, so the explanatory message would be lost", err, err)
-	}
 }
 
 // TestSetupConduitEndToEnd runs the real setup path against a realistic
@@ -547,10 +677,20 @@ func TestSetupConduitEndToEnd(t *testing.T) {
 		t.Fatalf("conduitIfaceName() error = %v", err)
 	}
 
+	// Sequential on one parent: each cleanup must release the parent's
+	// rx_handler slot, or the next type could not attach.
+	for _, typ := range conduitTypes {
+		t.Run(string(typ), func(t *testing.T) { runSetupConduitEndToEnd(t, typ, parent, name) })
+	}
+}
+
+func runSetupConduitEndToEnd(t *testing.T, typ flag.ConduitType, parent, name string) {
+	t.Helper()
+
 	var logged strings.Builder
 	log := funcr.New(func(prefix, args string) { logged.WriteString(prefix + args + "\n") }, funcr.Options{Verbosity: 1})
 
-	cleanup, err := setupConduit(log, parent, name)
+	cleanup, err := setupConduit(log, typ, parent, name)
 	if err != nil {
 		t.Fatalf("setupConduit() error = %v\nlog:\n%s", err, logged.String())
 	}
@@ -558,6 +698,9 @@ func TestSetupConduitEndToEnd(t *testing.T) {
 	link, err := netlink.LinkByName(name)
 	if err != nil {
 		t.Fatalf("conduit %q is not in the pod namespace: %v", name, err)
+	}
+	if got := link.Type(); got != string(typ) {
+		t.Errorf("conduit %q is a %s, want %s", name, got, typ)
 	}
 	if link.Attrs().Flags&net.FlagUp == 0 {
 		t.Errorf("conduit %q is not up", name)

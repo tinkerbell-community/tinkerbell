@@ -7,6 +7,7 @@ import (
 	"runtime"
 
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/cmd/tinkerbell/flag"
 )
 
 // errNotLinux is returned by the stubs below. The DHCP conduit and default route
@@ -17,6 +18,8 @@ var errNotLinux = errors.New("not supported on " + runtime.GOOS + ": requires Li
 
 func conduitIfaceName(bool) (string, error) { return "", errNotLinux }
 
-func setupConduit(logr.Logger, string, string) (func(), error) { return nil, errNotLinux }
+func setupConduit(logr.Logger, flag.ConduitType, string, string) (func(), error) {
+	return nil, errNotLinux
+}
 
 func defaultRouteInterface() (string, error) { return "", errNotLinux }

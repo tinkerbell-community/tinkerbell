@@ -34,13 +34,46 @@ type SmeeConfig struct {
 	// The cmd package is responsible for putting the fields back together into a url.URL for use in service package configs.
 	DHCPv6IPXEScript URLBuilder
 	LogLevel         int
-	// ConduitEnabled creates a layer 2 only ipvlan interface for the DHCP server
-	// to bind to, attached to one of the host's physical interfaces and living in
-	// the pod's network namespace. Requires CAP_NET_ADMIN.
+	// ConduitEnabled creates a layer 2 only interface for the DHCP server to bind
+	// to, attached to one of the host's physical interfaces and living in the
+	// pod's network namespace. Requires CAP_NET_ADMIN.
 	ConduitEnabled bool
+	// ConduitType is the kind of link the conduit is created as.
+	ConduitType ConduitType
 	// ConduitInterface is the host interface the conduit attaches to. When empty
 	// a single physical host interface that is up with carrier is looked for.
 	ConduitInterface string
+}
+
+// ConduitType is the kind of link the DHCP conduit is created as. Both kinds are
+// created, hardened and removed the same way; they differ only in how they share
+// the parent interface.
+type ConduitType string
+
+const (
+	// ConduitTypeIPVlan is an ipvlan in L2 mode. It shares its parent's MAC
+	// address, so the parent NIC gains no unicast address to filter on and is
+	// never pushed into promiscuous mode. It cannot attach to a parent that
+	// already carries a macvlan.
+	ConduitTypeIPVlan ConduitType = "ipvlan"
+	// ConduitTypeMacvlan is a macvlan in bridge mode. It has a MAC address of
+	// its own, which a NIC without unicast filtering can only receive in
+	// promiscuous mode, but it can share a parent with other macvlans, such as a
+	// Multus macvlan NetworkAttachmentDefinition.
+	ConduitTypeMacvlan ConduitType = "macvlan"
+)
+
+func (c ConduitType) String() string { return string(c) }
+
+func conduitTypeParser(s string) (ConduitType, error) {
+	switch t := ConduitType(strings.ToLower(s)); t {
+	case ConduitTypeIPVlan, ConduitTypeMacvlan:
+		return t, nil
+	case "":
+		return ConduitTypeIPVlan, nil
+	default:
+		return "", fmt.Errorf("invalid dhcp conduit type: %s, must be one of: [%s, %s]", s, ConduitTypeIPVlan, ConduitTypeMacvlan)
+	}
 }
 
 var KubeIndexesSmee = map[kube.IndexType]kube.Index{
@@ -104,6 +137,12 @@ func RegisterSmeeFlags(fs *Set, sc *SmeeConfig) {
 	fs.RegisterFamily(DHCPIPXEHTTPScriptPath, V4, ffval.NewValueDefault(&sc.Config.DHCP.IPXEHTTPScript.URL.Path, sc.Config.DHCP.IPXEHTTPScript.URL.Path))
 	fs.RegisterFamily(DHCPIPXEHTTPScriptPath, V6, ffval.NewValueDefault(&sc.Config.DHCPv6.IPXEHTTPScript.URL.Path, sc.Config.DHCPv6.IPXEHTTPScript.URL.Path))
 	fs.Register(DHCPConduitEnabled, ffval.NewValueDefault(&sc.ConduitEnabled, sc.ConduitEnabled))
+	fs.Register(DHCPConduitType, &ffval.Enum[ConduitType]{
+		ParseFunc: conduitTypeParser,
+		Valid:     []ConduitType{ConduitTypeIPVlan, ConduitTypeMacvlan},
+		Pointer:   &sc.ConduitType,
+		Default:   ConduitTypeIPVlan,
+	})
 	fs.Register(DHCPConduitInterface, ffval.NewValueDefault(&sc.ConduitInterface, sc.ConduitInterface))
 
 	// IPXE flags
@@ -431,7 +470,12 @@ var DHCPBindPort = Config{
 
 var DHCPConduitEnabled = Config{
 	Name:  "dhcp-conduit-enabled",
-	Usage: "[dhcp] carry DHCP over a layer 2 only ipvlan interface (no IP, no routes, MTU 1279 so it has no IPv6 stack) attached to a host interface and bound by the DHCP server; requires CAP_NET_ADMIN only. ipvlan shares its parent's MAC, so unlike a macvlan it does not force the parent NIC into promiscuous mode. The parent cannot already carry a macvlan, as a netdev has one rx_handler slot",
+	Usage: "[dhcp] carry DHCP over a layer 2 only interface (no IP, no routes, MTU 1279 so it has no IPv6 stack) attached to a host interface and bound by the DHCP server; requires CAP_NET_ADMIN only. The kind of link is set with --dhcp-conduit-type",
+}
+
+var DHCPConduitType = Config{
+	Name:  "dhcp-conduit-type",
+	Usage: "[dhcp] link type of the DHCP conduit: ipvlan (L2 mode; shares the parent's MAC, so the parent NIC is never forced into promiscuous mode, but it cannot attach to a parent that already carries a macvlan) or macvlan (bridge mode; has a MAC of its own, which a NIC without unicast filtering only receives in promiscuous mode, and can share a parent with other macvlans such as a Multus macvlan attachment)",
 }
 
 var DHCPConduitInterface = Config{

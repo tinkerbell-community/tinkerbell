@@ -12,32 +12,36 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/cmd/tinkerbell/flag"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 	"golang.org/x/sys/unix"
 )
 
-// The DHCP conduit is an ipvlan interface in L2 mode, attached to one of the
-// host's physical interfaces and living in the pod's network namespace. Its only
-// job is to carry DHCP: broadcasts from the physical segment arrive on it, and
-// the replies the DHCP server writes back to it go out of the same physical
-// port. It holds no address and installs no route, so nothing else in the pod
-// ever uses it and the CNI datapath stays in sole charge of routed traffic.
+// The DHCP conduit is an ipvlan (L2 mode) or macvlan (bridge mode) interface,
+// attached to one of the host's physical interfaces and living in the pod's
+// network namespace. Its only job is to carry DHCP: broadcasts from the physical
+// segment arrive on it, and the replies the DHCP server writes back to it go out
+// of the same physical port. It holds no address and installs no route, so
+// nothing else in the pod ever uses it and the CNI datapath stays in sole charge
+// of routed traffic. Both types are created, hardened and removed identically;
+// --dhcp-conduit-type only chooses the link kind.
 //
-// ipvlan rather than macvlan, for two reasons:
+// ipvlan is the default. It shares its parent's MAC address, so attaching one
+// adds no second unicast address for the parent to filter on. A macvlan gets its
+// own MAC, and a NIC that cannot filter on more than one — the Cadence GEM (macb)
+// on the Raspberry Pi 5's RP1 never programs its unicast list at all — can only
+// receive that second address by being put into promiscuous mode. The kernel
+// does that escalation silently, and on the GEM it also turns off hardware RX
+// checksum offload, pushing every checksum onto the CPU that is already handling
+// the interrupt.
 //
-// An ipvlan shares its parent's MAC address, so attaching one adds no second
-// unicast address for the parent to filter on. A macvlan gets its own MAC, and a
-// NIC that cannot filter on more than one — the Cadence GEM (macb) on the
-// Raspberry Pi 5's RP1 never programs its unicast list at all — can only receive
-// that second address by being put into promiscuous mode. The kernel does that
-// escalation silently, and on the GEM it also turns off hardware RX checksum
-// offload, pushing every checksum onto the CPU that is already handling the
-// interrupt.
-//
-// The two are also mutually exclusive: a netdev has a single rx_handler slot, so
-// attaching an ipvlan to a parent that already carries a macvlan (or vice versa)
-// fails with EBUSY. See setupConduit for how that is reported.
+// macvlan is there for the parent that is already taken. A netdev has a single
+// rx_handler slot, so an ipvlan cannot attach to a parent that already carries a
+// macvlan (or vice versa) and fails with EBUSY — but macvlans share the slot with
+// each other. A NIC that already hosts a Multus macvlan NetworkAttachmentDefinition
+// can therefore take a macvlan conduit alongside it, where an ipvlan conduit would
+// have to displace it. See setupConduit for how a conflict is reported.
 
 const (
 	// conduitPrefix starts the conduit's name in both forms below.
@@ -93,7 +97,59 @@ const (
 	// multicast through to the slave. L3 and L3S drop both, which would leave the
 	// DHCP server deaf to every DHCPDISCOVER.
 	ipvlanModeL2 = 0
+	// iflaMacvlanMode carries the macvlan mode inside IFLA_INFO_DATA.
+	iflaMacvlanMode = 1
+	// macvlanModeBridge is MACVLAN_MODE_BRIDGE. Every mode receives broadcasts
+	// from the parent's segment; bridge additionally lets macvlans on the same
+	// parent reach each other directly, so a client attached through another
+	// macvlan on this host — a VM or a Multus-attached pod — is heard as well.
+	// vishvananda/netlink numbers its MACVLAN_MODE_* constants differently from
+	// the kernel, so the kernel's value is spelled out here.
+	macvlanModeBridge = 4
 )
+
+// conduitLink describes how to create one type of conduit. Everything that
+// differs between the types is here; the rest of the conduit's life is common.
+type conduitLink struct {
+	// kind is the rtnetlink IFLA_INFO_KIND.
+	kind string
+	// data adds the type's IFLA_INFO_DATA attributes.
+	data func(*nl.RtAttr)
+	// mode describes the result for logs.
+	mode string
+	// rival is the link type that cannot share a parent with this one, named in
+	// the explanation of an EBUSY.
+	rival flag.ConduitType
+}
+
+var conduitLinks = map[flag.ConduitType]conduitLink{
+	flag.ConduitTypeIPVlan: {
+		kind:  "ipvlan",
+		data:  func(d *nl.RtAttr) { d.AddRtAttr(iflaIPVlanMode, nl.Uint16Attr(ipvlanModeL2)) },
+		mode:  "ipvlan-l2",
+		rival: flag.ConduitTypeMacvlan,
+	},
+	flag.ConduitTypeMacvlan: {
+		kind:  "macvlan",
+		data:  func(d *nl.RtAttr) { d.AddRtAttr(iflaMacvlanMode, nl.Uint32Attr(macvlanModeBridge)) },
+		mode:  "macvlan-bridge",
+		rival: flag.ConduitTypeIPVlan,
+	},
+}
+
+// conduitLinkFor returns how to create a conduit of the given type. An empty
+// type is the default, ipvlan.
+func conduitLinkFor(typ flag.ConduitType) (flag.ConduitType, conduitLink, error) {
+	if typ == "" {
+		typ = flag.ConduitTypeIPVlan
+	}
+	l, ok := conduitLinks[typ]
+	if !ok {
+		return "", conduitLink{}, fmt.Errorf("unknown DHCP conduit type %q, must be %q or %q", typ, flag.ConduitTypeIPVlan, flag.ConduitTypeMacvlan)
+	}
+
+	return typ, l, nil
+}
 
 // conduitIfaceName returns the name to give the DHCP conduit.
 //
@@ -137,9 +193,15 @@ func conduitIfaceName(leaderElected bool) (string, error) {
 // behind in the host namespace for someone to clean up, because the interface
 // never fully exists there.
 //
-// sourceIface is the host interface to attach to; when empty a single physical
-// interface is looked for and used.
-func setupConduit(log logr.Logger, sourceIface, ifaceName string) (cleanup func(), err error) {
+// typ is the kind of link to create, ipvlan when empty. sourceIface is the host
+// interface to attach to; when empty a single physical interface is looked for
+// and used.
+func setupConduit(log logr.Logger, typ flag.ConduitType, sourceIface, ifaceName string) (cleanup func(), err error) {
+	typ, kind, err := conduitLinkFor(typ)
+	if err != nil {
+		return nil, err
+	}
+
 	// A pod's network namespace belongs to the sandbox and outlives the
 	// container, so an ungraceful exit — an OOM kill, a SIGKILL after the grace
 	// period, a panic past the deferred teardown — leaves the conduit behind
@@ -170,13 +232,14 @@ func setupConduit(log logr.Logger, sourceIface, ifaceName string) (cleanup func(
 		return nil, err
 	}
 
-	if err := addConduit(ifaceName, parentIndex, nsid); err != nil {
+	if err := addConduit(ifaceName, typ, parentIndex, nsid); err != nil {
 		if errors.Is(err, unix.EBUSY) {
-			return nil, fmt.Errorf("create ipvlan %q on host interface %q: %w; a netdev has one rx_handler slot, so this is what the kernel reports when %[2]q already carries a macvlan — a Multus macvlan NetworkAttachmentDefinition is the usual cause, and it must be removed for the DHCP conduit to attach",
-				ifaceName, sourceIface, err)
+			return nil, fmt.Errorf("create %[1]s %[2]q on host interface %[3]q: %[4]w; a netdev has one rx_handler slot, so this is what the kernel reports when %[3]q already carries a %[5]s, or is a bridge, bond or Open vSwitch port — a Multus %[5]s NetworkAttachmentDefinition on the same NIC is the usual cause. "+
+				"If it is a %[5]s, set --dhcp-conduit-type=%[5]s: %[5]ss share a parent with each other, so the conduit can attach alongside it",
+				kind.kind, ifaceName, sourceIface, err, kind.rival)
 		}
 
-		return nil, fmt.Errorf("create ipvlan %q on host interface %q: %w", ifaceName, sourceIface, err)
+		return nil, fmt.Errorf("create %s %q on host interface %q: %w", kind.kind, ifaceName, sourceIface, err)
 	}
 
 	// From here the interface is in this namespace, which outlives the process.
@@ -203,7 +266,7 @@ func setupConduit(log logr.Logger, sourceIface, ifaceName string) (cleanup func(
 	}
 
 	log.Info("DHCP conduit ready",
-		"interface", ifaceName, "parent", sourceIface, "mode", "ipvlan-l2",
+		"interface", ifaceName, "parent", sourceIface, "mode", kind.mode,
 		"mtu", conduitMTU, "addressed", false)
 
 	return func() { teardownConduit(log, ifaceName) }, nil
@@ -373,17 +436,22 @@ func detectHostParent(links []hostLink) (string, error) {
 	}
 }
 
-// addConduit creates the ipvlan.
+// addConduit creates the conduit as a link of the given type.
 //
 // IFLA_LINK names the parent by index and IFLA_LINK_NETNSID says which namespace
 // that index belongs to. Given both, rtnl_newlink_create builds the interface in
 // the parent's namespace and then moves it into the one the request came from,
 // as a single operation: either the conduit ends up here or the kernel unwinds
-// it entirely, so a failure cannot strand an interface on the host.
+// it entirely, so a failure cannot strand an interface on the host. This is
+// generic rtnetlink behaviour, so ipvlan and macvlan are created the same way.
 //
 // vishvananda/netlink reads IFLA_LINK_NETNSID but never writes it, so the
 // message is assembled by hand.
-func addConduit(name string, parentIndex, nsid int) error {
+func addConduit(name string, typ flag.ConduitType, parentIndex, nsid int) error {
+	link, ok := conduitLinks[typ]
+	if !ok {
+		return fmt.Errorf("unknown DHCP conduit type %q", typ)
+	}
 	if parentIndex <= 0 || parentIndex > math.MaxInt32 {
 		return fmt.Errorf("parent interface has out of range index %d", parentIndex)
 	}
@@ -398,8 +466,8 @@ func addConduit(name string, parentIndex, nsid int) error {
 	req.AddData(nl.NewRtAttr(iflaLinkNetnsID, nl.Uint32Attr(uint32(nsid))))
 
 	info := nl.NewRtAttr(unix.IFLA_LINKINFO, nil)
-	info.AddRtAttr(nl.IFLA_INFO_KIND, nl.NonZeroTerminated("ipvlan"))
-	info.AddRtAttr(nl.IFLA_INFO_DATA, nil).AddRtAttr(iflaIPVlanMode, nl.Uint16Attr(ipvlanModeL2))
+	info.AddRtAttr(nl.IFLA_INFO_KIND, nl.NonZeroTerminated(link.kind))
+	link.data(info.AddRtAttr(nl.IFLA_INFO_DATA, nil))
 	req.AddData(info)
 
 	_, err := req.Execute(unix.NETLINK_ROUTE, 0)
@@ -421,9 +489,9 @@ const (
 
 // conduitDevconf are the per-interface IPv4 settings applied to the conduit.
 //
-// ARP requests are broadcast, and an L2 ipvlan passes every broadcast to every
-// slave, so requests for addresses the pod holds elsewhere — its CNI address on
-// eth0 above all — do reach the conduit. At the default arp_ignore of 0 the pod
+// ARP requests are broadcast, and both an L2 ipvlan and a macvlan pass every
+// broadcast to every slave, so requests for addresses the pod holds elsewhere —
+// its CNI address on eth0 above all — do reach the conduit. At the default arp_ignore of 0 the pod
 // would answer them, putting its cluster address on the physical segment and
 // drawing traffic for it away from the CNI. arp_ignore=8 answers for nothing;
 // arp_announce=2 keeps any request the interface does send from advertising an
