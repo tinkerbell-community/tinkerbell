@@ -51,10 +51,11 @@ Point an `ip helper-address` on the provisioning VLAN at Smee. The relay rewrite
 
 ### DHCP conduit
 
-Where no relay is available, Smee can give itself an interface directly on the physical segment: an ipvlan in layer 2 mode, attached to one of the host's interfaces and created inside the pod's own network namespace.
+Where no relay is available, Smee can give itself an interface directly on the physical segment: an ipvlan (layer 2 mode) or a macvlan (bridge mode), attached to one of the host's interfaces and created inside the pod's own network namespace.
 
 ```bash
 --dhcp-conduit-enabled=true
+--dhcp-conduit-type=ipvlan      # optional; ipvlan (default) or macvlan, see below
 --dhcp-conduit-interface=eth0   # optional; auto-detected when the host has one physical NIC
 ```
 
@@ -62,8 +63,11 @@ Or equivalently:
 
 ```bash
 TINKERBELL_DHCP_CONDUIT_ENABLED=true
+TINKERBELL_DHCP_CONDUIT_TYPE=ipvlan
 TINKERBELL_DHCP_CONDUIT_INTERFACE=eth0
 ```
+
+Both types are created, hardened and removed the same way, and everything below applies to either; the type only decides how the conduit shares its parent interface.
 
 The interface holds no IP address and installs no route, so the pod's routing table stays exactly as the CNI left it. Its MTU is set below `IPV6_MIN_MTU`, which makes the kernel decline to give it an IPv6 stack at all — no link-local address, no all-nodes multicast membership, and so nothing that could act on a router advertisement and install an IPv6 default route around the CNI. ARP is switched off for it with `arp_ignore=8`, so the pod never answers for its cluster address on the physical segment.
 
@@ -71,9 +75,19 @@ Requirements and constraints:
 
 - `CAP_NET_ADMIN`, and nothing else. Not a privileged container, not `CAP_SYS_ADMIN`, not `hostPID`. The Helm chart adds the capability automatically when `deployment.envs.dhcp.conduitEnabled` is true.
 - The pod must be on a CNI that hands it one end of a veth pair (Cilium, Calico and flannel all do). That is what records the host's network namespace against the pod's interface, which is how the conduit names the host's namespace without entering it. It does not work with `hostNetwork: true` — but then the host's interfaces are already available directly.
-- **The parent interface must not already carry a macvlan.** A netdev has a single `rx_handler` slot, so an ipvlan and a macvlan cannot share a parent; the second one fails with `EBUSY`. A Multus macvlan `NetworkAttachmentDefinition` on the same NIC is the usual cause and has to be removed.
+- **The parent interface must not already carry the other type.** A netdev has a single `rx_handler` slot, so an ipvlan and a macvlan cannot share a parent; the second one fails with `EBUSY`, and Smee says which type would fit. Bridge, bond and Open vSwitch ports hold the slot too, and take neither.
 
-An ipvlan is used rather than a macvlan because it shares its parent's MAC address. A macvlan gets its own, and a NIC that cannot filter on more than one unicast address can only receive it by being put into promiscuous mode. The Cadence GEM (`macb`) behind the Raspberry Pi 5's RP1 is such a NIC, and going promiscuous also turns off its hardware RX checksum offload.
+#### Choosing the conduit type
+
+| | `ipvlan` (default) | `macvlan` |
+|---|---|---|
+| MAC address | The parent's | Its own, randomly generated each time the conduit is created |
+| Parent NIC | Gains no unicast address, so is never pushed into promiscuous mode | Gains one; a NIC without unicast filtering only receives it in promiscuous mode |
+| Shares a parent with | Other ipvlans | Other macvlans, e.g. a Multus macvlan `NetworkAttachmentDefinition` |
+
+Use `ipvlan` unless the parent already carries a macvlan. The Cadence GEM (`macb`) behind the Raspberry Pi 5's RP1 is a NIC that cannot filter on more than one unicast address, and going promiscuous also turns off its hardware RX checksum offload — the reason ipvlan is the default.
+
+Use `macvlan` when the NIC already hosts a macvlan, typically a Multus attachment used by other workloads: an ipvlan conduit cannot attach there at all, while a macvlan conduit joins the existing ones without displacing them. In bridge mode it also hears DHCP from clients attached through another macvlan on the same host, such as a VM.
 
 ### Interface naming and leader election
 

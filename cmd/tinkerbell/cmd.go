@@ -441,7 +441,7 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 			// and removed on losing it. An instance standing by then holds no
 			// interface on the physical network at all.
 			s.Config.DHCP.BindInterfaceProvider = func(log logr.Logger) (string, func(), error) {
-				cleanup, err := setupConduit(log, s.ConduitInterface, ifaceName)
+				cleanup, err := setupConduit(log, s.ConduitType, s.ConduitInterface, ifaceName)
 				if err != nil {
 					return "", nil, fmt.Errorf("setting up the dhcp conduit: %w", err)
 				}

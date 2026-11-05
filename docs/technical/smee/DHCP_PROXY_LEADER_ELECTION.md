@@ -50,7 +50,7 @@ The socket must also be closed before campaigning again. The DHCP listener sets 
 
 When `--dhcp-conduit-enabled` is set, the conduit interface's lifetime follows the DHCP server's: it is created when the Lease is acquired and removed when it is lost, so an instance standing by holds no interface on the physical network at all. It is named `tink-dhcp0` — a fixed name, because under leader election there is only ever meant to be one.
 
-On acquiring the Lease, every interface matching the conduit naming pattern is removed before the new one is created. That clears a conduit left behind by an ungraceful exit: a pod's network namespace outlives its container, so a leftover would otherwise hold exactly the name the next start needs and every restart would fail with `EEXIST`.
+On acquiring the Lease, every interface matching the conduit naming pattern is removed before the new one is created. That clears a conduit left behind by an ungraceful exit: a pod's network namespace outlives its container, so a leftover would otherwise hold exactly the name the next start needs and every restart would fail with `EEXIST`. The sweep matches by name whatever the link type, so a leftover from before a change of `--dhcp-conduit-type` is cleared too, and with it the hold on the parent's `rx_handler` slot that would otherwise stop the new type attaching.
 
 See [DHCP boot modes](../DHCP_BOOT_MODES.md) for the conduit itself.
 

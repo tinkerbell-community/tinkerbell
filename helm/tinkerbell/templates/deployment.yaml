@@ -161,19 +161,22 @@ spec:
             failureThreshold: {{ .Values.deployment.probes.startup.failureThreshold }}
             successThreshold: {{ .Values.deployment.probes.startup.successThreshold }}
           {{- end }}
-          {{- if .Values.deployment.envs.dhcp.conduitEnabled }}
           securityContext:
             capabilities:
               add:
-                # The DHCP conduit is created, configured and removed entirely over
-                # netlink, which needs CAP_NET_ADMIN and nothing more. It names the
-                # host's network namespace by the id the kernel already recorded on
-                # the interface the CNI moved in, so it never has to enter that
-                # namespace (CAP_SYS_ADMIN) or reach a handle on it through
-                # /proc/1/ns/net (hostPID). Its MTU denies it an IPv6 stack, so
-                # nothing needs a writable /proc/sys either.
+                # NET_RAW is required for the DHCP server to send broadcast replies.
+                # DHCP serving is gated by leader election (see dhcp.enableLeaderElection).
+                - NET_RAW
+                {{- if .Values.deployment.envs.dhcp.conduitEnabled }}
+                # The DHCP conduit, ipvlan or macvlan alike, is created, configured
+                # and removed entirely over netlink, which needs CAP_NET_ADMIN and
+                # nothing more. It names the host's network namespace by the id the
+                # kernel already recorded on the interface the CNI moved in, so it
+                # never has to enter that namespace (CAP_SYS_ADMIN) or reach a
+                # handle on it through /proc/1/ns/net (hostPID). Its MTU denies it
+                # an IPv6 stack, so nothing needs a writable /proc/sys either.
                 - NET_ADMIN
-          {{- end }}
+                {{- end }}
           volumeMounts:
           - name: captain-artifacts
             mountPath: {{ .Values.deployment.envs.osie.imagePath }}

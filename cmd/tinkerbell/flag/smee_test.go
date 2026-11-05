@@ -152,3 +152,36 @@ func TestSmeeConfig_Convert_TinkServerAddrPort(t *testing.T) {
 		})
 	}
 }
+
+func TestConduitTypeParser(t *testing.T) {
+	tests := map[string]struct {
+		in      string
+		want    ConduitType
+		wantErr bool
+	}{
+		"ipvlan":                {in: "ipvlan", want: ConduitTypeIPVlan},
+		"macvlan":               {in: "macvlan", want: ConduitTypeMacvlan},
+		"case insensitive":      {in: "MacVLAN", want: ConduitTypeMacvlan},
+		"empty is the default":  {in: "", want: ConduitTypeIPVlan},
+		"other link kinds fail": {in: "vlan", wantErr: true},
+		"macvlan modes fail":    {in: "bridge", wantErr: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := conduitTypeParser(tt.in)
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("conduitTypeParser(%q) = %q, want error", tt.in, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("conduitTypeParser(%q) error = %v", tt.in, err)
+			}
+			if got != tt.want {
+				t.Fatalf("conduitTypeParser(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+}
