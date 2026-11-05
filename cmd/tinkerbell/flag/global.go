@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/netip"
 	"strings"
+	"time"
 
 	"github.com/peterbourgon/ff/v4/ffval"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
@@ -38,6 +39,8 @@ type GlobalConfig struct {
 	EnableSecondStar      bool
 	EnableUI              bool
 	EnableCRDMigrations   bool
+	MaxprocsEnable        bool
+	MemlimitRatio         float64
 	EmbeddedGlobalConfig  EmbeddedGlobalConfig
 	BackendKubeOptions    BackendKubeOptions
 	TLS                   TLSConfig
@@ -55,6 +58,8 @@ type BackendKubeOptions struct {
 	HardwareReferenceAllowListRules []string
 	HardwareReferenceDenyListRules  []string
 	Rendering                       bool
+	APIServerHealthTimeout          time.Duration
+	APIServerHealthPollInterval     time.Duration
 }
 
 type TLSConfig struct {
@@ -87,6 +92,8 @@ func RegisterGlobal(fs *Set, gc *GlobalConfig) {
 	fs.Register(BackendKubeHardwareReferenceAllowListRules, delimitedlist.New(&gc.BackendKubeOptions.HardwareReferenceAllowListRules, '|'))
 	fs.Register(BackendKubeHardwareReferenceDenyListRules, delimitedlist.New(&gc.BackendKubeOptions.HardwareReferenceDenyListRules, '|'))
 	fs.Register(KubeRendering, ffval.NewValueDefault(&gc.BackendKubeOptions.Rendering, gc.BackendKubeOptions.Rendering))
+	fs.Register(KubeAPIServerHealthTimeout, ffval.NewValueDefault(&gc.BackendKubeOptions.APIServerHealthTimeout, gc.BackendKubeOptions.APIServerHealthTimeout))
+	fs.Register(KubeAPIServerHealthPollInterval, ffval.NewValueDefault(&gc.BackendKubeOptions.APIServerHealthPollInterval, gc.BackendKubeOptions.APIServerHealthPollInterval))
 	fs.RegisterFamily(BindAddr, V4, &ntip.Addr{Addr: &gc.BindAddr})
 	fs.RegisterFamily(BindAddr, V6, &ntip.Addr{Addr: &gc.BindAddrV6})
 	fs.RegisterFamily(HTTPPort, V4, ffval.NewValueDefault(&gc.HTTPPort, gc.HTTPPort))
@@ -111,6 +118,8 @@ func RegisterGlobal(fs *Set, gc *GlobalConfig) {
 	fs.Register(DisableHTTPToHTTPSRedirect, ffval.NewValueDefault(&gc.TLS.DisableHTTPToHTTPSRedirect, gc.TLS.DisableHTTPToHTTPSRedirect))
 	fs.Register(TrustedProxies, &ntip.PrefixList{PrefixList: &gc.TrustedProxies})
 	fs.Register(PrintVersion, ffval.NewValueDefault(&gc.PrintVersion, gc.PrintVersion))
+	fs.Register(MaxprocsEnable, ffval.NewValueDefault(&gc.MaxprocsEnable, gc.MaxprocsEnable))
+	fs.Register(MemlimitRatio, ffval.NewValueDefault(&gc.MemlimitRatio, gc.MemlimitRatio))
 }
 
 func RegisterEmbeddedGlobals(fs *Set, gc *GlobalConfig) {
@@ -185,6 +194,16 @@ var BackendKubeHardwareReferenceDenyListRules = Config{
 var KubeRendering = Config{
 	Name:  "backend-kube-rendering-enabled",
 	Usage: "[kube] render templates in Hardware specs",
+}
+
+var KubeAPIServerHealthTimeout = Config{
+	Name:  "backend-kube-apiserver-health-timeout",
+	Usage: "[kube] maximum time to wait for the API server to become healthy during startup. This prevents permanent error loops on first boot with embedded API server.",
+}
+
+var KubeAPIServerHealthPollInterval = Config{
+	Name:  "backend-kube-apiserver-health-poll-interval",
+	Usage: "[kube] interval between API server health checks during startup.",
 }
 
 // OTEL flags.
@@ -293,4 +312,14 @@ var HTTPSPort = Config{
 var PrintVersion = Config{
 	Name:  "version",
 	Usage: "print the version and exit",
+}
+
+var MaxprocsEnable = Config{
+	Name:  "maxprocs-enable",
+	Usage: "automatically set GOMAXPROCS to match Linux container CPU quota via automaxprocs",
+}
+
+var MemlimitRatio = Config{
+	Name:  "memlimit-ratio",
+	Usage: "ratio (0.0-1.0) of cgroup memory limit to use as GOMEMLIMIT via automemlimit (default: 0.9)",
 }

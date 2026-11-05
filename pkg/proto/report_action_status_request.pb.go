@@ -27,29 +27,23 @@ const (
 type ActionStatusRequest_StateType int32
 
 const (
-	//
 	// Unspecified is the default state of a workflow. It means that the state of
 	// the workflow is not known.
 	ActionStatusRequest_UNSPECIFIED ActionStatusRequest_StateType = 0
-	//
 	// A workflow is in pending state when it is waiting for the hardware to pick
 	// it up and start the execution.
 	ActionStatusRequest_PENDING ActionStatusRequest_StateType = 1
-	//
 	// A workflow is in a running state when the Agent started the
 	// execution of it, and it is currently in execution inside the device
 	// itself.
 	ActionStatusRequest_RUNNING ActionStatusRequest_StateType = 2
-	//
 	// Failed is a final state. Something wrong happened during the execution of
 	// the workflow inside the target. Have a look at the logs to see if you can
 	// spot what is going on.
 	ActionStatusRequest_FAILED ActionStatusRequest_StateType = 3
-	//
 	// Timeout is final state, almost like FAILED but it communicate to you that
 	// an action or the overall workflow reached the specified timeout.
 	ActionStatusRequest_TIMEOUT ActionStatusRequest_StateType = 4
-	//
 	// This is the state we all deserve. The execution of the workflow is over
 	// and everything is just fine. Sit down, and enjoy your great work.
 	ActionStatusRequest_SUCCESS ActionStatusRequest_StateType = 5
@@ -105,35 +99,25 @@ func (ActionStatusRequest_StateType) EnumDescriptor() ([]byte, []int) {
 // ActionStatusRequest is the state of a single Workflow Action
 type ActionStatusRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	//
 	// The workflow id
 	WorkflowId *string `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId" json:"workflow_id,omitempty"`
-	//
 	// The agent id
 	AgentId *string `protobuf:"bytes,2,opt,name=agent_id,json=agentId" json:"agent_id,omitempty"`
-	//
 	// The name of the task this action is part of
 	TaskId *string `protobuf:"bytes,3,opt,name=task_id,json=taskId" json:"task_id,omitempty"`
-	//
 	// The action id
 	ActionId *string `protobuf:"bytes,4,opt,name=action_id,json=actionId" json:"action_id,omitempty"`
-	//
 	// The name of the action
 	ActionName *string `protobuf:"bytes,5,opt,name=action_name,json=actionName" json:"action_name,omitempty"`
-	//
 	// The state of the action. Those are the same described for workflow as
 	// well. pending, running, successful and so on.
 	ActionState *ActionStatusRequest_StateType `protobuf:"varint,6,opt,name=action_state,json=actionState,enum=proto.ActionStatusRequest_StateType" json:"action_state,omitempty"`
-	//
-	//This is the time when the action started the execution
+	// This is the time when the action started the execution
 	ExecutionStart *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=execution_start,json=executionStart" json:"execution_start,omitempty"`
-	//
 	// This is the time when the action stopped the execution
 	ExecutionStop *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=execution_stop,json=executionStop" json:"execution_stop,omitempty"`
-	//
 	// The execution duration time for the action
 	ExecutionDuration *string `protobuf:"bytes,9,opt,name=execution_duration,json=executionDuration" json:"execution_duration,omitempty"`
-	//
 	// The message returned from the action.
 	Message       *ActionMessage `protobuf:"bytes,10,opt,name=message" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -243,7 +227,6 @@ func (x *ActionStatusRequest) GetMessage() *ActionMessage {
 // ActionMessage to report the status of a single action, it's an object so it can be extended
 type ActionMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	//
 	// Message is the human readable message that can be used to describe the status of the action
 	Message       *string `protobuf:"bytes,1,opt,name=message" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -330,14 +313,17 @@ func file_report_action_status_request_proto_rawDescGZIP() []byte {
 	return file_report_action_status_request_proto_rawDescData
 }
 
-var file_report_action_status_request_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_report_action_status_request_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_report_action_status_request_proto_goTypes = []any{
-	(ActionStatusRequest_StateType)(0), // 0: proto.ActionStatusRequest.StateType
-	(*ActionStatusRequest)(nil),        // 1: proto.ActionStatusRequest
-	(*ActionMessage)(nil),              // 2: proto.ActionMessage
-	(*timestamppb.Timestamp)(nil),      // 3: google.protobuf.Timestamp
-}
+var (
+	file_report_action_status_request_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+	file_report_action_status_request_proto_msgTypes  = make([]protoimpl.MessageInfo, 2)
+	file_report_action_status_request_proto_goTypes   = []any{
+		ActionStatusRequest_StateType(0), // 0: proto.ActionStatusRequest.StateType
+		(*ActionStatusRequest)(nil),      // 1: proto.ActionStatusRequest
+		(*ActionMessage)(nil),            // 2: proto.ActionMessage
+		(*timestamppb.Timestamp)(nil),    // 3: google.protobuf.Timestamp
+	}
+)
+
 var file_report_action_status_request_proto_depIdxs = []int32{
 	0, // 0: proto.ActionStatusRequest.action_state:type_name -> proto.ActionStatusRequest.StateType
 	3, // 1: proto.ActionStatusRequest.execution_start:type_name -> google.protobuf.Timestamp

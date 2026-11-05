@@ -18,12 +18,14 @@ function build_ipxe() {
     # so the iPXE build defaults to a version of 1.0.0. See: https://github.com/ipxe/ipxe/blob/8460dc4e8ffc98db62377d1c5502d6aac40f5a64/src/Makefile#L213-L241
     tinkerbell_ipxe_commit=$(cat "$(dirname "${BASH_SOURCE[0]}")/ipxe.commit" | cut -c1-7)
     local extra_version="+ (${tinkerbell_ipxe_commit})"
-    local version_override="VERSION_MAJOR=2 VERSION_MINOR=0 VERSION_PATCH=0"
+    local version_major="VERSION_MAJOR=2"
+    local version_minor="VERSION_MINOR=0"
+    local version_patch="VERSION_PATCH=0"
 
-    if [ -z "${env_opts}" ]; then
-        make -C "${ipxe_dir}"/src ${version_override} EXTRAVERSION="${extra_version}" EMBED="${embed_path}" "${ipxe_bin}"
+    if [[ -z "${env_opts}" ]]; then
+        make -C "${ipxe_dir}"/src "${version_major}" "${version_minor}" "${version_patch}" EXTRAVERSION="${extra_version}" EMBED="${embed_path}" "${ipxe_bin}"
     else
-        make -C "${ipxe_dir}"/src "${env_opts}" ${version_override} EXTRAVERSION="${extra_version}" EMBED="${embed_path}" "${ipxe_bin}"
+        make -C "${ipxe_dir}"/src "${env_opts}" "${version_major}" "${version_minor}" "${version_patch}" EXTRAVERSION="${extra_version}" EMBED="${embed_path}" "${ipxe_bin}"
     fi
 }
 
@@ -113,21 +115,21 @@ function customize() {
 }
 
 function hasType() {
-    if [ -z "$(type type)" ]; then
+    if [[ -z "$(type type)" ]]; then
         echo "type command not found"
         return 1
     fi
 }
 
 function hasUname() {
-    if [ -z "$(type uname)" ]; then
+    if [[ -z "$(type uname)" ]]; then
         echo "uname command not found"
         return 1
     fi
 }
 
 function hasNixShell() {
-    if [ -z "$(type nix-shell)" ]; then
+    if [[ -z "$(type nix-shell)" ]]; then
         echo "nix-shell command not found"
         return 1
     fi

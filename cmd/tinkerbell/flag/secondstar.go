@@ -30,7 +30,6 @@ func RegisterSecondStarFlags(fs *Set, ssc *SecondStarConfig) {
 	fs.RegisterFamily(SecondStarPort, V4, ffval.NewValueDefault(&ssc.Port, ssc.Port))
 	fs.RegisterFamily(SecondStarPort, V6, ffval.NewValueDefault(&ssc.PortV6, ssc.PortV6))
 	fs.Register(SecondStarHostKey, ffval.NewValueDefault(&ssc.HostKeyPath, ssc.HostKeyPath))
-	fs.Register(SecondStarIPMIToolPath, ffval.NewValueDefault(&ssc.Config.IPMITOOLPath, ssc.Config.IPMITOOLPath))
 	fs.Register(SecondStarIdleTimeout, ffval.NewValueDefault(&ssc.Config.IdleTimeout, ssc.Config.IdleTimeout))
 	fs.Register(SecondStarLogLevel, ffval.NewValueDefault(&ssc.LogLevel, ssc.LogLevel))
 }
@@ -48,11 +47,6 @@ var SecondStarPort = Config{
 var SecondStarHostKey = Config{
 	Name:  "secondstar-host-key",
 	Usage: "Path to the host key file for SecondStar",
-}
-
-var SecondStarIPMIToolPath = Config{
-	Name:  "secondstar-ipmitool-path",
-	Usage: "Path to the ipmitool binary",
 }
 
 var SecondStarIdleTimeout = Config{

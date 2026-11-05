@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"path"
 	"time"
 
 	gssh "github.com/gliderlabs/ssh"
@@ -26,12 +27,11 @@ type Reader interface {
 
 type Config struct {
 	// V4 and V6 are the per-family listen addresses.
-	V4           listener.Bind
-	V6           listener.Bind
-	HostKey      ssh.Signer
-	IPMITOOLPath string
-	IdleTimeout  time.Duration
-	Backend      Reader
+	V4          listener.Bind
+	V6          listener.Bind
+	HostKey     ssh.Signer
+	IdleTimeout time.Duration
+	Backend     Reader
 }
 
 func (c *Config) Start(ctx context.Context, log logr.Logger) error {
@@ -74,7 +74,7 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 
 	// One store for every family, so a session arriving over the other family
 	// attaches to the running SOL session instead of starting a second one.
-	handler := internal.Handler(log, internal.NewKeyValueStore(), c.IPMITOOLPath)
+	handler := internal.Handler(log, internal.NewKeyValueStore())
 	pubkeyAuth := internal.PubkeyAuth(c.Backend, log)
 
 	g, ctx := errgroup.WithContext(ctx)
@@ -137,7 +137,7 @@ func generateHostKey() (ssh.Signer, error) {
 
 // HostKeyFrom reads a host key from a file and returns a signer.
 func HostKeyFrom(filePath string) (ssh.Signer, error) {
-	hostKey, err := os.ReadFile(filePath)
+	hostKey, err := os.ReadFile(path.Clean(filePath))
 	if err != nil {
 		return nil, fmt.Errorf("error reading host key: %w", err)
 	}

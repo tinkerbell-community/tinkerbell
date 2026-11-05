@@ -12,6 +12,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/avast/retry-go/v4"
 	"github.com/go-logr/logr"
 	"github.com/peterbourgon/ff/v4"
@@ -28,6 +29,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/tink/server"
 	"github.com/tinkerbell/tinkerbell/tootles"
 	"github.com/tinkerbell/tinkerbell/ui"
+	"go.uber.org/automaxprocs/maxprocs"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/credentials"
 	"k8s.io/client-go/rest"
@@ -65,13 +67,17 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		HTTPPortV6:           defaultHTTPPort,
 		HTTPSPort:            defaultHTTPSPort,
 		HTTPSPortV6:          defaultHTTPSPort,
+		MaxprocsEnable:       true,
+		MemlimitRatio:        0.9,
 		EmbeddedGlobalConfig: flag.EmbeddedGlobalConfig{
 			EnableKubeAPIServer: (embeddedApiserverExecute != nil),
 			EnableETCD:          (embeddedEtcdExecute != nil),
 		},
 		BackendKubeOptions: flag.BackendKubeOptions{
-			QPS:   defaultQPS,   // Default QPS value. A negative value disables client-side ratelimiting.
-			Burst: defaultBurst, // Default burst value.
+			QPS:                         defaultQPS,      // Default QPS value. A negative value disables client-side ratelimiting.
+			Burst:                       defaultBurst,    // Default burst value.
+			APIServerHealthTimeout:      2 * time.Minute, // Default timeout: 2 minutes to prevent permanent error loops
+			APIServerHealthPollInterval: 2 * time.Second, // Default poll interval: check every 2 seconds
 		},
 	}
 
@@ -108,8 +114,7 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		Port:   defaultSecondStarPort,
 		PortV6: defaultSecondStarPort,
 		Config: &secondstar.Config{
-			IPMITOOLPath: "/usr/sbin/ipmitool",
-			IdleTimeout:  15 * time.Minute,
+			IdleTimeout: 15 * time.Minute,
 		},
 	}
 
@@ -228,6 +233,23 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 	// handler is not overridden.
 	rest.SetDefaultWarningHandler(k8sAPIWarningLogger{log: log.WithName("kube-api-warning")})
 
+	// Configure Go runtime tuning before service startup.
+	if globals.MaxprocsEnable {
+		if _, err := maxprocs.Set(maxprocs.Logger(func(f string, a ...any) {
+			log.WithName("automaxprocs").Info(fmt.Sprintf(f, a...))
+		})); err != nil {
+			log.WithName("automaxprocs").Error(err, "failed to set GOMAXPROCS automatically")
+		}
+	}
+	if globals.MemlimitRatio > 0 {
+		if _, err := memlimit.SetGoMemLimitWithOpts(
+			memlimit.WithRatio(globals.MemlimitRatio),
+			memlimit.WithProvider(memlimit.ApplyFallback(memlimit.FromCgroup, memlimit.FromSystem)),
+		); err != nil {
+			log.WithName("automemlimit").Error(err, "failed to set GOMEMLIMIT automatically")
+		}
+	}
+
 	cliLog := log.WithName("cli")
 	for _, d := range deprecations {
 		cliLog.Info(d)
@@ -306,6 +328,10 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		return ok && f.IsSet()
 	}, inCluster(), podNS)
 
+	// Smee DHCP leader election. The Lease goes where the controllers' Leases
+	// go: a backend namespace, where a namespaced credential has permissions.
+	s.Config.LeaderElectionNamespace = leaderElectionNamespace(inCluster(), s.Config.EnableLeaderElection, s.Config.LeaderElectionNamespace, primaryNamespace(globals.BackendKubeNamespaces, podNS))
+
 	// Second star
 	if err := ssc.Convert(globals.BindAddr, globals.BindAddrV6); err != nil {
 		return fmt.Errorf("failed to convert secondstar config: %w", err)
@@ -383,7 +409,8 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 				return startupErr(fmt.Errorf("failed to create kube backend with no indexes: %w", err))
 			}
 			// Wait for the API server to be healthy and ready.
-			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, 20*time.Second, 5*time.Second, nil); err != nil {
+			// Use configurable timeout and poll interval to prevent permanent error loops on first boot.
+			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, globals.BackendKubeOptions.APIServerHealthTimeout, globals.BackendKubeOptions.APIServerHealthPollInterval, nil); err != nil {
 				return startupErr(fmt.Errorf("failed to wait for API server health: %w", err))
 			}
 
@@ -409,6 +436,10 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 			return startupErr(fmt.Errorf("failed to create kube backend: %w", err))
 		}
 		s.Config.Backend = b.RenderedReader()
+		// Wire DHCP leader election to the kube backend so only a single Smee
+		// instance serves DHCP. Compatible with per-pod IPs from CNIs such as
+		// Multus macvlan (no host interface manipulation needed).
+		s.Config.Client = b.ClientConfig
 		h.Config.SetBackendFromFilterer(b.RenderedReader())
 		ts.Config.SetBackends(b)
 		tc.Config.Client = b.ClientConfig
@@ -454,7 +485,7 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		s.Config.InitMetrics()
 	}
 
-	// Smee (non-HTTP services: DHCP, TFTP, syslog)
+	// Smee (non-HTTP services: DHCP, DHCPv6, TFTP, syslog)
 	g.Go(func() error {
 		if !globals.EnableSmee {
 			cliLog.Info("smee service is disabled")
@@ -462,6 +493,32 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 		}
 		ll := ternary((s.LogLevel != 0), s.LogLevel, globals.LogLevel)
 		smeeLog := getLogger(ll).WithName("smee")
+
+		if s.MacvlanEnabled {
+			ifaceName, err := macvlanIfaceName()
+			if err != nil {
+				return fmt.Errorf("macvlan interface name: %w", err)
+			}
+			cleanup, err := setupMacvlan(smeeLog, s.MacvlanSourceInterface, ifaceName)
+			if err != nil {
+				return fmt.Errorf("setup macvlan: %w", err)
+			}
+			defer cleanup()
+			s.Config.DHCP.BindInterface = ifaceName
+		} else if s.Config.DHCP.BindInterface == "" {
+			// Bind DHCP to the container's primary interface so the kernel has a
+			// valid (non-loopback) source address when sending 255.255.255.255
+			// broadcast replies. Without an explicit interface, cm.IfIndex in the
+			// response may point to an interface with no routable IP, causing
+			// sendmsg to return EINVAL.
+			iface, err := defaultRouteInterface()
+			if err != nil {
+				smeeLog.Error(err, "failed to detect primary container interface for DHCP broadcast; broadcast replies may fail")
+			} else {
+				s.Config.DHCP.BindInterface = iface
+				smeeLog.Info("DHCP server bound to primary container interface", "interface", iface)
+			}
+		}
 
 		if err := s.Config.Start(ctx, smeeLog); err != nil {
 			return fmt.Errorf("failed to start smee service: %w", err)

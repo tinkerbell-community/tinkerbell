@@ -1,117 +1,4 @@
 {{/*
-Report whether IPv4 listeners are served, matching how the binary resolves
-listenerFamilies. Returns "true" or an empty string, so the result works
-directly in an if.
-Usage: {{ if include "tinkerbell.servesIPv4" . }}
-*/}}
-{{- define "tinkerbell.servesIPv4" -}}
-{{- if has .Values.deployment.envs.globals.listenerFamilies (list "ipv4" "dual") -}}true{{- end -}}
-{{- end -}}
-
-{{/*
-Report whether IPv6 listeners are served.
-Usage: {{ if include "tinkerbell.servesIPv6" . }}
-*/}}
-{{- define "tinkerbell.servesIPv6" -}}
-{{- if has .Values.deployment.envs.globals.listenerFamilies (list "ipv6" "dual") -}}true{{- end -}}
-{{- end -}}
-
-{{/*
-The port a container actually binds for a setting. Only IPv6 being served makes
-the IPv6 value the live one; otherwise the IPv4 value is, because a Service port
-has a single targetPort that both families share.
-Usage: {{ include "tinkerbell.servedPort" (dict "v4" $httpPort "v6" $httpPortV6 "ctx" $) }}
-*/}}
-{{- define "tinkerbell.servedPort" -}}
-{{- if and (include "tinkerbell.servesIPv6" .ctx) (not (include "tinkerbell.servesIPv4" .ctx)) -}}
-{{- .v6 -}}
-{{- else -}}
-{{- .v4 -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-The namespaces Tinkerbell watches, as a JSON array. rbac.type selects the profile:
-with Role, the release namespace plus rbac.namespaces; with ClusterRole, empty (all
-namespaces). The deprecated deployment.envs.globals.backendKubeNamespace counts as
-one more entry in rbac.namespaces, and with ClusterRole limits Tinkerbell to it.
-Usage: {{ include "tinkerbell.watchedNamespaces" . | fromJsonArray }}
-*/}}
-{{- define "tinkerbell.watchedNamespaces" -}}
-{{- $listed := default (list) .Values.rbac.namespaces -}}
-{{- if not (kindIs "slice" $listed) -}}
-{{- fail "rbac.namespaces must be a list of namespace names" -}}
-{{- end -}}
-{{- $legacy := .Values.deployment.envs.globals.backendKubeNamespace -}}
-{{- range $name := concat $listed (ternary (list $legacy) (list) (not (empty $legacy))) -}}
-{{- if not (and (kindIs "string" $name) (le (len $name) 63) (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $name)) -}}
-{{- fail (printf "invalid namespace %q in rbac.namespaces or deployment.envs.globals.backendKubeNamespace: must be one lowercase DNS-1123 label (for several namespaces, list them in rbac.namespaces)" (toString $name)) -}}
-{{- end -}}
-{{- end -}}
-{{- $namespaces := list -}}
-{{- if eq .Values.rbac.type "Role" -}}
-{{- $namespaces = concat (list .Release.Namespace) $listed -}}
-{{- else if $listed -}}
-{{- fail "rbac.namespaces requires rbac.type Role: a ClusterRole already grants every namespace. To limit a ClusterRole to one namespace, set deployment.envs.globals.backendKubeNamespace instead" -}}
-{{- end -}}
-{{- if $legacy -}}
-{{- $namespaces = append $namespaces $legacy -}}
-{{- end -}}
-{{- toJson (uniq $namespaces) -}}
-{{- end -}}
-
-{{/*
-The backend namespaces as the comma-separated TINKERBELL_BACKEND_KUBE_NAMESPACE value.
-Empty means all namespaces.
-Usage: {{ include "tinkerbell.backendNamespaces" . }}
-*/}}
-{{- define "tinkerbell.backendNamespaces" -}}
-{{- include "tinkerbell.watchedNamespaces" . | fromJsonArray | join "," -}}
-{{- end -}}
-
-{{/*
-The namespaces that get the Role/ClusterRole and binding objects, as a JSON array:
-every watched namespace with Role, or one cluster-scoped entry ("") with ClusterRole.
-Usage: {{ include "tinkerbell.roleNamespaces" . | fromJsonArray }}
-*/}}
-{{- define "tinkerbell.roleNamespaces" -}}
-{{- if eq .Values.rbac.type "Role" -}}
-{{- include "tinkerbell.watchedNamespaces" . -}}
-{{- else -}}
-{{- toJson (list "") -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-The one namespace for settings that take a single namespace (auto-discovered
-Hardware, leader-election Leases and their Role): the watched namespace when there
-is exactly one, otherwise the release namespace. Tinkerbell makes the same choice.
-Usage: {{ include "tinkerbell.primaryNamespace" . }}
-*/}}
-{{- define "tinkerbell.primaryNamespace" -}}
-{{- $namespaces := include "tinkerbell.watchedNamespaces" . | fromJsonArray -}}
-{{- if eq (len $namespaces) 1 -}}
-{{- first $namespaces -}}
-{{- else -}}
-{{- .Release.Namespace -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
-enableCRDMigrations, or the profile default when empty or null: on with ClusterRole,
-off with Role, which cannot grant access to cluster-scoped CRDs.
-Usage: {{ include "tinkerbell.enableCRDMigrations" . }}
-*/}}
-{{- define "tinkerbell.enableCRDMigrations" -}}
-{{- $value := .Values.deployment.envs.globals.enableCRDMigrations -}}
-{{- if or (kindIs "invalid" $value) (eq (toString $value) "") -}}
-{{- eq .Values.rbac.type "ClusterRole" -}}
-{{- else -}}
-{{- $value -}}
-{{- end -}}
-{{- end -}}
-
-{{/*
 Ensure a value is a JSON array. Fails on nil or non-array input.
 - slice/array: use as-is
 - nil/missing: fail with an error (required field)
@@ -142,4 +29,203 @@ Usage: {{ include "tinkerbell.toOptionalJsonArray" .resourceNames }}
   {{- fail (printf "expected an array but got %s: %v" (kindOf .) .) -}}
 {{- end -}}
 {{- end -}}
+{{/* vim: set filetype=mustache: */}}
+{{/*
+Expand the name of the chart.
+*/}}
+{{- define "tinkerbell.name" -}}
+{{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
+{{- end }}
 
+{{/*
+Create a default fully qualified app name.
+We truncate at 63 chars because some Kubernetes name fields are limited to this (by the DNS naming spec).
+If release name contains chart name it will be used as a full name.
+*/}}
+{{- define "tinkerbell.fullname" -}}
+{{- if .Values.fullnameOverride }}
+{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- $name := default .Chart.Name .Values.nameOverride }}
+{{- if contains $name .Release.Name }}
+{{- .Release.Name | trunc 63 | trimSuffix "-" }}
+{{- else }}
+{{- printf "%s-%s" .Release.Name $name | trunc 63 | trimSuffix "-" }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Create chart name and version as used by the chart label.
+*/}}
+{{- define "tinkerbell.chart" -}}
+{{- printf "%s-%s" .Chart.Name .Chart.Version | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Create the name of the service account
+*/}}
+{{- define "tinkerbell.serviceAccountName" -}}
+{{- printf "%s-service-account" .Values.rbac.name }}
+{{- end }}
+
+{{/*
+Allow the release namespace to be overridden for multi-namespace deployments in combined charts
+*/}}
+{{- define "tinkerbell.namespace" -}}
+{{- if .Values.namespaceOverride }}
+{{- .Values.namespaceOverride }}
+{{- else }}
+{{- .Release.Namespace }}
+{{- end }}
+{{- end }}
+
+{{/*
+Common labels
+*/}}
+{{- define "tinkerbell.labels" -}}
+helm.sh/chart: {{ include "tinkerbell.chart" . }}
+{{ include "tinkerbell.selectorLabels" . }}
+{{- if or .Chart.AppVersion .Values.deployment.imageTag }}
+app.kubernetes.io/version: {{ coalesce .Values.deployment.imageTag .Chart.AppVersion | trunc 63 | trimSuffix "-" | quote }}
+{{- end }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+{{- with .Values.extraLabels }}
+{{ toYaml . }}
+{{- end }}
+{{- end }}
+
+{{/*
+Selector labels
+*/}}
+{{- define "tinkerbell.selectorLabels" -}}
+app.kubernetes.io/name: {{ include "tinkerbell.name" . }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{/*
+Generate environment variables from a values structure.
+Usage: {{ include "tinkerbell.generateEnvVars" (dict "values" .Values.deployment.envs.globals) }}
+*/}}
+{{- define "tinkerbell.generateEnvVars" -}}
+{{- range $sKey, $sValue := . }}
+{{- range $key, $value := $sValue }}
+{{- if $value }}
+- name: {{ list "TINKERBELL" (ternary "" (snakecase $sKey | upper) (eq (upper $sKey) "GLOBALS")) (snakecase $key | upper) | compact | join "_" }}
+  value: {{ quote $value }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Generate all Tinkerbell environment variables from deployment.envs structure.
+This generates env vars for all sections: globals, smee, tinkServer, tinkController, rufio, secondstar, tootles
+*/}}
+{{- define "tinkerbell.allEnvVars" -}}
+{{- $root := . }}
+{{- $publicIP := .Values.publicIP }}
+{{- $trustedProxies := .Values.trustedProxies }}
+{{- if .Values.deployment.hostNetwork }}
+- name: HOST_IP
+  valueFrom:
+    fieldRef:
+      fieldPath: status.hostIP
+{{- end }}
+{{- include "tinkerbell.generateEnvVars" .Values.deployment.envs }}
+- name: TINKERBELL_TRUSTED_PROXIES
+  value: {{ join "," $trustedProxies | quote }}
+- name: TINKERBELL_PUBLIC_IPV4
+  value: {{ coalesce .Values.deployment.envs.globals.PUBLIC_IPV4 $publicIP | quote }}
+{{- with .Values.deployment.additionalEnvs }}
+{{- toYaml . | nindent 0 }}
+{{- end }}
+{{- end }}
+
+{{/*
+Service account name for leader election RBAC
+*/}}
+{{- define "tinkerbell.leaderElection.serviceAccountName" -}}
+{{- default (printf "%s-service-account" (include "tinkerbell.fullname" .)) .Values.rbac.name }}
+{{- end }}
+
+{{/*
+Generate container ports based on enabled services
+*/}}
+{{- define "tinkerbell.containerPorts" -}}
+{{- if .Values.deployment.envs.globals.ENABLE_SMEE }}
+- containerPort: {{ .Values.deployment.envs.smee.TFTP_SERVER_BIND_PORT }}
+{{- with .Values.service.ports.tftp }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+- containerPort: {{ .Values.deployment.envs.smee.SYSLOG_BIND_PORT }}
+{{- with .Values.service.ports.syslog }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- with .Values.service.ports.dhcp }}
+- containerPort: {{ .port }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+- containerPort: {{ .Values.deployment.envs.smee.IPXE_HTTP_SCRIPT_BIND_PORT }}
+{{- with .Values.service.ports.httpSmee }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- end }}
+{{- if .Values.deployment.envs.globals.ENABLE_TOOTLES }}
+- containerPort: {{ .Values.deployment.envs.tootles.TOOTLES_BIND_PORT }}
+{{- with .Values.service.ports.httpTootles }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- end }}
+{{- if .Values.deployment.envs.globals.ENABLE_TINK_SERVER }}
+- containerPort: {{ .Values.deployment.envs.tinkServer.TINK_SERVER_BIND_PORT }}
+{{- with .Values.service.ports.grpc }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- end }}
+{{- if .Values.deployment.envs.globals.ENABLE_SECONDSTAR }}
+- containerPort: {{ .Values.deployment.envs.secondstar.SECONDSTAR_PORT }}
+{{- with .Values.service.ports.ssh }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- end }}
+{{- if and .Values.deployment.envs.globals.TLS_CERT_FILE .Values.deployment.envs.globals.TLS_KEY_FILE }}
+- containerPort: {{ .Values.deployment.envs.smee.HTTPS_BIND_PORT }}
+{{- with .Values.service.ports.https }}
+  name: {{ .name }}
+  protocol: {{ .protocol }}
+{{- end }}
+{{- end }}
+{{- end }}
+
+{{/*
+Image pull secrets handling
+*/}}
+{{- define "tinkerbell.imagePullSecrets" -}}
+{{- if .Values.imagePullSecrets }}
+imagePullSecrets:
+{{- range .Values.imagePullSecrets }}
+{{- if typeIs "string" . }}
+- name: {{ . }}
+{{- else }}
+- name: {{ .name }}
+{{- end }}
+{{- end }}
+{{- else if .Values.global.imagePullSecrets }}
+imagePullSecrets:
+{{- range .Values.global.imagePullSecrets }}
+{{- if typeIs "string" . }}
+- name: {{ . }}
+{{- else }}
+- name: {{ .name }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

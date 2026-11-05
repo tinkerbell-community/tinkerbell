@@ -75,37 +75,28 @@ type ActionResponse struct {
 	WorkflowId *string `protobuf:"bytes,1,opt,name=workflow_id,json=workflowId" json:"workflow_id,omitempty"`
 	// The name of the task to which the action belongs
 	TaskId *string `protobuf:"bytes,2,opt,name=task_id,json=taskId" json:"task_id,omitempty"`
-	//
 	// agent_id is the id of the worker that is executing the action
 	AgentId *string `protobuf:"bytes,3,opt,name=agent_id,json=agentId" json:"agent_id,omitempty"`
 	// Action id
 	ActionId *string `protobuf:"bytes,4,opt,name=action_id,json=actionId" json:"action_id,omitempty"`
-	//
 	// The name of the action
 	Name *string `protobuf:"bytes,5,opt,name=name" json:"name,omitempty"`
-	//
 	// The docker/oci image the action starts from
 	Image *string `protobuf:"bytes,6,opt,name=image" json:"image,omitempty"`
-	//
 	// Every action has a timeout, after that the execution stops and the action
 	// gets in a timeout state.
 	Timeout *int64 `protobuf:"varint,7,opt,name=timeout" json:"timeout,omitempty"`
-	//
 	// You can override the command executed for the container
 	Command []string `protobuf:"bytes,8,rep,name=command" json:"command,omitempty"`
-	//
 	// You can mount directory from your host to the running action, mainly to
 	// share files, or state
 	Volumes []string `protobuf:"bytes,9,rep,name=volumes" json:"volumes,omitempty"`
-	//
 	// Set environment variables usable from the action itself.
 	Environment []string `protobuf:"bytes,10,rep,name=environment" json:"environment,omitempty"`
-	//
 	// Set the namespace that the process IDs will be in.
 	// Deprecated: use namespaces.pid instead. Retained for backward
 	// compatibility; namespaces.pid takes precedence when both are set.
 	Pid *string `protobuf:"bytes,11,opt,name=pid" json:"pid,omitempty"`
-	//
 	// The Linux namespaces the action container should run in.
 	Namespaces    *Namespaces `protobuf:"bytes,12,opt,name=namespaces" json:"namespaces,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -230,12 +221,10 @@ func (x *ActionResponse) GetNamespaces() *Namespaces {
 // This mirrors the v1alpha2 API spec.
 type Namespaces struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	//
 	// The network namespace for the action container. The value is passed
 	// through to the container runtime as-is (e.g. "host" to share the host's
 	// network namespace).
 	Network *string `protobuf:"bytes,1,opt,name=network" json:"network,omitempty"`
-	//
 	// The PID namespace for the action container.
 	Pid           *string `protobuf:"bytes,2,opt,name=pid" json:"pid,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -329,13 +318,16 @@ func file_get_action_response_proto_rawDescGZIP() []byte {
 	return file_get_action_response_proto_rawDescData
 }
 
-var file_get_action_response_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_get_action_response_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_get_action_response_proto_goTypes = []any{
-	(PreconditionFailureViolation)(0), // 0: proto.PreconditionFailureViolation
-	(*ActionResponse)(nil),            // 1: proto.ActionResponse
-	(*Namespaces)(nil),                // 2: proto.Namespaces
-}
+var (
+	file_get_action_response_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+	file_get_action_response_proto_msgTypes  = make([]protoimpl.MessageInfo, 2)
+	file_get_action_response_proto_goTypes   = []any{
+		PreconditionFailureViolation(0), // 0: proto.PreconditionFailureViolation
+		(*ActionResponse)(nil),          // 1: proto.ActionResponse
+		(*Namespaces)(nil),              // 2: proto.Namespaces
+	}
+)
+
 var file_get_action_response_proto_depIdxs = []int32{
 	2, // 0: proto.ActionResponse.namespaces:type_name -> proto.Namespaces
 	1, // [1:1] is the sub-list for method output_type

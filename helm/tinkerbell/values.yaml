@@ -1,23 +1,28 @@
 # TRUSTED_PROXIES=$(kubectl get nodes -o jsonpath='{.items[*].spec.podCIDR}' | tr ' ' ',')
-# LB_IP=192.168.2.116
-# ARTIFACTS_FILE_SERVER and ARTIFACTS_FILE_SERVER_V6 are used to set the load balancer IPs for the HookOS/nginx service object and configure TINKERBELL_IPXE_HTTP_SCRIPT_OSIE_URL/TINKERBELL_IPXE_HTTP_SCRIPT_OSIE_URL_V6 in the Tinkerbell deployment.
-# ARTIFACTS_FILE_SERVER=http://192.168.2.117:7173
-# ARTIFACTS_FILE_SERVER_V6=http://[2001:db8:100::117]:7173
-# helm install tinkerbell tinkerbell/ --create-namespace --namespace tinkerbell --wait --set "trustedProxies={${TRUSTED_PROXIES}}" --set "publicIP=$LB_IP" --set "artifactsFileServer=$ARTIFACTS_FILE_SERVER" --set "artifactsFileServerV6=$ARTIFACTS_FILE_SERVER_V6" --set "deployment.agentImageTag=latest" --set "deployment.imageTag=latest"
-artifactsFileServer:
-artifactsFileServerV6:
+# LB_IP=192.168.2.116=
+# helm install tinkerbell tinkerbell/ --create-namespace --namespace tinkerbell --wait --set "trustedProxies={${TRUSTED_PROXIES}}" --set "publicIP=$LB_IP" --set "deployment.agentImageTag=latest" --set "deployment.imageTag=latest"
 deployment:
   additionalEnvs: []
   # - name: MY_ENV_VAR
   #   value: "my-value"
   additionalArgs: []
   # - "--my-arg=my-value"
-  affinity: {}
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: '{{ include "tinkerbell.fullname" . }}'
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+          topologyKey: kubernetes.io/hostname
   agentImage: ghcr.io/tinkerbell/tink-agent
   # agentImageTag is here as a placeholder and to show its possible to be set.
   # It is not set because in the deployment.yaml a coalesce is used with this value
   # and the .Chart.AppVersion. This allows CI and the release process to set the value properly.
   agentImageTag:
+  captainImage: ghcr.io/rpardini/captain/artifacts
+  captainImageTag: v0.0.0-0ab6603-trixie-full
+  annotations: {}
   daemonSet:
     enabled: false
   envs:
@@ -26,13 +31,11 @@ deployment:
       backendFilePath: ""
       backendKubeBurst: 100
       backendKubeConfig: ""
-      backendKubeNamespace: "" # deprecated: use rbac.namespaces. With Role, adds one namespace to rbac.namespaces; with ClusterRole, limits Tinkerbell to this one namespace
+      backendKubeNamespace: ""
       backendKubeQPS: 100
-      backendKubeRenderingEnabled: false # render templates in Hardware specs; escape literal '{{' as {{ "{{" }} before enabling
-      bindAddr: ""
-      bindAddrV6: ""
+      bindAddress: "" # derives TINKERBELL_BIND_ADDRESS, matching the --bind-address flag
       disableHttpToHttpsRedirect: false # set true to stop auto-redirecting plain HTTP requests to HTTPS when TLS is enabled
-      enableCRDMigrations: "" # empty means true when rbac.type is ClusterRole, false when it is Role
+      enableCRDMigrations: true
       enableRufioController: true
       enableSecondstar: true
       enableSmee: true
@@ -41,142 +44,124 @@ deployment:
       enableTinkController: true
       enableUI: true
       httpPort: 7080
-      httpPortV6: "" # Defaults to httpPort when empty. Must equal httpPort when listenerFamilies is dual and service.enabled is true.
       httpsPort: 7443
-      httpsPortV6: "" # Defaults to httpsPort when empty. Must equal httpsPort when listenerFamilies is dual and service.enabled is true.
-      # listenerFamilies controls the IP address families listeners serve.
-      # Can be set to ipv4, ipv6, or dual.
-      # Values for a family that is not served are ignored.
-      listenerFamilies: ipv4
       logLevel: 0
       otelEndpoint: ""
       otelInsecure: false
       publicIpv4: ""
-      publicIpv6: ""
       tlsCertFile: ""
       tlsKeyFile: ""
       trustedProxies: ""
+      maxprocsEnable: true
+      memlimitRatio: 0.9
     rufio:
       bmcConnectTimeout: "2m0s"
+      controllerEnableLeaderElection: true
+      controllerLeaderElectionNamespace: '{{ include "tinkerbell.namespace" . }}'
       enableInventoryCollection: true # collect out-of-band BMC hardware inventory into Hardware.status; per-Hardware opt-out via the tinkerbell.org/disable-outofband-inventory annotation
-      enableLeaderElection: true
       inventoryRefreshInterval: "24h0m0s" # how often out-of-band BMC hardware inventory is refreshed per machine
-      leaderElectionNamespace: ""
       logLevel: 0
       maxConcurrentReconciles: 1
       powerCheckInterval: "30m0s"
     secondstar:
-      bindAddr: ""
-      bindAddrV6: ""
-      bindPort: 2222
-      bindPortV6: "" # Defaults to bindPort when empty. Must equal bindPort when listenerFamilies is dual and service.enabled is true.
-      hostKeyPath: ""
-      ipmitoolPath: "/usr/sbin/ipmitool"
+      port: 2222
+      hostKey: ""
       idleTimeout: "15m"
       logLevel: 0
-    smee:
-      bootstrapEnabled: false # serve hardware.spec.metadata.osieFiles bootstrap data endpoint and ISO patching capabilities
-      dhcpBindAddr: ""
-      dhcpBindInterface: ""
-      dhcpEnableNetbootOptions: true # send PXE/iPXE netboot DHCP options (bootfile/next-server/opt43); disable if a non Tinkerbell (Proxy)DHCP owns netboot
-      dhcpEnabled: true
-      dhcpIPForPacket: ""
-      dhcpIpxeHttpBinaryHost: ""
-      dhcpIpxeHttpBinaryPath: "/ipxe/binary"
-      dhcpIpxeHttpBinaryPort: 7080
-      dhcpIpxeHttpBinaryScheme: "http"
-      dhcpIpxeHttpScriptHost: ""
-      dhcpIpxeHttpScriptPath: "/ipxe/script/auto.ipxe"
-      dhcpIpxeHttpScriptPort: 7080
-      dhcpIpxeHttpScriptPrependMac: true
-      dhcpIpxeHttpScriptScheme: "http"
-      dhcpBindPort: 67
-      dhcpDefaultDomainSearchList: [] # Fallback search domains when Hardware does not provide any for DHCPv4.
-      dhcpDefaultNameServers: [] # Fallback IPv4 DNS server addresses when Hardware does not provide IPv4 nameservers.
-      dhcpMode: "reservation" # reservation, proxy, auto-proxy
-      dhcpSyslogIP: ""
-      dhcpTftpIP: ""
-      dhcpTftpPort: 69
-      dhcpv6BindAddr: ""
-      dhcpv6BindInterface: ""
-      dhcpv6BindPort: 547
-      dhcpv6Enabled: true
-      dhcpv6EnableNetbootOptions: true
-      dhcpv6DefaultDomainSearchList: [] # Fallback search domains when Hardware does not provide any for DHCPv6.
-      dhcpv6DefaultNameServers: [] # Fallback IPv6 DNS server addresses when Hardware does not provide IPv6 nameservers.
-      dhcpv6SyslogIP: ""
-      dhcpv6IpxeHttpBinaryHost: ""
-      dhcpv6IpxeHttpBinaryPath: "/ipxe/binary"
-      dhcpv6IpxeHttpBinaryPort: 7080
-      dhcpv6IpxeHttpBinaryScheme: "http"
-      dhcpv6IpxeHttpScriptHost: ""
-      dhcpv6IpxeHttpScriptPath: "/ipxe/script/auto6.ipxe"
-      dhcpv6IpxeHttpScriptPort: 7080
-      dhcpv6IpxeHttpScriptPrependMac: true
-      dhcpv6IpxeHttpScriptScheme: "http"
-      dhcpv6Mode: "stateless" # stateless, auto-stateless, reservation, derived
-      dhcpv6ServerDUID: ""
-      dhcpv6DerivedDirectAddressPool: ""
-      dhcpv6DerivedRelayAddressPrefix: 64
-      dhcpv6TftpIP: ""
-      dhcpv6TftpPort: 69
-      ipxeBinaryInjectMacAddrFormat: "" # one of colon, dot, dash, no-delimiter, empty. defaults to colon when empty.
-      ipxeEmbeddedScriptPatch: ""
-      ipxeHttpBinaryEnabled: true
-      ipxeHttpScriptEnabled: true
-      ipxeHttpScriptExtraKernelArgs: [] # Additional kernel arguments to pass to the OSIE. (k=v k=v) that are appended to the kernel cmdline in the iPXE script
-      ipxeHttpScriptExtraKernelArgsV6: [] # As above, for IPv6 machines. Defaults to ipxeHttpScriptExtraKernelArgs when empty.
-      ipxeHttpScriptKernelName: "vmlinuz" # name of the kernel file to fetch in the iPXE script, defaults to vmlinuz, which becomes vmlinuz-<arch> in the script
-      ipxeHttpScriptInitrdName: "initramfs" # name of the initrd file to fetch in the iPXE script, defaults to initramfs, which becomes initramfs-<arch> in the script
-      ipxeHttpScriptOsieURL: ""
-      ipxeHttpScriptOsieURLv6: ""
-      ipxeHttpScriptRetries: 1
-      ipxeHttpScriptRetryDelay: 1
-      ipxeOverrideArchMapping: "" # a comma separated list of <arch>=<binary> pairs. See the iPXE Architecture Mapping documentation for more details.
-      ipxeScriptSyslogFqdn: ""
-      # -- Syslog hostname or IPv6 address for DHCPv6 boot scripts. Hostnames resolve in iPXE at boot; defaults to dhcpv6SyslogIP.
-      ipxeScriptSyslogFqdnV6: ""
-      ipxeScriptTinkServerAddrPort: ""
-      ipxeScriptTinkServerAddrPortV6: ""
-      ipxeScriptTinkServerInsecureTLS: false
-      ipxeScriptTinkServerUseTLS: false
-      isoEnabled: true
-      isoPatchMagicString: ""
-      isoStaticIPAMEnabled: true
-      isoUpstreamURL: ""
+    osie:
+      debugMode: false
+      imagePath: "/var/lib/images"
       logLevel: 0
-      syslogBindAddr: ""
-      syslogBindAddrV6: ""
-      syslogBindPort: 514
-      syslogBindPortV6: "" # Defaults to syslogBindPort when empty. Must equal syslogBindPort when listenerFamilies is dual and service.enabled is true.
-      syslogEnabled: true
-      tftpBlockSize: 512
-      tftpServerBindAddr: ""
-      tftpServerBindAddrV6: ""
-      tftpServerBindPort: 69
-      tftpServerBindPortV6: "" # Defaults to tftpServerBindPort when empty. Must equal tftpServerBindPort when listenerFamilies is dual and service.enabled is true.
-      tftpServerEnabled: true
-      tftpTimeout: "10s"
-      tftpSinglePort: true # if true, use single port mode for TFTP server
-      tftpAssetDir: "" # serves extra TFTP files from this (in-pod) directory if set
-      pxeHttpEnabled: false # serve pxelinux.cfg and the TFTP asset dir over HTTP (for u-boot pxe-over-http)
-      pxeHttpPathPrefix: "/tftp/" # URL path prefix to serve pxelinux.cfg and TFTP assets under over HTTP
+    dhcp:
+      bindAddr: ""
+      bindInterface: ""
+      enabled: true
+      enableNetbootOptions: true
+      ipForPacket: ""
+      ipxeHttpBinaryHost: ""
+      ipxeHttpBinaryPath: "/ipxe/binary"
+      ipxeHttpBinaryPort: 7080
+      ipxeHttpBinaryScheme: "http"
+      ipxeHttpScriptHost: ""
+      ipxeHttpScriptPath: "/ipxe/script/auto.ipxe"
+      ipxeHttpScriptPort: 7080
+      ipxeHttpScriptPrependMac: true
+      ipxeHttpScriptScheme: "http"
+      mode: "reservation" # reservation, proxy, auto-proxy
+      syslogIP: ""
+      tftpIP: ""
+      tftpPort: 69
+      # Leader election ensures only a single Smee instance serves DHCP at a time.
+      # This replaces host network interface (macvlan) management and is compatible
+      # with per-pod IPs assigned by CNIs such as Multus macvlan. Requires the kube
+      # backend; ignored for file/none backends.
+      enableLeaderElection: true
+      leaderElectionNamespace: '{{ include "tinkerbell.namespace" . }}'
+      # macvlanEnabled enables native macvlan interface setup inside the tinkerbell
+      # binary (no init container required). The binary creates a per-pod macvlan
+      # interface (mv<13-hex-chars-of-pod-UID>) in the host netns and moves it into
+      # the pod netns before starting the DHCP server.
+      # Requires hostPID=true and CAP_NET_ADMIN + CAP_SYS_ADMIN (added automatically
+      # when this is true).
+      macvlanEnabled: false
+      # macvlanSourceInterface is the host parent interface for the macvlan.
+      # Leave empty to auto-detect from the host's default route.
+      macvlanSourceInterface: ""
+    smee:
+      logLevel: 0
+    ipxe:
+      binaryInjectMacAddrFormat: "" # one of colon, dot, dash, no-delimiter, empty. defaults to colon when empty.
+      embeddedScriptPatch: ""
+      httpBinaryEnabled: true
+      httpScriptBindAddr: ""
+      httpScriptEnabled: true
+      httpScriptExtraKernelArgs: [] # Additional kernel arguments to pass to the OSIE. (k=v k=v) that are appended to the kernel cmdline in the iPXE script
+      httpScriptInitrdName: "initramfs-trixie-full" # name of the initrd file to fetch in the iPXE script, defaults to initramfs, which becomes initramfs-<arch> in the script
+      httpScriptKernelName: "initramfs-trixie-full" # name of the kernel file to fetch in the iPXE script, defaults to vmlinuz, which becomes vmlinuz-<arch> in the script
+      httpScriptOsieUrl: ""
+      httpScriptRetries: 1
+      httpScriptRetryDelay: 1
+      httpScriptTrustedProxies: ""
+      overrideArchMapping: "" # a comma separated list of <arch>=<binary> pairs. See the iPXE Architecture Mapping documentation for more details.
+      scriptTinkServerAddrPort: ""
+      scriptTinkServerInsecureTls: false
+      scriptTinkServerUseTls: false
+    tftp:
+      assetDir: "" # serves extra TFTP files from this (in-pod) directory if set
+      blockSize: 512
+      serverBindAddr: ""
+      serverBindPort: 69
+      serverEnabled: true
+      singlePort: true # if true, use single port mode for TFTP server
+      timeout: "10s"
+    pxeHttp:
+      enabled: false # serve pxelinux.cfg and the TFTP asset dir over HTTP (for u-boot pxe-over-http)
+      pathPrefix: "/tftp/" # URL path prefix to serve pxelinux.cfg and TFTP assets under over HTTP
+    syslog:
+      bindAddr: ""
+      bindPort: 514
+      enabled: true
+    iso:
+      enabled: true
+      patchMagicString: ""
+      staticIpamEnabled: true
+      upstreamUrl: ""
+    https:
+      bindPort: 7272
     tinkController:
       enableLeaderElection: true
-      leaderElectionNamespace: ""
+      leaderElectionNamespace: '{{ include "tinkerbell.namespace" . }}'
       logLevel: 0
       maxConcurrentReconciles: 1
-      referenceAllowListRules: []
-      referenceDenyListRules: []
+      referenceAllowListRules: {}
+      referenceDenyListRules: {}
     tinkServer:
       autoDiscoveryAutoEnrollmentEnabled: false
       autoDiscoveryEnabled: false
-      autoDiscoveryNamespace: "" # defaults to the backend namespace, otherwise the namespace in which Tinkerbell is deployed.
+      autoDiscoveryNamespace: "" # defaults to the namespace in which Tinkerbell is deployed.
       autoEnrollmentEnabled: false
       bindAddr: ""
       bindPort: 42113
-      bindAddrV6: ""
-      bindPortV6: "" # Defaults to bindPort when empty. Must equal bindPort when listenerFamilies is dual and service.enabled is true.
       logLevel: 0
     tootles:
       debugMode: false
@@ -190,20 +175,11 @@ deployment:
   hostNetwork: false
   image: ghcr.io/tinkerbell/tinkerbell
   imagePullPolicy: IfNotPresent
+  initContainers: []
   # imageTag is here as a placeholder and to show its possible to be set.
   # It is not set because in the deployment.yaml a coalesce is used with this value
   # and the .Chart.AppVersion. This allows CI and the release process to set the value properly.
   imageTag:
-  init:
-    enabled: true
-    # if `interfaceMode: ipvlan`, then ghcr.io/jacobweinstock/relay-init:v0.1.0 (has nmap and nmap-scripts) is required. Otherwise, alpine can be used.
-    image: ghcr.io/jacobweinstock/relay-init:v0.1.0
-    # interfaceMode determines how we create the interface needed to listen for DHCP broadcast traffic.
-    # by default macvlan is used. ipvlan is the only other option.
-    interfaceMode: macvlan
-    # sourceInterface is the Host/Node interface to use for listening for DHCP broadcast packets.
-    # When unset, the interface from the default route will be used.
-    # sourceInterface: eno1
   nodeSelector: {}
   replicas: 1
   resources:
@@ -216,7 +192,47 @@ deployment:
   selector: {}
   strategy:
     type: RollingUpdate
+  # Kubernetes probes configuration
+  # Uses Smee's /healthcheck endpoint on the HTTP script server port (7171)
+  probes:
+    # Liveness probe - restarts the container if it fails
+    liveness:
+      enabled: true
+      httpGet:
+        path: /healthcheck
+        port: http
+        scheme: HTTP
+      initialDelaySeconds: 10
+      periodSeconds: 30
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    # Readiness probe - removes pod from service endpoints if it fails
+    readiness:
+      enabled: true
+      httpGet:
+        path: /healthcheck
+        port: http
+        scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 10
+      timeoutSeconds: 5
+      failureThreshold: 3
+      successThreshold: 1
+    # Startup probe - gives the container time to start before liveness kicks in
+    startup:
+      enabled: true
+      httpGet:
+        path: /healthcheck
+        port: http
+        scheme: HTTP
+      initialDelaySeconds: 0
+      periodSeconds: 5
+      timeoutSeconds: 5
+      failureThreshold: 30
+      successThreshold: 1
   tolerations: []
+  topologySpreadConstraints: []
   # Additional volumes on the output Deployment definition.
   volumes: []
   # - name: foo
@@ -232,7 +248,6 @@ deployment:
   #   readOnly: true
 name: tinkerbell
 publicIP:
-publicIPv6:
 rbac:
   additionalRoleRules: []
   # Resource-based rule example:
@@ -243,11 +258,8 @@ rbac:
   # Non-resource URL rule example:
   # - nonResourceURLs: ["/healthz"] # Required. Non-resource URL paths.
   #   verbs: ["get"]                # Required. Allowed operations.
+  create: true
   name: tinkerbell
-  # Namespaces Tinkerbell manages when type is Role. The release namespace is always included.
-  # A Role and RoleBinding are created in each, and Tinkerbell watches exactly these namespaces.
-  # Must be empty with ClusterRole, which manages all namespaces.
-  namespaces: []
   type: ClusterRole # or Role
   secrets:
     enabled: true
@@ -256,28 +268,21 @@ service:
   annotations: {}
   labels:
     app: tinkerbell
+  externalTrafficPolicy: Local
+  # Null omits the field, keeping the Kubernetes default (true). Set false for a
+  # LoadBalancer implementation that does not need NodePorts (kube-vip, MetalLB L2).
+  allocateLoadBalancerNodePorts: null
   # Optional family selection/order, e.g. [IPv6] or [IPv4, IPv6]. Empty lets Kubernetes choose.
   ipFamilies: []
   # Empty omits the field: Kubernetes defaults new Services to SingleStack, even on dual-stack clusters.
-  # PreferDualStack uses both families where supported and falls back to one otherwise.
-  # Configure optional.osie.service separately; see README.md "Service IP Families".
   ipFamilyPolicy: ""
   lbClass: "kube-vip.io/kube-vip-class"
   loadBalancerIP: ""
-  # Set false when the load balancer sends traffic to the load balancer IP or to the pod rather than
-  # to a NodePort, as kube-vip and MetalLB do, so that Kubernetes allocates no NodePorts for the Service.
-  # Null omits the field, keeping the Kubernetes default (true). Rendered only for type LoadBalancer.
-  # See README.md "Service NodePorts".
-  allocateLoadBalancerNodePorts: null
   name: tinkerbell
   ports:
     dhcp:
       name: dhcp
       port: 67
-      protocol: UDP
-    dhcpv6:
-      name: dhcpv6
-      port: 547
       protocol: UDP
     grpc:
       name: grpc
@@ -305,8 +310,13 @@ service:
       protocol: TCP
   selector:
     app: tinkerbell
+  sessionAffinity: None
+  sessionAffinityConfig: {}
   type: LoadBalancer
 trustedProxies: []
+
+# Enable creating the tinkerbell configmap
+createConfigmap: true
 
 optional:
   # enable migration to convert a 0.6.2 values.yaml to a v0.19.x values.yaml.
@@ -315,36 +325,6 @@ optional:
   migration:
     enabled: false
 
-  # osie (Operating System Installation Environment) objects are shared across HookOS and CaptainOS.
-  # They handle the file server for serving Artifacts.
-  osie:
-    deployment:
-      strategy:
-        type: RollingUpdate
-    hostNetwork: false
-    image: nginx:1.29.5
-    name: hookos # this value is deprecated and will be updated to "osie" in a future release.
-    nodeSelector: {}
-    tolerations: []
-    port: 7173
-    selector:
-      app: hookos # this value is deprecated and will be updated to "osie" in a future release.
-    service:
-      annotations: {}
-      labels: {}
-      # Optional family selection/order. Empty lets Kubernetes choose.
-      ipFamilies: []
-      # Empty defaults new Services to SingleStack, even on dual-stack clusters.
-      # Set PreferDualStack to use both families where supported. Does not inherit service.ipFamilyPolicy.
-      ipFamilyPolicy: ""
-      lbClass: "kube-vip.io/kube-vip-class"
-      loadBalancerIP: ""
-      # Null omits the field, keeping the Kubernetes default (true). Does not inherit
-      # service.allocateLoadBalancerNodePorts.
-      allocateLoadBalancerNodePorts: null
-      type: LoadBalancer
-    affinity: {}
-
   # captainos objects enable downloading and serving CaptainOS artifacts.
   # Optional, disabled by default.
   # Can be enabled together with hookos.
@@ -352,50 +332,6 @@ optional:
     enabled: false
     image: ghcr.io/tinkerbell/captain/artifacts:v0.1.0
     pullPolicy: IfNotPresent
-
-  # hookos objects enable downloading and serving HookOS artifacts.
-  # Optional, enabled by default.
-  hookos:
-    arch: both # x86_64, aarch64, both
-    # downloadURL only works with the > 0.8.1 Hook release because
-    # previous Hook versions didn't provide a checksum file.
-    downloadURL: https://github.com/tinkerbell/hook/releases/download/v0.11.1
-    enabled: true
-    extension: tar.gz # iso, tar.gz, both
-    kernelVersion: both # 5.10, 6.6, both
-    persistence:
-      # If existingClaim is set, the local persistence volume (localPersistentVolume) objects will NOT be created.
-      # Use this to point to an existing production grade storage class.
-      existingClaim: ""
-      # While local storage is the default, it is not recommended for production use.
-      localPersistentVolume:
-        accessModes:
-          - ReadWriteMany
-        extraLabels: {}
-        name: hook-artifacts
-        # this path must already exist on the node
-        path: /tmp
-        size: 2Gi
-        storageClassName: local-storage
-    scriptImage: bash:5.2.37
-    # the following are deprecated under optional.hookos. Set these values via optional.osie.
-    deployment:
-      strategy:
-        type:
-    hostNetwork:
-    image:
-    name:
-    nodeSelector: {}
-    tolerations: []
-    port:
-    selector:
-      app:
-    service:
-      annotations: {}
-      lbClass:
-      loadBalancerIP:
-      type:
-    affinity: {}
 
   # kubevip objects are used to provide a LoadBalancer IP for the Tinkerbell services.
   # Optional, enabled by default.
@@ -408,7 +344,7 @@ optional:
     #   - name: MY_ENV_VAR
     #     value: my-value
     additionalEnv: []
-    enabled: true
+    enabled: false
     image: ghcr.io/kube-vip/kube-vip:v1.0.0
     imagePullPolicy: IfNotPresent
     # Customize the interface KubeVIP advertises on. When unset, KubeVIP will autodetect the interface.
