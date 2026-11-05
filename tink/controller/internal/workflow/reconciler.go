@@ -34,6 +34,7 @@ const (
 	//
 	// Deprecated: use templateDataHardware instead. This key will be removed in a future release.
 	templateDataHardwareLegacy = "Hardware"
+	templateDataMetadataURL    = "metadata_url"
 
 	// reasonError is the condition Reason set when a workflow step fails.
 	reasonError = "Error"
@@ -46,23 +47,37 @@ type referenceResolver interface {
 
 // Reconciler is a type for managing Workflows.
 type Reconciler struct {
-	client     ctrlclient.Client
-	nowFunc    func() time.Time
-	backoff    *backoff.ExponentialBackOff
-	references referenceResolver
+	client      ctrlclient.Client
+	nowFunc     func() time.Time
+	backoff     *backoff.ExponentialBackOff
+	references  referenceResolver
+	metadataURL string
+}
+
+type Option func(*Reconciler)
+
+func WithMetadataURL(u string) Option {
+	return func(r *Reconciler) {
+		r.metadataURL = u
+	}
 }
 
 // TODO(jacobweinstock): add functional arguments to the signature.
 // TODO(jacobweinstock): write functional argument for customizing the backoff.
-func NewReconciler(client ctrlclient.Client, references referenceResolver) *Reconciler {
+func NewReconciler(client ctrlclient.Client, references referenceResolver, opts ...Option) *Reconciler {
 	bo := backoff.NewExponentialBackOff()
 	bo.MaxInterval = 5 * time.Second // this should keep all NextBackOff's under 10 seconds
-	return &Reconciler{
+	r := &Reconciler{
 		client:     client,
 		nowFunc:    time.Now,
 		backoff:    bo,
 		references: references,
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	return r
 }
 
 func (r *Reconciler) SetupWithManager(mgr manager.Manager, opts controller.Options) error {
@@ -289,6 +304,9 @@ func (r *Reconciler) processWorkflow(ctx context.Context, logger logr.Logger, st
 	hardware = *rendered
 
 	data := make(map[string]interface{})
+	if r.metadataURL != "" {
+		data[templateDataMetadataURL] = r.metadataURL
+	}
 	for key, val := range stored.Spec.HardwareMap {
 		data[key] = val
 	}

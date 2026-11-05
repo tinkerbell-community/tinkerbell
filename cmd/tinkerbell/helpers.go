@@ -103,3 +103,12 @@ func inCluster() bool {
 	}
 	return false
 }
+
+// With TLS, plain HTTP only redirects to HTTPS unless the redirect is disabled.
+func metadataEndpoint(globals *flag.GlobalConfig, tlsEnabled bool) flag.MetadataEndpoint {
+	md := flag.MetadataEndpoint{Enabled: globals.EnableTootles, PublicIP: globals.PublicIP, Scheme: flag.SchemeHTTP, Port: globals.HTTPPort}
+	if tlsEnabled && !globals.TLS.DisableHTTPToHTTPSRedirect {
+		md.Scheme, md.Port = flag.SchemeHTTPS, globals.HTTPSPort
+	}
+	return md
+}

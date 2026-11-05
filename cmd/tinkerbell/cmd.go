@@ -332,6 +332,11 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 	// go: a backend namespace, where a namespaced credential has permissions.
 	s.Config.LeaderElectionNamespace = leaderElectionNamespace(inCluster(), s.Config.EnableLeaderElection, s.Config.LeaderElectionNamespace, primaryNamespace(globals.BackendKubeNamespaces, podNS))
 
+	// Tink Controller
+	if err := tc.Convert(metadataEndpoint(globals, len(s.Config.TLS.Certs) > 0)); err != nil {
+		return err
+	}
+
 	// Second star
 	if err := ssc.Convert(globals.BindAddr, globals.BindAddrV6); err != nil {
 		return fmt.Errorf("failed to convert secondstar config: %w", err)
