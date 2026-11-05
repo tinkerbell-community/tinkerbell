@@ -119,6 +119,28 @@ All metadata routes identify the requesting machine by its source IP address
 | `/tootles/` | GET | ✅ | ✅ | Instance-endpoint mirror of EC2 metadata (enabled via `--tootles-instance-endpoint`). Supports paths like `/tootles/instanceID/<id>/2009-04-04/...` |
 | `/metadata` | GET | ✅ | ✅ | Legacy JSON endpoint returning Hardware storage/filesystem configuration. Used by the rootio action. |
 
+#### Metadata URL in Templates
+
+The Tink Controller exposes the base URL of these routes to Templates as `{{ .metadata_url }}`,
+next to the Workflow's `hardwareMap` keys such as `{{ .device_1 }}`. It has no trailing slash, so
+Templates append the route:
+
+```yaml
+environment:
+  KERNEL_ARGS: "talos.config={{ .metadata_url }}/2009-04-04/user-data"
+  CONTENTS: |
+    datasource:
+      Ec2:
+        metadata_urls: ["{{ .metadata_url }}"]
+```
+
+The value is `--tink-controller-metadata-url` (`TINKERBELL_TINK_CONTROLLER_METADATA_URL`, Helm
+`deployment.envs.tinkController.metadataURL`) when set. Otherwise, with Tootles enabled, it is
+derived from the public IP: `http://<public IP>:<HTTP port>`, or `https://<public IP>:<HTTPS port>`
+when TLS is configured and HTTP redirects to HTTPS. With neither, the key is absent and a Template
+that uses it fails to render. A `metadata_url` entry in a Workflow's `hardwareMap` overrides it
+for that Workflow.
+
 ### Web UI
 
 The UI is served at a configurable URL prefix (default: `/`). All UI routes

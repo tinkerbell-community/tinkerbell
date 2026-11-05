@@ -184,6 +184,7 @@ deployment:
       leaderElectionNamespace: '{{ include "tinkerbell.namespace" . }}'
       logLevel: 0
       maxConcurrentReconciles: 1
+      metadataURL: ""
       referenceAllowListRules: {}
       referenceDenyListRules: {}
     tinkServer:

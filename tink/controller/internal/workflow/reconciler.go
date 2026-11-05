@@ -35,6 +35,7 @@ const (
 	//
 	// Deprecated: use templateDataHardware instead. This key will be removed in a future release.
 	templateDataHardwareLegacy = "Hardware"
+	templateDataMetadataURL    = "metadata_url"
 
 	// reasonError is the condition Reason set when a workflow step fails.
 	reasonError = "Error"
@@ -51,6 +52,7 @@ type Reconciler struct {
 	backoff        *backoff.ExponentialBackOff
 	dynamicClient  dynamicClient
 	referenceRules ReferenceRules
+	metadataURL    string
 }
 
 type ReferenceRules struct {
@@ -71,6 +73,12 @@ func WithAllowReferenceRules(allowlist []string) Option {
 func WithDenyReferenceRules(denylist []string) Option {
 	return func(r *Reconciler) {
 		r.referenceRules.Denylist = denylist
+	}
+}
+
+func WithMetadataURL(u string) Option {
+	return func(r *Reconciler) {
+		r.metadataURL = u
 	}
 }
 
@@ -305,6 +313,9 @@ func (r *Reconciler) processWorkflow(ctx context.Context, logger logr.Logger, st
 	}
 
 	data := make(map[string]interface{})
+	if r.metadataURL != "" {
+		data[templateDataMetadataURL] = r.metadataURL
+	}
 	for key, val := range stored.Spec.HardwareMap {
 		data[key] = val
 	}
