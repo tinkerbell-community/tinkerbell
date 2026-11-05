@@ -73,8 +73,11 @@ func (c *Config) Serve(ctx context.Context, log logr.Logger, addr string, mux *S
 	case <-ctx.Done():
 		server.Shutdown()
 		// ListenAndServe returns nil once Shutdown completes; wait for it so
-		// the socket is released before we return.
-		<-serveErr
+		// the socket is released before we return. Shutting down was the
+		// point, so an error from it is only worth a debug log.
+		if err := <-serveErr; err != nil {
+			log.V(1).Info("tftp server returned an error while shutting down", "error", err)
+		}
 		return nil
 	case err := <-serveErr:
 		if err != nil {
