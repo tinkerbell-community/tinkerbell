@@ -278,6 +278,9 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 
 	// Tink Controller
 	tc.Config.LeaderElectionNamespace = leaderElectionNamespace(inCluster(), tc.Config.EnableLeaderElection, tc.Config.LeaderElectionNamespace)
+	if err := tc.Convert(metadataEndpoint(globals, len(s.Config.TLS.Certs) > 0)); err != nil {
+		return err
+	}
 
 	// Rufio Controller
 	rc.Config.LeaderElectionNamespace = leaderElectionNamespace(inCluster(), rc.Config.EnableLeaderElection, rc.Config.LeaderElectionNamespace)

@@ -33,6 +33,7 @@ type Config struct {
 	ReferenceAllowListRules []string
 	ReferenceDenyListRules  []string
 	MaxConcurrentReconciles int
+	MetadataURL             string
 }
 
 type dynamicClient interface {
@@ -83,6 +84,12 @@ func WithReferenceDenyListRules(rules []string) Option {
 	}
 }
 
+func WithMetadataURL(u string) Option {
+	return func(c *Config) {
+		c.MetadataURL = u
+	}
+}
+
 func NewConfig(opts ...Option) *Config {
 	defatuls := &Config{
 		EnableLeaderElection:    true,
@@ -118,6 +125,10 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 	if len(c.ReferenceDenyListRules) > 0 {
 		wfOpts = append(wfOpts, workflow.WithDenyReferenceRules(c.ReferenceDenyListRules))
 	}
+	if c.MetadataURL != "" {
+		wfOpts = append(wfOpts, workflow.WithMetadataURL(c.MetadataURL))
+	}
+	log.Info("template variable metadata_url", "metadataURL", c.MetadataURL)
 
 	mgr, err := newManager(c.Client, c.DynamicClient, options, c.MaxConcurrentReconciles, wfOpts...)
 	if err != nil {
