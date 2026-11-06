@@ -330,14 +330,14 @@ func (h *Handler) readBackend(ctx context.Context, mac net.HardwareAddr) (dhcp.H
 }
 
 func (h *Handler) reply(ctx context.Context, i v6.Info, d *dhcp.DHCP, n *dhcp.Netboot, ipAddress netip.Addr) (*dhcpv6.Message, error) {
-	bootURL, err := h.bootURL(ctx, i, d, n)
+	bootURL, params, err := h.bootURL(ctx, i, d, n)
 	if err != nil {
 		return nil, err
 	}
 
 	mods := []dhcpv6.Modifier{
 		dhcpv6.WithServerID(h.serverID),
-		h.withAddressOptions(i, d, ipAddress, bootURL),
+		h.withAddressOptions(i, d, ipAddress, bootURL, params),
 	}
 
 	switch i.Msg.Type() {
@@ -353,9 +353,13 @@ func (h *Handler) reply(ctx context.Context, i v6.Info, d *dhcp.DHCP, n *dhcp.Ne
 	}
 }
 
-func (h *Handler) bootURL(ctx context.Context, i v6.Info, _ *dhcp.DHCP, n *dhcp.Netboot) (string, error) {
+// bootURL returns the boot file URL to serve and its parameters.
+func (h *Handler) bootURL(ctx context.Context, i v6.Info, _ *dhcp.DHCP, n *dhcp.Netboot) (string, []string, error) {
 	if !i.IsBootfileURLOptionRequested() {
-		return "", nil
+		return "", nil, nil
+	}
+	if bootURL, params, ok := v6.HardwareBootFile(n); ok {
+		return bootURL, params, nil
 	}
 
 	var traceparent string
@@ -365,13 +369,13 @@ func (h *Handler) bootURL(ctx context.Context, i v6.Info, _ *dhcp.DHCP, n *dhcp.
 
 	bootURL, err := h.bootURLSource.BootURL(i, n, traceparent)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	return bootURL, nil
+	return bootURL, nil, nil
 }
 
-func (h *Handler) withAddressOptions(i v6.Info, d *dhcp.DHCP, ipAddress netip.Addr, bootURL string) dhcpv6.Modifier {
+func (h *Handler) withAddressOptions(i v6.Info, d *dhcp.DHCP, ipAddress netip.Addr, bootURL string, params []string) dhcpv6.Modifier {
 	return func(reply dhcpv6.DHCPv6) {
 		if msg, ok := reply.(*dhcpv6.Message); ok {
 			for _, ia := range h.ianaOptions(i, d, ipAddress) {
@@ -380,6 +384,7 @@ func (h *Handler) withAddressOptions(i v6.Info, d *dhcp.DHCP, ipAddress netip.Ad
 		}
 
 		v6.ApplyBootOptions(reply, i, bootURL)
+		v6.ApplyBootFileParams(reply, params)
 		v6.ApplyRequestedStatelessOptions(reply, i, d, h.dnsDefaults)
 	}
 }
@@ -421,7 +426,7 @@ func (h *Handler) ianaOptions(i v6.Info, d *dhcp.DHCP, ipAddress netip.Addr) []*
 }
 
 func (h *Handler) ianaWithIAID(iaid [4]byte, d *dhcp.DHCP, ipAddress netip.Addr) *dhcpv6.OptIANA {
-	t1, t2, preferredLifetime, validLifetime := statefulLifetimes(d.LeaseTime)
+	t1, t2, preferredLifetime, validLifetime := statefulLifetimes(d.LeaseTime, d.PreferredLifetime)
 
 	return &dhcpv6.OptIANA{
 		IaId: iaid,
@@ -437,7 +442,11 @@ func (h *Handler) ianaWithIAID(iaid [4]byte, d *dhcp.DHCP, ipAddress netip.Addr)
 	}
 }
 
-func statefulLifetimes(leaseTime uint32) (t1, t2, preferredLifetime, validLifetime time.Duration) {
+// statefulLifetimes returns the IA_NA timers and IA address lifetimes for a
+// valid lifetime of leaseTime and a preferred lifetime of preferred seconds.
+// 0 is the default for either; the preferred lifetime defaults to half the
+// valid lifetime and never exceeds it.
+func statefulLifetimes(leaseTime, preferred uint32) (t1, t2, preferredLifetime, validLifetime time.Duration) {
 	validLifetime = time.Duration(leaseTime) * time.Second
 	if leaseTime == 0 {
 		validLifetime = defaultLeaseTime
@@ -450,6 +459,9 @@ func statefulLifetimes(leaseTime uint32) (t1, t2, preferredLifetime, validLifeti
 	// advertised preferred lifetime, per RFC 9915 section 21.4, so both begin
 	// before the address is deprecated.
 	preferredLifetime = (validLifetime / 2).Truncate(time.Second)
+	if preferred > 0 {
+		preferredLifetime = min(time.Duration(preferred)*time.Second, validLifetime)
+	}
 	t1 = (preferredLifetime / 2).Truncate(time.Second)
 	t2 = (preferredLifetime * 4 / 5).Truncate(time.Second)
 

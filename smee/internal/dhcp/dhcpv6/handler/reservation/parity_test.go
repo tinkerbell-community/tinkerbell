@@ -99,8 +99,8 @@ func TestReplyParityPXE(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want, wantErr := h.bootURL(ctx, i, old.DHCP, old.Netboot)
-			got, err := h.bootURL(ctx, i, hw.DHCPv6, hw.Netboot)
+			want, _, wantErr := h.bootURL(ctx, i, old.DHCP, old.Netboot)
+			got, _, err := h.bootURL(ctx, i, hw.DHCPv6, hw.Netboot)
 			if got != want || (err != nil) != (wantErr != nil) {
 				t.Fatalf("boot URL = %q, %v, want %q, %v", got, err, want, wantErr)
 			}

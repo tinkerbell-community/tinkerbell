@@ -156,7 +156,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 	// Craft reply message
 	reply, err := dhcpv6.NewReplyFromMessage(i.Msg,
 		dhcpv6.WithServerID(h.serverID),
-		dhcpv6.WithInformationRefreshTime(h.informationRefreshTime),
+		dhcpv6.WithInformationRefreshTime(h.refreshTimeFor(hw)),
 	)
 	if err != nil {
 		log.Error(err, "failed to create DHCPv6 reply")
@@ -164,7 +164,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 		return
 	}
 
-	bootURL, err := h.bootURL(ctx, i, hw)
+	bootURL, params, err := h.bootURL(ctx, i, hw)
 	if errors.Is(err, v6.ErrNoBootURL) {
 		log.Info("bootURL error, DHCPv6 packet: no boot URL available", "error", err.Error())
 		span.SetStatus(codes.Ok, "no boot URL available")
@@ -176,6 +176,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 		return
 	}
 	v6.ApplyBootOptions(reply, i, bootURL)
+	v6.ApplyBootFileParams(reply, params)
 
 	v6.ApplyRequestedStatelessOptions(reply, i, hw.DHCPv6, h.dnsDefaults)
 
@@ -235,9 +236,13 @@ func (h *Handler) resolveHardware(ctx context.Context, i v6.Info, log logr.Logge
 	return hw, true
 }
 
-func (h *Handler) bootURL(ctx context.Context, i v6.Info, hw dhcp.Hardware) (string, error) {
+// bootURL returns the boot file URL to serve and its parameters.
+func (h *Handler) bootURL(ctx context.Context, i v6.Info, hw dhcp.Hardware) (string, []string, error) {
 	if !i.IsBootfileURLOptionRequested() {
-		return "", nil
+		return "", nil, nil
+	}
+	if bootURL, params, ok := v6.HardwareBootFile(hw.Netboot); ok {
+		return bootURL, params, nil
 	}
 
 	var traceparent string
@@ -247,10 +252,19 @@ func (h *Handler) bootURL(ctx context.Context, i v6.Info, hw dhcp.Hardware) (str
 
 	bootURL, err := h.bootURLSource.BootURL(i, hw.Netboot, traceparent)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
-	return bootURL, nil
+	return bootURL, nil, nil
+}
+
+// refreshTimeFor returns the information refresh time to serve hw: its own,
+// clamped like the configured one, or the configured one.
+func (h *Handler) refreshTimeFor(hw dhcp.Hardware) time.Duration {
+	if hw.DHCPv6 != nil && hw.DHCPv6.InformationRefreshTime > 0 {
+		return informationRefreshTime(time.Duration(hw.DHCPv6.InformationRefreshTime) * time.Second)
+	}
+	return h.informationRefreshTime
 }
 
 func errString(err error) string {

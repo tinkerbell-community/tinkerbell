@@ -188,6 +188,8 @@ func dhcpv6Data(mac net.HardwareAddr, arch string, ni v1alpha2.NetworkInterface,
 	if ni.DHCP != nil && ni.DHCP.IPv6 != nil {
 		d.Disabled = ni.DHCP.IPv6.Disabled
 		d.LeaseTime, lifetimeSet = seconds(ni.DHCP.IPv6.ValidLifetime)
+		d.PreferredLifetime, _ = seconds(ni.DHCP.IPv6.PreferredLifetime)
+		d.InformationRefreshTime, _ = seconds(ni.DHCP.IPv6.InformationRefreshTime)
 	}
 	if !lifetimeSet && compat.leaseTime != nil {
 		d.LeaseTime = *compat.leaseTime
@@ -326,6 +328,10 @@ func netbootData(nb *v1alpha2.Netboot, osie *v1alpha2.OSIE, compat v1alpha1Compa
 		}
 		if r := nb.RPI; r != nil {
 			n.RPI = RPI{SerialNum: r.SerialNum, FirmwarePath: r.FirmwarePath, ConfigTxt: r.ConfigTxt}
+		}
+		if nb.IPv6 != nil {
+			n.BootFileURL = nb.IPv6.BootFileURL
+			n.BootFileParams = nb.IPv6.BootFileParams
 		}
 	}
 

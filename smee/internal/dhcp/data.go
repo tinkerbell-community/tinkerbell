@@ -74,6 +74,12 @@ type DHCP struct {
 	DomainSearch          []string         // DHCP option 119.
 	ClasslessStaticRoutes dhcpv4.Routes    // DHCP option 121 - RFC 3442.
 	Disabled              bool             // If true, no DHCP response should be sent.
+	// PreferredLifetime is the DHCPv6 IA address preferred lifetime, in seconds.
+	// 0 derives it from the valid lifetime.
+	PreferredLifetime uint32
+	// InformationRefreshTime is DHCPv6 option 32, in seconds. 0 uses the
+	// server's.
+	InformationRefreshTime uint32
 }
 
 // Netboot holds info used in netbooting a client.
@@ -82,11 +88,15 @@ type Netboot struct {
 	IPXEScriptURL *url.URL // Overrides a default value that is passed into DHCP on startup.
 	IPXEScript    string   // Overrides a default value that is passed into DHCP on startup.
 	IPXEBinary    string   // Overrides Smee's default architecture to binary mapping.
-	Console       string
-	Facility      string
-	OSIE          OSIE
-	PXELINUX      PXELINUX
-	RPI           RPI
+	// BootFileURL is DHCPv6 option 59. It overrides the boot file Smee chooses.
+	BootFileURL string
+	// BootFileParams is DHCPv6 option 60, served with BootFileURL.
+	BootFileParams []string
+	Console        string
+	Facility       string
+	OSIE           OSIE
+	PXELINUX       PXELINUX
+	RPI            RPI
 }
 
 // Isoboot holds info used in booting a client using an ISO image.

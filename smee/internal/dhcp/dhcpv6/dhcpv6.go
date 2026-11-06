@@ -259,6 +259,26 @@ func ApplyBootOptions(reply dhcpv6.DHCPv6, i Info, bootURL string) {
 	}
 }
 
+// HardwareBootFile returns the boot file URL and parameters of Hardware that
+// sets them (netboot.ipv6) and may netboot. They are served instead of the boot
+// file Smee would choose, also when Smee's own DHCPv6 netboot is disabled, the
+// way an explicit DHCPv4 TFTP server and boot file are.
+func HardwareBootFile(n *dhcp.Netboot) (bootURL string, params []string, ok bool) {
+	if n == nil || !n.AllowNetboot || n.BootFileURL == "" {
+		return "", nil, false
+	}
+	return n.BootFileURL, n.BootFileParams, true
+}
+
+// ApplyBootFileParams sets Option OPT_BOOTFILE_PARAM (60), the parameters of
+// the boot file. https://datatracker.ietf.org/doc/html/rfc5970#section-3.2
+func ApplyBootFileParams(reply dhcpv6.DHCPv6, params []string) {
+	if len(params) == 0 {
+		return
+	}
+	dhcpv6.WithOption(dhcpv6.OptBootFileParam(params...))(reply)
+}
+
 // ApplyRequestedStatelessOptions adds requested DNS, domain-search, and NTP options.
 func ApplyRequestedStatelessOptions(reply dhcpv6.DHCPv6, i Info, d *dhcp.DHCP, defaults DNSDefaults) {
 	var nameServers, ntpServers []net.IP

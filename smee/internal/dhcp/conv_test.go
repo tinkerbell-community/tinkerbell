@@ -217,6 +217,21 @@ func TestConvertByMac(t *testing.T) {
 				Netboot: &Netboot{AllowNetboot: true},
 			},
 		},
+		"DHCPv6 lifetimes, refresh time and boot file": {
+			hw: hardwareWith(v1alpha2.NetworkInterface{
+				DHCP: &v1alpha2.DHCP{IPv6: &v1alpha2.DHCPv6{
+					ValidLifetime:          ptrTo[int64](7200),
+					PreferredLifetime:      ptrTo[int64](3600),
+					InformationRefreshTime: ptrTo[int64](900),
+				}},
+				Netboot: &v1alpha2.Netboot{IPv6: &v1alpha2.Netbootv6{BootFileURL: "tftp://[2001:db8::1]/boot.efi", BootFileParams: []string{"a=1"}}},
+			}),
+			want: Hardware{
+				DHCP:    &DHCP{MACAddress: testMAC, LeaseTime: defaultLeaseTime},
+				DHCPv6:  &DHCP{MACAddress: testMAC, LeaseTime: 7200, PreferredLifetime: 3600, InformationRefreshTime: 900},
+				Netboot: &Netboot{AllowNetboot: true, BootFileURL: "tftp://[2001:db8::1]/boot.efi", BootFileParams: []string{"a=1"}},
+			},
+		},
 		"a zero lease time is zero": {
 			hw: hardwareWith(v1alpha2.NetworkInterface{DHCP: &v1alpha2.DHCP{
 				IPv4: &v1alpha2.DHCPv4{LeaseTimeSeconds: ptrTo[int64](0)},
