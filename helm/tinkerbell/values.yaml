@@ -240,10 +240,9 @@ deployment:
   selector: {}
   strategy:
     # The default rolling update stops a pod before it starts its replacement
-    # (maxSurge 0), so two Tinkerbell versions never run side by side (Rufio has
-    # no leader election), and on a single node the required pod anti-affinity
-    # above does not keep the new pod from being scheduled. A surge brings both
-    # problems back. Recreate stops every pod first.
+    # (maxSurge 0): with a surge, the required pod anti-affinity above keeps the
+    # new pod from being scheduled on a single node, so the upgrade never
+    # finishes. Recreate stops every pod first.
     type: RollingUpdate
     rollingUpdate:
       maxSurge: 0
