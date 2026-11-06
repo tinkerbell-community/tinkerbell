@@ -253,6 +253,10 @@ func (t Tinkerbell) MigrateAndReady(ctx context.Context) error {
 	if err := t.MigrateStorage(ctx); err != nil {
 		return err
 	}
+	// Only how finished Workflows display depends on it, so it does not stop the start.
+	if err := t.NameWorkflowStates(ctx); err != nil && t.Logger.GetSink() != nil {
+		t.Logger.Info("WARNING: could not name the workflow states stored as numbers", "error", err.Error())
+	}
 	if t.removeDeprecated {
 		return t.RemoveDeprecated(ctx)
 	}
