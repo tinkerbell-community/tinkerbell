@@ -122,7 +122,7 @@ spec:
 
 Out-of-band inventory is collected directly from a machine's BMC (Baseboard Management Controller). Because it is gathered over the network via the BMC rather than from a running operating system, it is available even when the machine is powered off or has never booted. It is written to `status.attributes.outOfBand`.
 
-Collection is performed by Rufio's Machine controller using [bmclib](https://github.com/bmc-toolbox/bmclib), which talks to the BMC over Redfish or a vendor-specific API. The `collectionMethod` field records which bmclib driver produced the data: `gofish` for Redfish-based BMCs, or a vendor driver such as `dell`, `supermicro`, `asrockrack`, or `openbmc`.
+Collection is performed by Rufio, as it polls a machine's BMC, using [bmclib](https://github.com/bmc-toolbox/bmclib), which talks to the BMC over Redfish or a vendor-specific API. The `collectionMethod` field records which bmclib driver produced the data: `gofish` for Redfish-based BMCs, or a vendor driver such as `dell`, `supermicro`, `asrockrack`, or `openbmc`.
 
 > [!NOTE]
 > IPMI-only BMCs cannot provide inventory. bmclib collects out-of-band inventory over Redfish or a vendor API only, so machines whose BMCs speak IPMI alone will not populate this subtree. This is an expected, permanent state for some fleets, not an error.
@@ -130,16 +130,30 @@ Collection is performed by Rufio's Machine controller using [bmclib](https://git
 ### Prerequisites
 
 - The Rufio controller must be enabled (`deployment.envs.globals.enableRufioController=true`, the default).
-- The Hardware object must reference a `machine.bmc.tinkerbell.org` object via `spec.bmcRef`.
+- The Hardware object must have a BMC: either a `v1alpha2` `spec.bmc.connection` of its own, or, through `v1alpha1`, a reference to a `machine.bmc.tinkerbell.org` object via `spec.bmcRef`.
 
   ```yaml
+  apiVersion: tinkerbell.org/v1alpha2
+  kind: Hardware
+  spec:
+    bmc:
+      connection:
+        host: 192.168.2.10
+        credentialsRef:
+          name: example-bmc-auth
+          namespace: tinkerbell
+  ```
+
+  ```yaml
+  apiVersion: tinkerbell.org/v1alpha1
+  kind: Hardware
   spec:
     bmcRef:
       kind: machine.bmc.tinkerbell.org
       name: example-bmc
   ```
 
-- The referenced BMC must be reachable and support Redfish or a bmclib vendor API. The `machine.bmc.tinkerbell.org` object should have a `status.conditions` entry of `type: Contactable` with `status: "True"`.
+- The BMC must be reachable and support Redfish or a bmclib vendor API. The Hardware (or the `machine.bmc.tinkerbell.org` object) should have a `status.conditions` entry of `type: Contactable` with `status: "True"`.
 
 ### Configuration
 
@@ -188,7 +202,7 @@ metadata:
 
 #### Force an immediate refresh
 
-To refresh a machine's inventory before its interval elapses, set the following annotation on the corresponding `machine.bmc.tinkerbell.org` object. It triggers an immediate refresh on the next reconcile and is removed automatically after a successful collection.
+To refresh a machine's inventory before its interval elapses, set the following annotation on the corresponding `machine.bmc.tinkerbell.org` object, or on the Hardware when its BMC connection is its own. It triggers an immediate refresh on the next reconcile and is removed automatically after a successful collection.
 
 ```bash
 kubectl annotate machine.bmc.tinkerbell.org example-bmc \
@@ -197,11 +211,11 @@ kubectl annotate machine.bmc.tinkerbell.org example-bmc \
 
 ### How it works
 
-Collection is performed by Rufio's Machine controller, which already reconciles each Machine's power state on a fixed interval (the power check interval, default 30 minutes). During that reconcile it reuses the already-open BMC connection to collect inventory when a refresh is due. No second BMC connection is opened.
+Collection is performed by Rufio as it polls a BMC's power state on a fixed interval (the power check interval, default 30 minutes): the BMC of a Machine, or of a Hardware with a BMC connection of its own. During that poll it reuses the already-open BMC connection to collect inventory when a refresh is due. No second BMC connection is opened.
 
 Inventory collection can be comparatively slow (5–30 seconds over Redfish), so it deliberately does not run on every power-poll reconcile. Instead, each machine is refreshed at most once per refresh interval (default 24 hours):
 
-1. On each Machine reconcile, the controller finds the Hardware object whose `spec.bmcRef` points at the Machine.
+1. On each Machine reconcile, the controller finds the Hardware object whose `spec.bmcRef` points at the Machine. A Hardware with a BMC connection of its own is polled, and its inventory collected, through the Hardware instead.
 1. If inventory has never been collected, is older than the refresh interval, or a manual refresh was requested, it collects inventory from the BMC.
 1. The result is written to `status.attributes.outOfBand`, along with a `lastUpdated` timestamp and a `collectionMethod` recording which bmclib driver produced the data.
 

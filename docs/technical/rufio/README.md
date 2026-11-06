@@ -61,9 +61,17 @@ The `machineRef` points to the Machine object on the cluster, for which the job 
 
 ### Job Controller
 
-The job controller watches for Job objects on the cluster. Once a new job object is created, it immediately sets the job condition to `Running` and creates a `Task` object on the cluster for the first item in the tasks list.
+Jobs are stored as `bmc.tinkerbell.org/v1alpha2`, where `tasks` are `operations` (see [Moving from v1alpha1 to v1alpha2](../v1alpha2/MIGRATION.md)); `v1alpha1` Jobs, like the one above, are the same objects. The job controller runs the operations of a Job against its BMC in order, one at a time, over one BMC connection where it can. A power action that turns the machine on or off is done once the BMC reports that power state; the controller checks again every few seconds until then. Each operation may take up to its `timeoutSeconds` (default 10 minutes). The first operation that fails fails the Job.
 
-The job controller also watches for changes in `Task` objects which have an ownerRef pointing to a Job. Once a Task object status is updated, the job controller checks the conditions on the Task and either marks the Job as Completed/Failed or proceeds to create the next Task object.
+The status records the progress: `completedOperations` counts the operations that are done, and the conditions are `Running`, then `Completed` or `Failed`, as for `v1alpha1` Jobs. The job controller does not create Task objects.
+
+The BMC connection of a Job is, in order: its `connection`; the `spec.bmc.connection` of the Hardware its `hardwareRef` names; for Jobs created through `v1alpha1`, the connection of the Machine their `machineRef` names.
+
+### Hardware BMC
+
+A `v1alpha2` Hardware can hold its BMC connection itself, in `spec.bmc.connection`. Rufio polls such a BMC like the machine controller polls a Machine, and records the state in the Hardware's `status.conditions`: `Contactable` (`True` or `False`) and `PowerState` (`On`, `Off` or `Unknown`). It also collects its [out-of-band inventory](../HARDWARE_INVENTORY.md#out-of-band-collection).
+
+A Hardware created through `v1alpha1` whose `bmcRef` names a Machine gets that Machine's connection as `spec.bmc.connection`, with the annotation `bmc.tinkerbell.org/machine: <namespace>/<name>`. While the annotation is there, the connection follows the Machine, and the Hardware conditions show the Machine's state: the machine controller keeps polling the Machine, and the BMC is not polled a second time. A connection without the annotation is never changed; remove the annotation to manage the connection on the Hardware.
 
 ### Task API
 
