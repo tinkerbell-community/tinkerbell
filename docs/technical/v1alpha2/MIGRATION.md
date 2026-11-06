@@ -186,11 +186,15 @@ by Rufio directly, which also collects its out-of-band inventory.
 progress in `status.completedOperations`; the conditions are the same as before (`Running`, then
 `Completed` or `Failed`). A Job started by an older Rufio before the upgrade is taken over: its
 completed Tasks count as done. Rufio runs without leader election, so do not let an old and a new
-Tinkerbell run side by side during the upgrade: both would act on new Jobs. The chart defaults to
-a rolling update; use `deployment.strategy.type: Recreate` for the upgrade. A release installed
-by chart v0.28.1 or earlier cannot be switched to `Recreate` by Helm alone: the Deployment keeps
-the `rollingUpdate` settings the API server defaulted, which `Recreate` rejects. Switch it once
-before the upgrade:
+Tinkerbell run side by side during the upgrade: both would act on new Jobs. From chart v0.28.5 on,
+the chart's rolling update stops the old pod before it starts the new one (`maxSurge: 0`,
+`maxUnavailable: 1`), so a plain `helm upgrade` to it is safe, also on a single node, where the
+chart's required pod anti-affinity deadlocked the earlier default, which surged. Keep those two
+settings if you override `deployment.strategy`.
+
+With chart v0.28.4 or earlier, use `Recreate` instead. A release installed by chart v0.28.1 or
+earlier cannot be switched to `Recreate` by Helm alone: the Deployment keeps the `rollingUpdate`
+settings the API server defaulted, which `Recreate` rejects. Switch it once before the upgrade:
 
 ```sh
 kubectl -n <namespace> patch deployment <release> --type=merge \

@@ -29,7 +29,7 @@ spec:
     {{- /* Rendered, not left to the API server's defaults, so that Helm owns it
     and removes it when the type changes to Recreate, which rejects it. */}}
     rollingUpdate:
-      {{- toYaml (.Values.deployment.strategy.rollingUpdate | default (dict "maxSurge" "25%" "maxUnavailable" "25%")) | nindent 6 }}
+      {{- toYaml (.Values.deployment.strategy.rollingUpdate | default (dict "maxSurge" 0 "maxUnavailable" 1)) | nindent 6 }}
     {{- end }}
   {{- end }}
   template:
