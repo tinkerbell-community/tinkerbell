@@ -11,14 +11,14 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
 )
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error)
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Info holds the unified hardware data used by iPXE script and TFTP serving paths.
@@ -38,7 +38,16 @@ type Info struct {
 }
 
 // OSIE or OS Installation Environment is the data about where the OSIE parts are located.
+//
+// The kernel and initrd are located by KernelURL and InitrdURL, the Hardware's
+// instance.osie, or, for Hardware created through v1alpha1, by BaseURL, Kernel
+// and Initrd as v1alpha1 held them. Only one of the two forms is set.
 type OSIE struct {
+	// KernelURL is the URL of the kernel: absolute, or a reference relative to
+	// the default OSIE URL. ${arch} in it is the client's architecture.
+	KernelURL string
+	// InitrdURL is KernelURL for the initrd.
+	InitrdURL string
 	// BaseURL is the URL where the OSIE parts are located.
 	BaseURL *url.URL
 	// Kernel is the name of the kernel file.
@@ -67,7 +76,7 @@ func GetByMac(ctx context.Context, mac net.HardwareAddr, br BackendReader) (Info
 	if br == nil {
 		return Info{}, errors.New("backend is nil")
 	}
-	spec, err := br.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := br.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return Info{}, err
 	}
@@ -76,29 +85,7 @@ func GetByMac(ctx context.Context, mac net.HardwareAddr, br BackendReader) (Info
 		return Info{}, fmt.Errorf("failed to convert hardware data: %w", err)
 	}
 
-	if hw.DHCP == nil {
-		return Info{}, errors.New("no dhcp data")
-	}
-	if hw.Netboot == nil {
-		return Info{}, errors.New("no netboot data")
-	}
-	d := hw.DHCP
-	n := hw.Netboot
-
-	return Info{
-		AllowNetboot:  n.AllowNetboot,
-		Console:       "",
-		MACAddress:    d.MACAddress,
-		Arch:          d.Arch,
-		VLANID:        d.VLANID,
-		AgentID:       hw.AgentID,
-		Facility:      n.Facility,
-		IPXEScript:    n.IPXEScript,
-		IPXEScriptURL: n.IPXEScriptURL,
-		OSIE:          OSIE(n.OSIE),
-		PXELINUX:      PXELINUX(n.PXELINUX),
-		RPI:           RPI(n.RPI),
-	}, nil
+	return info(hw)
 }
 
 // GetByIP uses the BackendReader to get the hardware data by IP address and
@@ -107,7 +94,7 @@ func GetByIP(ctx context.Context, ip net.IP, br BackendReader) (Info, error) {
 	if br == nil {
 		return Info{}, errors.New("backend is nil")
 	}
-	spec, err := br.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip.String()})
+	spec, err := br.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip.String()})
 	if err != nil {
 		return Info{}, err
 	}
@@ -115,6 +102,11 @@ func GetByIP(ctx context.Context, ip net.IP, br BackendReader) (Info, error) {
 	if err != nil {
 		return Info{}, fmt.Errorf("failed to convert hardware data: %w", err)
 	}
+
+	return info(hw)
+}
+
+func info(hw dhcp.Hardware) (Info, error) {
 	if hw.DHCP == nil {
 		return Info{}, errors.New("no dhcp data")
 	}
@@ -129,7 +121,7 @@ func GetByIP(ctx context.Context, ip net.IP, br BackendReader) (Info, error) {
 		Console:       "",
 		MACAddress:    d.MACAddress,
 		Arch:          d.Arch,
-		VLANID:        d.VLANID,
+		VLANID:        hw.VLANID(),
 		AgentID:       hw.AgentID,
 		Facility:      n.Facility,
 		IPXEScript:    n.IPXEScript,

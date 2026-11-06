@@ -12,6 +12,7 @@ import (
 
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/crd"
+	"github.com/tinkerbell/tinkerbell/smee/internal/paritytest"
 )
 
 var parseModeTests = map[string]struct {
@@ -63,24 +64,36 @@ func TestCRDModePatternMatchesParseMode(t *testing.T) {
 	if err := yaml.Unmarshal(crd.TinkerbellDefaults["hardware.tinkerbell.org"], &c); err != nil {
 		t.Fatal(err)
 	}
-	mode := c.Spec.Versions[0].Schema.OpenAPIV3Schema.
-		Properties["spec"].Properties["metadata"].Properties["osieFiles"].Items.Schema.Properties["mode"]
-	if mode.Pattern == "" {
-		t.Fatal("CRD has no pattern for spec.metadata.osieFiles[].mode")
-	}
-	pattern := regexp.MustCompile(mode.Pattern)
-
-	for name, tt := range parseModeTests {
-		// The API omits empty strings, and only Smee trims whitespace.
-		if strings.TrimSpace(tt.in) != tt.in || tt.in == "" {
-			continue
+	// The files are spec.instance.osie.files in v1alpha2, and were
+	// spec.metadata.osieFiles in v1alpha1, which is converted to them.
+	for _, v := range c.Spec.Versions {
+		spec := v.Schema.OpenAPIV3Schema.Properties["spec"]
+		var mode apiextensionsv1.JSONSchemaProps
+		switch v.Name {
+		case "v1alpha1":
+			mode = spec.Properties["metadata"].Properties["osieFiles"].Items.Schema.Properties["mode"]
+		case "v1alpha2":
+			mode = spec.Properties["instance"].Properties["osie"].Properties["files"].Items.Schema.Properties["mode"]
+		default:
+			t.Fatalf("unexpected Hardware version %s", v.Name)
 		}
-		t.Run(name, func(t *testing.T) {
-			admitted := pattern.MatchString(tt.in) && int64(len(tt.in)) <= *mode.MaxLength
-			if admitted == tt.wantErr {
-				t.Errorf("CRD admits %q = %v, but parseMode error = %v", tt.in, admitted, tt.wantErr)
+		if mode.Pattern == "" {
+			t.Fatalf("CRD %s has no pattern for the OSIE file mode", v.Name)
+		}
+		pattern := regexp.MustCompile(mode.Pattern)
+
+		for name, tt := range parseModeTests {
+			// The API omits empty strings, and only Smee trims whitespace.
+			if strings.TrimSpace(tt.in) != tt.in || tt.in == "" {
+				continue
 			}
-		})
+			t.Run(v.Name+"/"+name, func(t *testing.T) {
+				admitted := pattern.MatchString(tt.in) && int64(len(tt.in)) <= *mode.MaxLength
+				if admitted == tt.wantErr {
+					t.Errorf("CRD admits %q = %v, but parseMode error = %v", tt.in, admitted, tt.wantErr)
+				}
+			})
+		}
 	}
 }
 
@@ -92,11 +105,11 @@ func TestFilesAppliesMode(t *testing.T) {
 		tinkerbell.OSIEFile{Path: "scripts/setup.sh", Contents: "#!/bin/sh\n", Mode: "755"},
 		tinkerbell.OSIEFile{Path: "shared.conf", Contents: "x", Mode: "0644"},
 	)
-	files, err := Files(hw)
+	files, err := Files(paritytest.V1Alpha2(t, hw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := Archive(files, ModTime(hw))
+	a, err := Archive(files, ModTime(paritytest.V1Alpha2(t, hw)))
 	if err != nil {
 		t.Fatal(err)
 	}

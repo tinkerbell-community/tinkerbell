@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv6"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	tbotel "github.com/tinkerbell/tinkerbell/pkg/otel"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
@@ -32,7 +32,7 @@ const (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error)
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // BootURLSource supplies DHCPv6 request parsing options and boot URLs.
@@ -177,7 +177,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 	}
 	v6.ApplyBootOptions(reply, i, bootURL)
 
-	v6.ApplyRequestedStatelessOptions(reply, i, hw.DHCP, h.dnsDefaults)
+	v6.ApplyRequestedStatelessOptions(reply, i, hw.DHCPv6, h.dnsDefaults)
 
 	response, err := v6.WriteReply(conn, peer, i.Relay, reply)
 	if err != nil {
@@ -192,7 +192,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 }
 
 func (h *Handler) resolveHardware(ctx context.Context, i v6.Info, log logr.Logger, span trace.Span) (dhcp.Hardware, bool) {
-	spec, lookupErr := h.backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: i.Mac.String()})
+	spec, lookupErr := h.backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: i.Mac.String()})
 	if lookupErr != nil {
 		if v6.HardwareNotFound(lookupErr) {
 			if h.autoStatelessEnabled {
@@ -220,13 +220,13 @@ func (h *Handler) resolveHardware(ctx context.Context, i v6.Info, log logr.Logge
 		return dhcp.Hardware{}, false
 	}
 
-	if hw.DHCP != nil && hw.DHCP.Disabled {
+	if hw.DHCPv6 != nil && hw.DHCPv6.Disabled {
 		log.Info("ignoring DHCPv6 packet: DHCP is disabled for this MAC address")
 		span.SetStatus(codes.Ok, "DHCP is disabled for this MAC address")
 		return dhcp.Hardware{}, false
 	}
 
-	if hw.DHCP == nil {
+	if hw.DHCPv6 == nil {
 		log.Info("ignoring DHCPv6 packet: DHCP unavailable")
 		span.SetStatus(codes.Ok, "DHCP unavailable")
 		return dhcp.Hardware{}, false

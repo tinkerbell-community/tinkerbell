@@ -1,0 +1,297 @@
+// Package paritytest holds what parity tests need to check that Smee serves
+// Hardware created through v1alpha1 exactly as it did before it read v1alpha2:
+// the v1alpha1 Hardware conversion Smee used then, frozen, and the v1alpha2 form
+// in which the API server now serves v1alpha1 Hardware. Only tests import it.
+package paritytest
+
+import (
+	"errors"
+	"fmt"
+	"net"
+	"net/netip"
+	"net/url"
+
+	"github.com/ccoveille/go-safecast/v2"
+	"github.com/insomniacslk/dhcp/dhcpv4"
+	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
+)
+
+// ConvertByMac and ConvertByIP are dhcp.ConvertByMac and dhcp.ConvertByIP
+// as they were when Smee read v1alpha1 Hardware, without tracing. Do not change
+// them: they are the reference.
+
+func ConvertByMac(mac net.HardwareAddr, hw *v1alpha1.Hardware) (dhcp.Hardware, error) {
+	if hw == nil {
+		return dhcp.Hardware{}, errors.New("hardware is nil")
+	}
+	i := v1alpha1.Interface{}
+	for _, iface := range hw.Spec.Interfaces {
+		if iface.DHCP != nil && iface.DHCP.MAC == mac.String() {
+			i = iface
+			break
+		}
+	}
+
+	d, n, err := transform(i, hw.Spec.Metadata)
+	if err != nil {
+		return dhcp.Hardware{}, err
+	}
+
+	result := dhcp.Hardware{DHCP: d, Netboot: n, AgentID: hw.Spec.AgentID}
+
+	if i.Isoboot != nil && i.Isoboot.SourceISO != "" {
+		si, err := url.Parse(i.Isoboot.SourceISO)
+		if err != nil {
+			return dhcp.Hardware{}, fmt.Errorf("failed to parse source ISO as a URL %q: %w", i.Isoboot.SourceISO, err)
+		}
+		result.Isoboot = &dhcp.Isoboot{SourceISO: si}
+	}
+
+	return result, nil
+}
+
+func ConvertByIP(ip net.IP, hw *v1alpha1.Hardware) (dhcp.Hardware, error) {
+	if hw == nil {
+		return dhcp.Hardware{}, errors.New("hardware is nil")
+	}
+	i := v1alpha1.Interface{}
+	for _, iface := range hw.Spec.Interfaces {
+		if iface.DHCP != nil && iface.DHCP.IP != nil && iface.DHCP.IP.Address == ip.String() {
+			i = iface
+			break
+		}
+	}
+
+	d, n, err := transform(i, hw.Spec.Metadata)
+	if err != nil {
+		return dhcp.Hardware{}, err
+	}
+
+	result := dhcp.Hardware{DHCP: d, Netboot: n, AgentID: hw.Spec.AgentID}
+
+	if i.Isoboot != nil && i.Isoboot.SourceISO != "" {
+		si, err := url.Parse(i.Isoboot.SourceISO)
+		if err != nil {
+			return dhcp.Hardware{}, fmt.Errorf("failed to parse source ISO as a URL %q: %w", i.Isoboot.SourceISO, err)
+		}
+		result.Isoboot = &dhcp.Isoboot{SourceISO: si}
+	}
+
+	return result, nil
+}
+
+// toDHCPData converts a v1alpha1.DHCP to a DHCP data structure.
+// Fields that are set are checked for correctness of their types.
+func toDHCPData(h *v1alpha1.DHCP) (*dhcp.DHCP, error) {
+	if h == nil {
+		return nil, errors.New("no DHCP data")
+	}
+	d := new(dhcp.DHCP)
+
+	var err error
+	if h.MAC != "" {
+		// A valid MACAddress is required
+		if d.MACAddress, err = net.ParseMAC(h.MAC); err != nil {
+			return nil, err
+		}
+	}
+
+	if h.IP != nil {
+		// A valid IPAddress is required
+		if d.IPAddress, err = netip.ParseAddr(h.IP.Address); err != nil {
+			return nil, err
+		}
+		if d.IPAddress.Is4() || d.IPAddress.Is4In6() {
+			// SubnetMask is required for IPv4 addresses
+			sm := net.ParseIP(h.IP.Netmask)
+			if sm == nil {
+				return nil, errors.New("no netmask")
+			}
+			sm4 := sm.To4()
+			if sm4 == nil {
+				return nil, errors.New("netmask must be an IPv4 address")
+			}
+			d.SubnetMask = net.IPMask(sm4)
+		} else if h.IP.Netmask != "" {
+			return nil, errors.New("netmask is not applicable for IPv6 addresses")
+		}
+	}
+
+	// Gateway is optional, but should be a valid IP address if present
+	if h.IP != nil && h.IP.Gateway != "" {
+		if d.DefaultGateway, err = netip.ParseAddr(h.IP.Gateway); err != nil {
+			return nil, err
+		}
+	}
+
+	// name servers, optional
+	for _, s := range h.NameServers {
+		ip := net.ParseIP(s)
+		if ip == nil {
+			continue
+		}
+		d.NameServers = append(d.NameServers, ip)
+	}
+
+	// timeservers, optional
+	for _, s := range h.TimeServers {
+		ip := net.ParseIP(s)
+		if ip == nil {
+			continue
+		}
+		d.NTPServers = append(d.NTPServers, ip)
+	}
+
+	// hostname, optional
+	d.Hostname = h.Hostname
+
+	// domain name, optional
+	d.DomainName = h.DomainName
+
+	// domain search, derived from domain name
+	if h.DomainName != "" {
+		d.DomainSearch = []string{h.DomainName}
+	}
+
+	// broadcast address, computed from IP and netmask
+	if h.IP != nil && d.IPAddress.Is4() && d.SubnetMask != nil {
+		ip4 := d.IPAddress.As4()
+		var broadcast [4]byte
+		// Compute the broadcast address by ORing the IP with the inverted subnet mask,
+		// which sets all host bits to 1.
+		for i := range 4 {
+			broadcast[i] = ip4[i] | ^d.SubnetMask[i]
+		}
+		d.BroadcastAddress = netip.AddrFrom4(broadcast)
+	}
+
+	// lease time required
+	// Default to one week
+	const defaultLeaseTime uint32 = 604800 // 1 week in seconds
+	d.LeaseTime = defaultLeaseTime
+	if v, err := safecast.Convert[uint32](h.LeaseTime); err == nil {
+		d.LeaseTime = v
+	}
+
+	// TFTP server name, optional
+	d.TFTPServerName = h.TFTPServerName
+
+	// Boot file name, optional
+	d.BootFileName = h.BootFileName
+
+	// arch
+	d.Arch = h.Arch
+
+	// vlanid
+	d.VLANID = h.VLANID
+
+	// classless static routes, optional
+	for _, route := range h.ClasslessStaticRoutes {
+		_, destNetwork, err := net.ParseCIDR(route.DestinationDescriptor)
+		if err != nil {
+			return nil, err
+		}
+		routerIP := net.ParseIP(route.Router)
+		if routerIP == nil {
+			return nil, fmt.Errorf("failed to parse router IP %q", route.Router)
+		}
+		d.ClasslessStaticRoutes = append(d.ClasslessStaticRoutes, &dhcpv4.Route{
+			Dest:   destNetwork,
+			Router: routerIP,
+		})
+	}
+
+	return d, nil
+}
+
+// toNetbootData converts a hardware interface to a Netboot data structure.
+func toNetbootData(i *v1alpha1.Netboot, facility string) (*dhcp.Netboot, error) {
+	if i == nil {
+		return nil, errors.New("no netboot data")
+	}
+	n := new(dhcp.Netboot)
+
+	// allow machine to netboot
+	if i.AllowPXE != nil {
+		n.AllowNetboot = *i.AllowPXE
+	}
+
+	// ipxe script url is optional but if provided, it must be a valid url
+	if i.IPXE != nil {
+		if i.IPXE.URL != "" {
+			u, err := url.ParseRequestURI(i.IPXE.URL)
+			if err != nil {
+				return nil, err
+			}
+			n.IPXEScriptURL = u
+		}
+	}
+
+	// ipxescript
+	if i.IPXE != nil {
+		n.IPXEScript = i.IPXE.Contents
+	}
+
+	// ipxebinary
+	if i.IPXE != nil && i.IPXE.Binary != "" {
+		n.IPXEBinary = i.IPXE.Binary
+	}
+
+	// console
+	n.Console = ""
+
+	// facility
+	n.Facility = facility
+
+	// OSIE data
+	n.OSIE = dhcp.OSIE{}
+	if i.OSIE != nil {
+		if b, err := url.Parse(i.OSIE.BaseURL); err == nil {
+			n.OSIE.BaseURL = b
+		}
+		n.OSIE.Kernel = i.OSIE.Kernel
+		n.OSIE.Initrd = i.OSIE.Initrd
+		n.OSIE.KernelParams = i.OSIE.KernelParams
+	}
+
+	// PXELINUX data
+	n.PXELINUX = dhcp.PXELINUX{}
+	if i.PXELINUX != nil {
+		n.PXELINUX.Config = i.PXELINUX.Config
+	}
+
+	// RPI (RaspberryPi-Netboot) data
+	n.RPI = dhcp.RPI{}
+	if i.RPI != nil {
+		n.RPI.SerialNum = i.RPI.SerialNum
+		n.RPI.FirmwarePath = i.RPI.FirmwarePath
+		n.RPI.ConfigTxt = i.RPI.ConfigTxt
+	}
+
+	return n, nil
+}
+
+// transform returns DHCP and Netboot from part a v1alpha1.Interface and *v1alpha1.HardwareMeta
+func transform(i v1alpha1.Interface, m *v1alpha1.HardwareMetadata) (*dhcp.DHCP, *dhcp.Netboot, error) {
+	d, err := toDHCPData(i.DHCP)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to convert hardware to DHCP data: %w", err)
+	}
+	d.Disabled = i.DisableDHCP
+
+	// Facility is used in the default HookOS iPXE script so we get it from the hardware metadata, if set.
+	facility := ""
+	if m != nil {
+		if m.Facility != nil {
+			facility = m.Facility.FacilityCode
+		}
+	}
+
+	n, err := toNetbootData(i.Netboot, facility)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to convert hardware to netboot data: %w", err)
+	}
+
+	return d, n, nil
+}

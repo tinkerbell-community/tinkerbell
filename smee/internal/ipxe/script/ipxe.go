@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
@@ -169,7 +170,7 @@ func (h *Handler) HandlerFunc() http.HandlerFunc {
 }
 
 // serveNetbootNotAllowed answers a client whose Hardware exists but has
-// netboot.allowPXE=false.
+// netboot disabled (netboot.disabled=true; netboot.allowPXE=false in v1alpha1).
 //
 // It is a 403, not the 404 that a missing Hardware record gets, because the
 // two are different problems and only one of them is about the requested URL.
@@ -178,17 +179,17 @@ func (h *Handler) HandlerFunc() http.HandlerFunc {
 // otherwise hand out is never seen and this response is the only signal the
 // operator gets. A 404 there is indistinguishable from a bad URL or a Smee
 // that has not loaded the Hardware, and sends people looking in the wrong
-// place; the status and the body both name allowPXE instead.
+// place; the status and the body both name the setting instead.
 //
 // The body is written as an iPXE comment so a client that fetched this as a
 // script and ignored the status still shows something intelligible rather
 // than a parse error.
 func (h *Handler) serveNetbootNotAllowed(w http.ResponseWriter, client string) {
-	h.Logger.Info("netboot not allowed for this hardware, netboot.allowPXE is false", "client", client)
+	h.Logger.Info("netboot not allowed for this hardware, netboot is disabled", "client", client)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusForbidden)
-	if _, err := fmt.Fprintf(w, "#!ipxe\n# netboot is not allowed for this hardware: netboot.allowPXE is false in the Hardware record (%s)\n", client); err != nil { //nolint:gosec // G705: client is a parsed MAC/IP, and the body is text/plain with nosniff
+	if _, err := fmt.Fprintf(w, "#!ipxe\n# netboot is not allowed for this hardware (%s): netboot.disabled is true in the Hardware record (netboot.allowPXE is false in v1alpha1)\n", client); err != nil { //nolint:gosec // G705: client is a parsed MAC/IP, and the body is text/plain with nosniff
 		h.Logger.Error(err, "unable to send the netboot-not-allowed response", "client", client)
 	}
 }
@@ -359,6 +360,15 @@ func (h *Handler) buildHook(span trace.Span, hw hardware.Info, settings familySe
 	if h.InitrdName != "" {
 		auto.InitrdName = h.InitrdName + "-" + arch
 	}
+	if hw.OSIE.KernelURL != "" || hw.OSIE.InitrdURL != "" {
+		kernelDir, kernelName := osieLocation(hw.OSIE.KernelURL, settings.downloadURL, auto.KernelName)
+		initrdDir, initrdName := osieLocation(hw.OSIE.InitrdURL, settings.downloadURL, auto.InitrdName)
+		auto.DownloadURL, auto.KernelName, auto.InitrdName = kernelDir, kernelName, initrdName
+		if initrdDir != kernelDir {
+			auto.InitrdDownloadURL = initrdDir
+		}
+	}
+	// The OSIE location of Hardware created through v1alpha1, as v1alpha1 held it.
 	if hw.OSIE.BaseURL != nil && hw.OSIE.BaseURL.String() != "" {
 		u := *hw.OSIE.BaseURL
 		if osieURL, err := url.Parse(settings.downloadURL); err == nil && osieURL.Path != "" && (u.Path == "" || u.Path == "/") {
@@ -378,6 +388,39 @@ func (h *Handler) buildHook(span trace.Span, hw hardware.Info, settings familySe
 	}
 
 	return auto
+}
+
+// osieLocation splits ref, the URL of an OSIE file, into the URL of the
+// directory it is in and its name, the way the iPXE script fetches it
+// ("${download-url}/${kernel}"). An empty ref is defaultName in defaultURL. A
+// relative ref is relative to defaultURL as a directory, the way v1alpha1 file
+// names were relative to the OSIE base URL; one with a leading "/" to its host.
+//
+// ref is not parsed and rebuilt, which would escape the iPXE settings, such as
+// ${arch}, that it may contain.
+func osieLocation(ref, defaultURL, defaultName string) (dir, name string) {
+	switch {
+	case ref == "":
+		return defaultURL, defaultName
+	case isAbsoluteURL(ref):
+		i := strings.LastIndex(ref, "/")
+		if i < strings.Index(ref, "://")+3 {
+			// No path: the default file in that directory.
+			return ref, defaultName
+		}
+		return ref[:i], ref[i+1:]
+	case strings.HasPrefix(ref, "/"):
+		if u, err := url.Parse(defaultURL); err == nil && u.Host != "" {
+			return u.Scheme + "://" + u.Host, strings.TrimPrefix(ref, "/")
+		}
+	}
+	return defaultURL, ref
+}
+
+// isAbsoluteURL reports whether ref is a URL with a scheme and a host.
+func isAbsoluteURL(ref string) bool {
+	u, err := url.Parse(ref)
+	return err == nil && u.Scheme != "" && u.Host != "" && strings.Contains(ref, "://")
 }
 
 func (h *Handler) defaultScript(span trace.Span, hw hardware.Info, settings familySettings) (string, error) {

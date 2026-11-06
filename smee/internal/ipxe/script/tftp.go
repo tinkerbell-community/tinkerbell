@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -161,14 +162,7 @@ func (h Handler) HandleTFTP(filename string, rf io.ReaderFrom) error {
 		return e
 	}
 
-	// Build Hook struct from hardware info. A TFTP request carries no client
-	// address here, and the generated configs have only ever been IPv4.
-	auto := h.buildHook(span, hw, h.settingsFor(ipv4))
-	auto.Kernel = tftpFileName(hw.OSIE.Kernel, auto.Arch)
-	auto.Initrd = tftpFileName(hw.OSIE.Initrd, auto.Arch)
-
-	// Generate the iPXE script content
-	content, err := GenerateTemplate(auto, tmplStr)
+	content, err := h.tftpConfig(span, hw, tmplStr)
 	if err != nil {
 		e := fmt.Errorf("failed to generate pxelinux config: %w", err)
 		log.Error(e, "failed to generate pxelinux config")
@@ -182,9 +176,29 @@ func (h Handler) HandleTFTP(filename string, rf io.ReaderFrom) error {
 	return serveContent(content, rf, log, span, filename)
 }
 
-// tftpFileName returns name, a file on the TFTP server, with ${arch}
-// substituted: a TFTP client, unlike iPXE, does not expand it.
-func tftpFileName(name, arch string) string {
+// tftpConfig generates the TFTP config tmpl for hw.
+func (h Handler) tftpConfig(span trace.Span, hw hardware.Info, tmpl string) (string, error) {
+	// A TFTP request carries no client address here, and the generated configs
+	// have only ever been IPv4.
+	auto := h.buildHook(span, hw, h.settingsFor(ipv4))
+	auto.Kernel = tftpFileName(hw.OSIE.KernelURL, hw.OSIE.Kernel, auto.Arch)
+	auto.Initrd = tftpFileName(hw.OSIE.InitrdURL, hw.OSIE.Initrd, auto.Arch)
+
+	return GenerateTemplate(auto, tmpl)
+}
+
+// tftpFileName returns the OSIE file a generated TFTP config loads, relative to
+// the TFTP root: the Hardware's file URL, or, for Hardware created through
+// v1alpha1, its file name. A TFTP client loads files from this server only, so
+// an absolute URL stands for its file name. ${arch} is substituted: a TFTP
+// client, unlike iPXE, does not expand it.
+func tftpFileName(fileURL, name, arch string) string {
+	if fileURL != "" {
+		name = fileURL
+		if u, err := url.Parse(fileURL); err == nil && isAbsoluteURL(fileURL) {
+			name = u.Path[strings.LastIndex(u.Path, "/")+1:]
+		}
+	}
 	return strings.ReplaceAll(name, "${arch}", arch)
 }
 

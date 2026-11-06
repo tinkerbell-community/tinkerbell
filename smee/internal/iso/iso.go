@@ -19,7 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 
 	"github.com/go-logr/logr"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/smee/internal/bootstrap"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
@@ -34,7 +34,7 @@ const (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error)
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Handler is a struct that contains the necessary fields to patch an ISO file with
@@ -292,19 +292,8 @@ func (h *Handler) roundTripWithRedirectCount(req *http.Request, redirectCount in
 				Request:    req,
 			}, nil
 		}
-		// The hardware object doesn't contain a dedicated field for consoles right now and
-		// historically the facility is used as a way to define consoles on a per Hardware basis.
-		var consoles string
-		switch {
-		case fac != "" && strings.Contains(fac, "console="):
-			consoles = fmt.Sprintf("facility=%s", fac)
-		case fac != "":
-			consoles = fmt.Sprintf("facility=%s %s", fac, defaultConsoles)
-		default:
-			consoles = defaultConsoles
-		}
 		// The patch is added to the request context so that it can be used in the Copy method.
-		req = req.WithContext(internal.WithPatch(req.Context(), []byte(h.constructPatch(consoles, ha.String(), hw.DHCP))))
+		req = req.WithContext(internal.WithPatch(req.Context(), []byte(h.constructPatch(facilityConsoles(fac), ha.String(), hw.DHCP))))
 
 		// Get the target URL (either from the hardware object or default SourceISO)
 		fromHWObject := ""
@@ -376,7 +365,7 @@ func (h *Handler) roundTripWithRedirectCount(req *http.Request, redirectCount in
 	tu := req.URL.String()
 	// The parts of a multipart range response are separated by boundaries, so
 	// its bytes are not one run of the ISO the slot can be placed in.
-	if spec, ok := req.Context().Value(hardwareCtxKey{}).(*tinkerbell.Hardware); ok && !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "multipart/") {
+	if spec, ok := req.Context().Value(hardwareCtxKey{}).(*v1alpha2.Hardware); ok && !strings.HasPrefix(strings.ToLower(resp.Header.Get("Content-Type")), "multipart/") {
 		// The body is copied with the response request's context.
 		resp.Request = req.WithContext(withSlot(req.Context(), &slot{archive: archiveFor(spec)}))
 	}
@@ -403,7 +392,7 @@ type hardwareCtxKey struct{}
 
 // withBootstrap prepares req, when bootstrap is enabled, for the bootstrap
 // slot to be placed in the final response, once redirects are followed.
-func (h *Handler) withBootstrap(req *http.Request, spec *tinkerbell.Hardware) *http.Request {
+func (h *Handler) withBootstrap(req *http.Request, spec *v1alpha2.Hardware) *http.Request {
 	if !h.BootstrapEnabled {
 		return req
 	}
@@ -414,13 +403,28 @@ func (h *Handler) withBootstrap(req *http.Request, spec *tinkerbell.Hardware) *h
 
 // archiveFor returns a function that builds spec's bootstrap archive, so that
 // it is only built for a response that holds the slot.
-func archiveFor(spec *tinkerbell.Hardware) func() ([]byte, error) {
+func archiveFor(spec *v1alpha2.Hardware) func() ([]byte, error) {
 	return func() ([]byte, error) {
 		files, err := bootstrap.Files(spec)
 		if err != nil {
 			return nil, err
 		}
 		return bootstrap.Archive(files, bootstrap.ModTime(spec))
+	}
+}
+
+// facilityConsoles returns the facility and console kernel arguments. The
+// hardware object doesn't contain a dedicated field for consoles right now and
+// historically the facility is used as a way to define consoles on a per
+// Hardware basis.
+func facilityConsoles(fac string) string {
+	switch {
+	case fac != "" && strings.Contains(fac, "console="):
+		return fmt.Sprintf("facility=%s", fac)
+	case fac != "":
+		return fmt.Sprintf("facility=%s %s", fac, defaultConsoles)
+	default:
+		return defaultConsoles
 	}
 }
 
@@ -453,12 +457,12 @@ func getMAC(urlPath string) (net.HardwareAddr, error) {
 	return hw, nil
 }
 
-func (h *Handler) getFacility(ctx context.Context, mac net.HardwareAddr, br BackendReader) (string, dhcp.Hardware, *tinkerbell.Hardware, error) {
+func (h *Handler) getFacility(ctx context.Context, mac net.HardwareAddr, br BackendReader) (string, dhcp.Hardware, *v1alpha2.Hardware, error) {
 	if br == nil {
 		return "", dhcp.Hardware{}, nil, errors.New("backend is nil")
 	}
 
-	spec, err := br.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := br.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return "", dhcp.Hardware{}, nil, err
 	}
@@ -467,7 +471,7 @@ func (h *Handler) getFacility(ctx context.Context, mac net.HardwareAddr, br Back
 		return "", dhcp.Hardware{}, nil, fmt.Errorf("failed to convert hardware data: %w", err)
 	}
 
-	return hw.Netboot.Facility, dhcp.Hardware{DHCP: hw.DHCP, Isoboot: hw.Isoboot}, spec, nil
+	return hw.Netboot.Facility, dhcp.Hardware{DHCP: hw.Addressing(), Isoboot: hw.Isoboot}, spec, nil
 }
 
 func randomPercentage(precision int64) float64 {

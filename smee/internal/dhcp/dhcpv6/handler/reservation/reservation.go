@@ -13,7 +13,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv6"
 	"github.com/insomniacslk/dhcp/iana"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	tbotel "github.com/tinkerbell/tinkerbell/pkg/otel"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
@@ -35,7 +35,7 @@ const (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error)
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // BootURLSource supplies DHCPv6 request parsing options and boot URLs.
@@ -226,7 +226,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 		return
 	}
 
-	if hw.DHCP.Disabled {
+	if hw.DHCPv6.Disabled {
 		log.Info("DHCP is disabled for this MAC address, no response sent")
 		span.SetStatus(codes.Ok, "disabled DHCP response")
 		return
@@ -238,13 +238,13 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 		return
 	}
 
-	ipAddress := h.addressFor(i, hw.DHCP.IPAddress)
+	ipAddress := h.addressFor(i, hw.DHCPv6.IPAddress)
 	if !ipAddress.Is6() {
 		if isReleaseOrDecline(i.Msg.Type()) {
 			h.writeReleaseOrDeclineReply(conn, peer, i, log, span, noBindingIANAStatuses(i))
 			return
 		}
-		log.Info("ignoring DHCPv6 packet: IPv6 address unavailable", "ipAddress", hw.DHCP.IPAddress.String(), "mode", h.modeName())
+		log.Info("ignoring DHCPv6 packet: IPv6 address unavailable", "ipAddress", hw.DHCPv6.IPAddress.String(), "mode", h.modeName())
 		span.SetStatus(codes.Ok, "IPv6 address unavailable")
 		return
 	}
@@ -254,7 +254,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 		return
 	}
 
-	reply, err := h.reply(ctx, i, hw.DHCP, hw.Netboot, ipAddress)
+	reply, err := h.reply(ctx, i, hw.DHCPv6, hw.Netboot, ipAddress)
 	if err != nil {
 		if errors.Is(err, v6.ErrNoBootURL) {
 			// Netboot requests are all-or-nothing: if a client explicitly asks for
@@ -312,7 +312,7 @@ func (h *Handler) writeReleaseOrDeclineReply(conn net.PacketConn, peer net.Addr,
 }
 
 func (h *Handler) readBackend(ctx context.Context, mac net.HardwareAddr) (dhcp.Hardware, error) {
-	spec, err := h.backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := h.backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return dhcp.Hardware{}, err
 	}
@@ -322,7 +322,7 @@ func (h *Handler) readBackend(ctx context.Context, mac net.HardwareAddr) (dhcp.H
 		return dhcp.Hardware{}, err
 	}
 
-	if hw.DHCP == nil {
+	if hw.DHCPv6 == nil {
 		return dhcp.Hardware{}, errors.New("no DHCP data")
 	}
 

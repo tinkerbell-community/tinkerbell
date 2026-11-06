@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 )
 
 // Dir is where the delivered files land in the initramfs, relative to its root.
@@ -17,24 +17,24 @@ const Dir = "osie_files"
 // Files returns the per-host files to deliver.
 //
 // Content is entirely user defined: every file comes from the Hardware's
-// spec.metadata.osieFiles, placed under Dir. Nothing is synthesized, so a Hardware
-// with no files produces an empty archive.
-func Files(hw *tinkerbell.Hardware) ([]File, error) {
-	if hw == nil || hw.Spec.Metadata == nil {
+// spec.instance.osie.files, placed under Dir. Nothing is synthesized, so a
+// Hardware with no files produces an empty archive.
+func Files(hw *v1alpha2.Hardware) ([]File, error) {
+	if hw == nil || hw.Spec.Instance == nil || hw.Spec.Instance.OSIE == nil {
 		return nil, nil
 	}
 
-	files := make([]File, 0, len(hw.Spec.Metadata.OSIEFiles))
-	for i, f := range hw.Spec.Metadata.OSIEFiles {
+	files := make([]File, 0, len(hw.Spec.Instance.OSIE.Files))
+	for i, f := range hw.Spec.Instance.OSIE.Files {
 		// Paths are relative to Dir; a leading "/" is a common way to write one
 		// and means the same thing.
 		p := strings.TrimSpace(strings.TrimPrefix(f.Path, "/"))
 		if p == "" {
-			return nil, fmt.Errorf("spec.metadata.osieFiles[%d] has an empty path", i)
+			return nil, fmt.Errorf("spec.instance.osie.files[%d] has an empty path", i)
 		}
 		mode, err := parseMode(f.Mode)
 		if err != nil {
-			return nil, fmt.Errorf("spec.metadata.osieFiles[%d] (%s): %w", i, p, err)
+			return nil, fmt.Errorf("spec.instance.osie.files[%d] (%s): %w", i, p, err)
 		}
 		files = append(files, File{Name: Dir + "/" + p, Mode: mode, Data: []byte(f.Contents)})
 	}
@@ -70,7 +70,7 @@ func parseMode(s string) (uint32, error) {
 // The Hardware's creation time is used because it is stable for the life of the
 // object; see [Archive] for why a live clock cannot be. It does not move when
 // the files themselves are edited.
-func ModTime(hw *tinkerbell.Hardware) time.Time {
+func ModTime(hw *v1alpha2.Hardware) time.Time {
 	if hw == nil {
 		return time.Time{}
 	}

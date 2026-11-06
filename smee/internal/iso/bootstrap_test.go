@@ -21,8 +21,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/smee/internal/bootstrap"
+	"github.com/tinkerbell/tinkerbell/smee/internal/paritytest"
 )
 
 const (
@@ -107,7 +109,7 @@ type bootstrapBackend struct {
 	files []tinkerbell.OSIEFile
 }
 
-func (b bootstrapBackend) FilterHardware(_ context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error) {
+func (b bootstrapBackend) filterV1Alpha1(_ context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error) {
 	if opts.ByMACAddress == "" {
 		return nil, fmt.Errorf("hardware not found")
 	}
@@ -441,4 +443,14 @@ func TestBootstrapSlotUpstreamError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// it to a v1alpha2 reader.
+func (b bootstrapBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	hw, err := b.filterV1Alpha1(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return paritytest.ToV1Alpha2(hw)
 }

@@ -12,8 +12,9 @@ import (
 )
 
 // ErrNetbootNotAllowed marks a request that was declined solely because the
-// Hardware matching the client has netboot disabled (netboot.allowPXE=false in
-// the Hardware, which dhcp.Convert* turns into hardware.Info.AllowNetboot).
+// Hardware matching the client has netboot disabled (netboot.disabled=true in
+// the Hardware, netboot.allowPXE=false in v1alpha1, which dhcp.Convert* turns
+// into hardware.Info.AllowNetboot).
 //
 // It exists to keep that case distinguishable from "this file does not exist".
 // In the L3 scenarios (external DHCP, static IPs, DHCP relay) Smee's DHCP
@@ -27,7 +28,7 @@ import (
 // routes; if none of them serve the request, the Router returns this instead of
 // os.ErrNotExist, and the transports turn it into 403 Forbidden (HTTP) or a
 // TFTP error whose message names the cause.
-var ErrNetbootNotAllowed = errors.New("netboot is not allowed for this hardware: netboot.allowPXE is false in the Hardware record")
+var ErrNetbootNotAllowed = errors.New("netboot is not allowed for this hardware: netboot.disabled is true in the Hardware record (netboot.allowPXE is false in v1alpha1)")
 
 // netbootNotAllowedForMAC/IP wrap ErrNetbootNotAllowed with the identity the
 // route matched on, so the message the client is shown (TFTP puts it in the

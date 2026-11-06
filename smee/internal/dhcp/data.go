@@ -10,17 +10,48 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-// Hardware is the combination of structs that hold all the data about a piece of hardware.
+// Hardware is the combination of structs that hold all the data about one
+// network interface of a piece of hardware.
 type Hardware struct {
 	// Holds the assigned AgentID from the hardware object
 	AgentID string
-	// DHCP holds the DHCP headers and options to be set in a DHCP handler response.
+	// DHCP holds the DHCPv4 headers and options to be set in a DHCP handler response:
+	// the interface's ipam.ipv4, dhcp.ipv4 and netboot.ipv4.
 	// This is the API between a DHCP handler and a backend.
 	DHCP *DHCP
+	// DHCPv6 holds the data to be set in a DHCPv6 handler response: the
+	// interface's ipam.ipv6 and dhcp.ipv6. An interface without ipam.ipv6 is
+	// served the name servers, NTP servers and search domains of its ipam.ipv4.
+	DHCPv6 *DHCP
 	// Netboot holds info used in netbooting a client.
 	Netboot *Netboot
 	// Isoboot holds info used in booting a client using an ISO image.
 	Isoboot *Isoboot
+}
+
+// Addressing returns the interface's IP configuration for uses that take one,
+// such as a static IP kernel argument: the IPv4 configuration, or the IPv6
+// configuration when the interface has an IPv6 address and no IPv4 address.
+func (h Hardware) Addressing() *DHCP {
+	if h.DHCP != nil && h.DHCP.IPAddress.IsValid() {
+		return h.DHCP
+	}
+	if h.DHCPv6 != nil && h.DHCPv6.IPAddress.IsValid() {
+		return h.DHCPv6
+	}
+	return h.DHCP
+}
+
+// VLANID returns the interface's VLAN ID: that of its IPv4 configuration, or
+// of its IPv6 configuration when the IPv4 one sets none.
+func (h Hardware) VLANID() string {
+	if h.DHCP != nil && h.DHCP.VLANID != "" {
+		return h.DHCP.VLANID
+	}
+	if h.DHCPv6 != nil {
+		return h.DHCPv6.VLANID
+	}
+	return ""
 }
 
 // DHCP holds the DHCP headers and options to be set in a DHCP handler response.
@@ -36,7 +67,7 @@ type DHCP struct {
 	BroadcastAddress      netip.Addr       // DHCP option 28.
 	NTPServers            []net.IP         // DHCP option 42.
 	VLANID                string           // DHCP option 43.116.
-	LeaseTime             uint32           // DHCP option 51.
+	LeaseTime             uint32           // DHCP option 51; for DHCPv6 the IA address valid lifetime, 0 meaning the default.
 	TFTPServerName        string           // DHCP option 66.
 	BootFileName          string           // DHCP option 67.
 	Arch                  string           // DHCP option 93.
@@ -79,7 +110,16 @@ type RPI struct {
 }
 
 // OSIE or OS Installation Environment is the data about where the OSIE parts are located.
+//
+// The kernel and initrd are located by KernelURL and InitrdURL, the Hardware's
+// instance.osie, or, for Hardware created through v1alpha1, by BaseURL, Kernel
+// and Initrd as v1alpha1 held them. Only one of the two forms is set.
 type OSIE struct {
+	// KernelURL is the URL of the kernel: absolute, or a reference relative to
+	// the default OSIE URL. ${arch} in it is the client's architecture.
+	KernelURL string
+	// InitrdURL is KernelURL for the initrd.
+	InitrdURL string
 	// BaseURL is the URL where the OSIE parts are located.
 	BaseURL *url.URL
 	// Kernel is the name of the kernel file.

@@ -14,10 +14,12 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv6"
 	"github.com/insomniacslk/dhcp/iana"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	tbotel "github.com/tinkerbell/tinkerbell/pkg/otel"
 	v6 "github.com/tinkerbell/tinkerbell/smee/internal/dhcp/dhcpv6"
+	"github.com/tinkerbell/tinkerbell/smee/internal/paritytest"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 )
@@ -51,7 +53,7 @@ type hardwareNotFoundError struct{}
 func (hardwareNotFoundError) Error() string  { return "not found" }
 func (hardwareNotFoundError) NotFound() bool { return true }
 
-func (m *mockBackend) FilterHardware(_ context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error) {
+func (m *mockBackend) filterV1Alpha1(_ context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -683,7 +685,8 @@ func TestHandleAutoStatelessIgnoresBackendLookupErrors(t *testing.T) {
 func TestHandleAutoStatelessIgnoresUnusableKnownHardware(t *testing.T) {
 	mac := net.HardwareAddr{0, 1, 2, 3, 4, 5}
 	hardware := hardwareForMAC(mac, true, "", "", nil, "")
-	hardware.Spec.Interfaces[0].Netboot = nil
+	// A bad iPXE script URL makes the Hardware unusable.
+	hardware.Spec.Interfaces[0].Netboot.IPXE.URL = "not a URL"
 	handler := newAutoHandler(t, map[string]*tinkerbell.Hardware{
 		mac.String(): hardware,
 	})
@@ -1190,4 +1193,14 @@ func hardwareForMACWithArch(mac net.HardwareAddr, allowNetboot bool, binary, scr
 			},
 		},
 	}
+}
+
+// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// it to a v1alpha2 reader.
+func (m *mockBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	hw, err := m.filterV1Alpha1(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return paritytest.ToV1Alpha2(hw)
 }

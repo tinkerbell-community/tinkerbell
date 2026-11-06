@@ -5,14 +5,14 @@ import (
 	"context"
 	"errors"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 )
 
 // Handler is a noop backend.
 type noop struct{}
 
-// FilterHardware returns an error.
-func (h noop) FilterHardware(_ context.Context, _ data.HardwareFilter) (*tinkerbell.Hardware, error) {
+// FilterHardwareV1Alpha2 returns an error.
+func (h noop) FilterHardwareV1Alpha2(_ context.Context, _ data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	return nil, errors.New("no backend specified, please specify a backend")
 }

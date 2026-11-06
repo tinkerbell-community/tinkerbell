@@ -10,6 +10,9 @@ echo Debug TraceID: {{ .TraceID }}
 
 set arch {{ .Arch }}
 set download-url {{ .DownloadURL }}
+{{- if .InitrdDownloadURL }}
+set initrd-download-url {{ .InitrdDownloadURL }}
+{{- end }}
 set kernel {{ if .KernelName }}{{ .KernelName }}{{ else }}vmlinuz-${arch}{{ end }}
 set initrd {{ if .InitrdName }}{{ .InitrdName }}{{ else }}initramfs-${arch}{{ end }}
 set retries:int32 {{ .Retries }}
@@ -24,7 +27,7 @@ modules=loop,squashfs,sd-mod,usb-storage intel_iommu=on iommu=pt initrd=${initrd
 :download_initrd
 set idx:int32 0
 :retry_initrd
-initrd ${download-url}/${initrd} && goto {{ if .BootstrapURL }}download_bootstrap{{ else }}boot{{ end }} || iseq ${idx} ${retries} && goto initrd-error || inc idx && echo retry in ${retry_delay} seconds ; sleep ${retry_delay} ; goto retry_initrd
+initrd ${ {{- if .InitrdDownloadURL }}initrd-download-url{{ else }}download-url{{ end -}} }/${initrd} && goto {{ if .BootstrapURL }}download_bootstrap{{ else }}boot{{ end }} || iseq ${idx} ${retries} && goto initrd-error || inc idx && echo retry in ${retry_delay} seconds ; sleep ${retry_delay} ; goto retry_initrd
 {{- if .BootstrapURL }}
 
 :download_bootstrap
@@ -68,6 +71,7 @@ type Hook struct {
 	Arch                  string        // example x86_64
 	Console               string        // example ttyS1,115200
 	DownloadURL           string        // example https://location:8080/to/kernel/and/initrd
+	InitrdDownloadURL     string        // where the initrd is, when not in DownloadURL
 	ExtraKernelParams     []string      // example tink_worker_image=quay.io/tinkerbell/tink-worker:v0.8.0
 	Facility              string
 	HWAddr                string // example 3c:ec:ef:4c:4f:54

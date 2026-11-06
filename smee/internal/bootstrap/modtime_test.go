@@ -9,6 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/smee/internal/paritytest"
 )
 
 func TestArchiveModTime(t *testing.T) {
@@ -62,21 +63,21 @@ func TestArchiveIsStableAcrossCalls(t *testing.T) {
 		}},
 	}
 
-	first, err := Files(hw)
+	first, err := Files(paritytest.V1Alpha2(t, hw))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := Archive(first, ModTime(hw))
+	want, err := Archive(first, ModTime(paritytest.V1Alpha2(t, hw)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	for range 50 {
-		files, err := Files(hw)
+		files, err := Files(paritytest.V1Alpha2(t, hw))
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := Archive(files, ModTime(hw))
+		got, err := Archive(files, ModTime(paritytest.V1Alpha2(t, hw)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -100,7 +101,7 @@ func TestModTime(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			if got := ModTime(tt.hw); !got.Equal(tt.want) {
+			if got := ModTime(paritytest.V1Alpha2(t, tt.hw)); !got.Equal(tt.want) {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
 		})

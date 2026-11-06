@@ -9,566 +9,354 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
+	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func boolPtr(b bool) *bool { return &b }
+var testMAC = net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff}
+
+func hardwareWith(ni v1alpha2.NetworkInterface) *v1alpha2.Hardware {
+	return &v1alpha2.Hardware{
+		ObjectMeta: metav1.ObjectMeta{Name: "hw", Namespace: "tink"},
+		Spec: v1alpha2.HardwareSpec{
+			NetworkInterfaces: v1alpha2.NetworkInterfaces{"aa:bb:cc:dd:ee:ff": ni},
+		},
+	}
+}
 
 func TestConvertByMac(t *testing.T) {
 	tests := map[string]struct {
+		hw        *v1alpha2.Hardware
 		mac       net.HardwareAddr
-		hw        *tinkerbell.Hardware
 		want      Hardware
 		shouldErr bool
 	}{
-		"nil hardware": {
-			mac:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw:        nil,
+		"nil hardware":     {shouldErr: true},
+		"no interfaces":    {hw: &v1alpha2.Hardware{}, shouldErr: true},
+		"no matching MAC":  {hw: hardwareWith(v1alpha2.NetworkInterface{}), mac: net.HardwareAddr{0, 1, 2, 3, 4, 5}, shouldErr: true},
+		"bad iPXE URL":     {hw: hardwareWith(v1alpha2.NetworkInterface{Netboot: &v1alpha2.Netboot{IPXE: &v1alpha2.IPXE{URL: "bad"}}}), shouldErr: true},
+		"bad address":      {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{Address: "bad"}}}), shouldErr: true},
+		"IPv4 no prefix":   {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{Address: "192.168.2.4"}}}), shouldErr: true},
+		"IPv4 bad prefix":  {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{Address: "192.168.2.4", Prefix: "33"}}}), shouldErr: true},
+		"bad gateway":      {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{Address: "192.168.2.4", Prefix: "24", Gateway: "bad"}}}), shouldErr: true},
+		"bad IPv6 address": {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv6: &v1alpha2.IP{Address: "bad"}}}), shouldErr: true},
+		"bad route": {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{
+			ClasslessStaticRoutes: []v1alpha2.ClasslessStaticRoute{{DestinationDescriptor: "10.0.0.0/33", Router: "192.168.2.1"}},
+		}}}), shouldErr: true},
+		"bad route router": {hw: hardwareWith(v1alpha2.NetworkInterface{IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{
+			ClasslessStaticRoutes: []v1alpha2.ClasslessStaticRoute{{DestinationDescriptor: "10.0.0.0/8", Router: "bad"}},
+		}}}), shouldErr: true},
+		"bad ISO URL": {
+			hw: func() *v1alpha2.Hardware {
+				hw := hardwareWith(v1alpha2.NetworkInterface{})
+				hw.Spec.Instance = &v1alpha2.Instance{OSIE: &v1alpha2.OSIE{ISOURL: "http://[::1"}}
+				return hw
+			}(),
 			shouldErr: true,
 		},
-		"empty interfaces": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw:  &tinkerbell.Hardware{},
-			// no matching interface means transform gets a zero-value Interface which has nil DHCP/Netboot
-			shouldErr: true,
-		},
-		"no matching mac": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "00:11:22:33:44:55",
-								Hostname: "other",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "255.255.255.0",
-									Gateway: "10.0.0.254",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			// No match means zero-value Interface -> nil DHCP -> transform error
-			shouldErr: true,
-		},
-		"matching mac with full DHCP and netboot": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "test-host",
-								IP: &tinkerbell.IP{
-									Address: "192.168.1.10",
-									Netmask: "255.255.255.0",
-									Gateway: "192.168.1.1",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{
-								AllowPXE: boolPtr(true),
-								IPXE:     &tinkerbell.IPXE{URL: "http://example.com/auto.ipxe"},
-							},
-						},
-					},
-				},
-			},
+		"empty interface": {
+			hw: hardwareWith(v1alpha2.NetworkInterface{}),
 			want: Hardware{
+				DHCP:    &DHCP{MACAddress: testMAC, LeaseTime: defaultLeaseTime},
+				DHCPv6:  &DHCP{MACAddress: testMAC},
+				Netboot: &Netboot{AllowNetboot: true},
+			},
+		},
+		"MAC is matched case insensitively": {
+			hw: &v1alpha2.Hardware{Spec: v1alpha2.HardwareSpec{NetworkInterfaces: v1alpha2.NetworkInterfaces{"AA:BB:CC:DD:EE:FF": {}}}},
+			want: Hardware{
+				DHCP:    &DHCP{MACAddress: testMAC, LeaseTime: defaultLeaseTime},
+				DHCPv6:  &DHCP{MACAddress: testMAC},
+				Netboot: &Netboot{AllowNetboot: true},
+			},
+		},
+		"dual stack": {
+			hw: &v1alpha2.Hardware{Spec: v1alpha2.HardwareSpec{
+				AgentID: "agent",
+				Arch:    "aarch64",
+				Instance: &v1alpha2.Instance{OSIE: &v1alpha2.OSIE{
+					KernelURL:    "http://osie/vmlinuz-${arch}",
+					InitrdURL:    "initramfs",
+					KernelParams: []string{"a=1"},
+					ISOURL:       "http://iso/hook.iso",
+				}},
+				NetworkInterfaces: v1alpha2.NetworkInterfaces{"aa:bb:cc:dd:ee:ff": {
+					IPAM: &v1alpha2.IPAM{
+						IPv4: &v1alpha2.IP{
+							Address:          "192.168.2.10",
+							Prefix:           "24",
+							Gateway:          "192.168.2.1",
+							Hostname:         ptrTo("four"),
+							VLANID:           ptrTo("40"),
+							Nameservers:      []v1alpha2.Nameserver{"1.1.1.1", "dns.example.com"},
+							NTPServers:       []v1alpha2.Timeserver{"132.163.96.2"},
+							DomainSearchList: []string{"example.com", "example.org"},
+							ClasslessStaticRoutes: []v1alpha2.ClasslessStaticRoute{
+								{DestinationDescriptor: "10.0.0.0/8", Router: "192.168.2.254"},
+							},
+						},
+						IPv6: &v1alpha2.IP{
+							Address:          "2001:db8::10",
+							Prefix:           "64",
+							Gateway:          "2001:db8::1",
+							Hostname:         ptrTo("six"),
+							VLANID:           ptrTo("60"),
+							Nameservers:      []v1alpha2.Nameserver{"2001:db8::53"},
+							NTPServers:       []v1alpha2.Timeserver{"2001:db8::123"},
+							DomainSearchList: []string{"six.example.com"},
+						},
+					},
+					DHCP: &v1alpha2.DHCP{
+						IPv4: &v1alpha2.DHCPv4{LeaseTimeSeconds: ptrTo[int64](3600)},
+						IPv6: &v1alpha2.DHCPv6{Disabled: true, ValidLifetime: ptrTo[int64](7200)},
+					},
+					Netboot: &v1alpha2.Netboot{
+						IPv4:     &v1alpha2.Netbootv4{TFTPServerName: "192.168.2.5", BootFileName: "boot.efi"},
+						IPXE:     &v1alpha2.IPXE{URL: "http://boot/custom.ipxe", Binary: "ipxe.efi"},
+						PXELINUX: &v1alpha2.PXELINUX{Config: "default deploy"},
+						RPI:      &v1alpha2.RPI{SerialNum: "1234abcd", FirmwarePath: "fw", ConfigTxt: "x=1"},
+					},
+				}},
+			}},
+			want: Hardware{
+				AgentID: "agent",
 				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("192.168.1.10"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					DefaultGateway:   netip.MustParseAddr("192.168.1.1"),
-					Hostname:         "test-host",
-					BroadcastAddress: netip.MustParseAddr("192.168.1.255"),
-					LeaseTime:        0,
+					MACAddress:       testMAC,
+					IPAddress:        netip.MustParseAddr("192.168.2.10"),
+					SubnetMask:       net.CIDRMask(24, 32),
+					DefaultGateway:   netip.MustParseAddr("192.168.2.1"),
+					NameServers:      []net.IP{net.ParseIP("1.1.1.1")},
+					Hostname:         "four",
+					DomainName:       "example.com",
+					BroadcastAddress: netip.MustParseAddr("192.168.2.255"),
+					NTPServers:       []net.IP{net.ParseIP("132.163.96.2")},
+					VLANID:           "40",
+					LeaseTime:        3600,
+					TFTPServerName:   "192.168.2.5",
+					BootFileName:     "boot.efi",
+					Arch:             "aarch64",
+					DomainSearch:     []string{"example.com", "example.org"},
+					ClasslessStaticRoutes: dhcpv4.Routes{{
+						Dest:   &net.IPNet{IP: net.IPv4(10, 0, 0, 0).To4(), Mask: net.CIDRMask(8, 32)},
+						Router: net.ParseIP("192.168.2.254"),
+					}},
+				},
+				DHCPv6: &DHCP{
+					MACAddress:     testMAC,
+					IPAddress:      netip.MustParseAddr("2001:db8::10"),
+					DefaultGateway: netip.MustParseAddr("2001:db8::1"),
+					NameServers:    []net.IP{net.ParseIP("2001:db8::53")},
+					Hostname:       "six",
+					DomainName:     "six.example.com",
+					NTPServers:     []net.IP{net.ParseIP("2001:db8::123")},
+					VLANID:         "60",
+					LeaseTime:      7200,
+					Arch:           "aarch64",
+					DomainSearch:   []string{"six.example.com"},
+					Disabled:       true,
 				},
 				Netboot: &Netboot{
 					AllowNetboot:  true,
-					IPXEScriptURL: &url.URL{Scheme: "http", Host: "example.com", Path: "/auto.ipxe"},
+					IPXEScriptURL: &url.URL{Scheme: "http", Host: "boot", Path: "/custom.ipxe"},
+					IPXEBinary:    "ipxe.efi",
+					OSIE:          OSIE{KernelURL: "http://osie/vmlinuz-${arch}", InitrdURL: "initramfs", KernelParams: []string{"a=1"}},
+					PXELINUX:      PXELINUX{Config: "default deploy"},
+					RPI:           RPI{SerialNum: "1234abcd", FirmwarePath: "fw", ConfigTxt: "x=1"},
 				},
+				Isoboot: &Isoboot{SourceISO: &url.URL{Scheme: "http", Host: "iso", Path: "/hook.iso"}},
 			},
 		},
-		"matching mac among multiple interfaces": {
-			mac: net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "wrong",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "255.0.0.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(false)},
-						},
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "00:11:22:33:44:55",
-								Hostname: "correct",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.2",
-									Netmask: "255.0.0.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
+		"IPv4 only is served the IPv6 servers of it over DHCPv6": {
+			hw: hardwareWith(v1alpha2.NetworkInterface{
+				IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{
+					Address:          "192.168.2.10",
+					Prefix:           "24",
+					Hostname:         ptrTo("four"),
+					Nameservers:      []v1alpha2.Nameserver{"1.1.1.1", "2001:db8::53"},
+					NTPServers:       []v1alpha2.Timeserver{"2001:db8::123"},
+					DomainSearchList: []string{"example.com"},
+				}},
+				DHCP:    &v1alpha2.DHCP{IPv4: &v1alpha2.DHCPv4{Disabled: true}},
+				Netboot: &v1alpha2.Netboot{Disabled: true, IPXE: &v1alpha2.IPXE{Script: "#!ipxe\nexit"}},
+			}),
 			want: Hardware{
 				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
-					IPAddress:        netip.MustParseAddr("10.0.0.2"),
-					SubnetMask:       net.IPv4Mask(255, 0, 0, 0),
-					Hostname:         "correct",
-					BroadcastAddress: netip.MustParseAddr("10.255.255.255"),
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
-		"with isoboot": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "iso-host",
-								IP: &tinkerbell.IP{
-									Address: "192.168.2.5",
-									Netmask: "255.255.255.0",
-									Gateway: "192.168.2.1",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-							Isoboot: &tinkerbell.Isoboot{SourceISO: "http://example.com/hook.iso"},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("192.168.2.5"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					DefaultGateway:   netip.MustParseAddr("192.168.2.1"),
-					Hostname:         "iso-host",
+					MACAddress:       testMAC,
+					IPAddress:        netip.MustParseAddr("192.168.2.10"),
+					SubnetMask:       net.CIDRMask(24, 32),
+					NameServers:      []net.IP{net.ParseIP("1.1.1.1"), net.ParseIP("2001:db8::53")},
+					NTPServers:       []net.IP{net.ParseIP("2001:db8::123")},
+					Hostname:         "four",
+					DomainName:       "example.com",
+					DomainSearch:     []string{"example.com"},
 					BroadcastAddress: netip.MustParseAddr("192.168.2.255"),
-					LeaseTime:        0,
+					LeaseTime:        defaultLeaseTime,
+					Disabled:         true,
 				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
+				DHCPv6: &DHCP{
+					MACAddress:   testMAC,
+					NameServers:  []net.IP{net.ParseIP("1.1.1.1"), net.ParseIP("2001:db8::53")},
+					NTPServers:   []net.IP{net.ParseIP("2001:db8::123")},
+					DomainName:   "example.com",
+					DomainSearch: []string{"example.com"},
 				},
-				Isoboot: &Isoboot{SourceISO: &url.URL{Scheme: "http", Host: "example.com", Path: "/hook.iso"}},
+				Netboot: &Netboot{IPXEScript: "#!ipxe\nexit"},
 			},
 		},
-		"with metadata facility": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "255.255.255.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(false)},
-						},
-					},
-					Metadata: &tinkerbell.HardwareMetadata{
-						Facility: &tinkerbell.MetadataFacility{FacilityCode: "dc1"},
-					},
-				},
-			},
+		"lease times that do not fit are the defaults": {
+			hw: hardwareWith(v1alpha2.NetworkInterface{DHCP: &v1alpha2.DHCP{
+				IPv4: &v1alpha2.DHCPv4{LeaseTimeSeconds: ptrTo[int64](1 << 33)},
+				IPv6: &v1alpha2.DHCPv6{ValidLifetime: ptrTo[int64](-1)},
+			}}),
 			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("10.0.0.1"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					BroadcastAddress: netip.MustParseAddr("10.0.0.255"),
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					Facility: "dc1",
-				},
+				DHCP:    &DHCP{MACAddress: testMAC, LeaseTime: defaultLeaseTime},
+				DHCPv6:  &DHCP{MACAddress: testMAC},
+				Netboot: &Netboot{AllowNetboot: true},
 			},
 		},
-		"with agent id": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					AgentID: "custom-worker-1",
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "agent-host",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.5",
-									Netmask: "255.255.255.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
+		"a zero lease time is zero": {
+			hw: hardwareWith(v1alpha2.NetworkInterface{DHCP: &v1alpha2.DHCP{
+				IPv4: &v1alpha2.DHCPv4{LeaseTimeSeconds: ptrTo[int64](0)},
+			}}),
 			want: Hardware{
-				AgentID: "custom-worker-1",
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("10.0.0.5"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					BroadcastAddress: netip.MustParseAddr("10.0.0.255"),
-					Hostname:         "agent-host",
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
+				DHCP:    &DHCP{MACAddress: testMAC},
+				DHCPv6:  &DHCP{MACAddress: testMAC},
+				Netboot: &Netboot{AllowNetboot: true},
 			},
-		},
-		"ipv6 address no netmask": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "ipv6-host",
-								IP: &tinkerbell.IP{
-									Address: "2001:db8::1",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:  netip.MustParseAddr("2001:db8::1"),
-					Hostname:   "ipv6-host",
-					LeaseTime:  0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
-		"ipv6 address with netmask errors": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-								IP: &tinkerbell.IP{
-									Address: "2001:db8::1",
-									Netmask: "255.255.255.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			shouldErr: true,
-		},
-		"ipv6 gateway with ipv6 ip": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "ipv6-gw",
-								IP: &tinkerbell.IP{
-									Address: "2001:db8::1",
-									Gateway: "2001:db8::fffe",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress:     net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:      netip.MustParseAddr("2001:db8::1"),
-					DefaultGateway: netip.MustParseAddr("2001:db8::fffe"),
-					Hostname:       "ipv6-gw",
-					LeaseTime:      0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
-		"nameservers with invalid in middle preserved": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "255.255.255.0",
-								},
-								NameServers: []string{"8.8.8.8", "not-an-ip", "8.8.4.4"},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("10.0.0.1"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					BroadcastAddress: netip.MustParseAddr("10.0.0.255"),
-					NameServers:      []net.IP{net.ParseIP("8.8.8.8"), net.ParseIP("8.8.4.4")},
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
-		"ipv4 netmask as ipv6 errors": {
-			mac: net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "2001:db8::1",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			shouldErr: true,
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := ConvertByMac(context.Background(), tt.mac, tt.hw)
+			mac := testMAC
+			if tt.mac != nil {
+				mac = tt.mac
+			}
+			got, err := ConvertByMac(context.Background(), mac, tt.hw)
 			if tt.shouldErr {
 				if err == nil {
-					t.Fatal("expected error, got nil")
+					t.Fatal("expected an error")
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+				t.Fatal(err)
 			}
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(netip.Addr{})); diff != "" {
-				t.Fatalf("mismatch (-got +want):\n%s", diff)
+			if diff := cmp.Diff(tt.want, got, cmpopts.EquateComparable(netip.Addr{})); diff != "" {
+				t.Fatal(diff)
 			}
 		})
 	}
 }
 
 func TestConvertByIP(t *testing.T) {
+	hw := &v1alpha2.Hardware{Spec: v1alpha2.HardwareSpec{NetworkInterfaces: v1alpha2.NetworkInterfaces{
+		"aa:bb:cc:dd:ee:01": {IPAM: &v1alpha2.IPAM{IPv4: &v1alpha2.IP{Address: "192.168.2.1", Prefix: "24"}}},
+		"aa:bb:cc:dd:ee:02": {IPAM: &v1alpha2.IPAM{
+			IPv4: &v1alpha2.IP{Address: "192.168.2.2", Prefix: "24"},
+			IPv6: &v1alpha2.IP{Address: "2001:db8::2"},
+		}},
+	}}}
 	tests := map[string]struct {
 		ip        net.IP
-		hw        *tinkerbell.Hardware
-		want      Hardware
+		wantMAC   string
 		shouldErr bool
 	}{
-		"nil hardware": {
-			ip:        net.ParseIP("192.168.1.10"),
-			hw:        nil,
-			shouldErr: true,
-		},
-		"empty interfaces": {
-			ip:        net.ParseIP("192.168.1.10"),
-			hw:        &tinkerbell.Hardware{},
-			shouldErr: true,
-		},
-		"no matching ip": {
-			ip: net.ParseIP("192.168.1.10"),
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "255.255.255.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			// No matching IP -> zero Interface -> nil DHCP -> transform error
-			shouldErr: true,
-		},
-		"matching ip": {
-			ip: net.ParseIP("192.168.1.10"),
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "by-ip",
-								IP: &tinkerbell.IP{
-									Address: "192.168.1.10",
-									Netmask: "255.255.255.0",
-									Gateway: "192.168.1.1",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("192.168.1.10"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					DefaultGateway:   netip.MustParseAddr("192.168.1.1"),
-					Hostname:         "by-ip",
-					BroadcastAddress: netip.MustParseAddr("192.168.1.255"),
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
-		"with agent id": {
-			ip: net.ParseIP("192.168.1.10"),
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					AgentID: "custom-worker-2",
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "agent-host",
-								IP: &tinkerbell.IP{
-									Address: "192.168.1.10",
-									Netmask: "255.255.255.0",
-									Gateway: "192.168.1.1",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				AgentID: "custom-worker-2",
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff},
-					IPAddress:        netip.MustParseAddr("192.168.1.10"),
-					SubnetMask:       net.IPv4Mask(255, 255, 255, 0),
-					DefaultGateway:   netip.MustParseAddr("192.168.1.1"),
-					BroadcastAddress: netip.MustParseAddr("192.168.1.255"),
-					Hostname:         "agent-host",
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
-		"matching ip among multiple interfaces": {
-			ip: net.ParseIP("10.0.0.2"),
-			hw: &tinkerbell.Hardware{
-				Spec: tinkerbell.HardwareSpec{
-					Interfaces: []tinkerbell.Interface{
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "aa:bb:cc:dd:ee:ff",
-								Hostname: "wrong",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.1",
-									Netmask: "255.0.0.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(false)},
-						},
-						{
-							DHCP: &tinkerbell.DHCP{
-								MAC:      "00:11:22:33:44:55",
-								Hostname: "correct",
-								IP: &tinkerbell.IP{
-									Address: "10.0.0.2",
-									Netmask: "255.0.0.0",
-								},
-							},
-							Netboot: &tinkerbell.Netboot{AllowPXE: boolPtr(true)},
-						},
-					},
-				},
-			},
-			want: Hardware{
-				DHCP: &DHCP{
-					MACAddress:       net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
-					IPAddress:        netip.MustParseAddr("10.0.0.2"),
-					SubnetMask:       net.IPv4Mask(255, 0, 0, 0),
-					Hostname:         "correct",
-					BroadcastAddress: netip.MustParseAddr("10.255.255.255"),
-					LeaseTime:        0,
-				},
-				Netboot: &Netboot{
-					AllowNetboot: true,
-				},
-			},
-		},
+		"IPv4":                   {ip: net.ParseIP("192.168.2.1"), wantMAC: "aa:bb:cc:dd:ee:01"},
+		"IPv4 of a dual stack":   {ip: net.IPv4(192, 168, 2, 2).To4(), wantMAC: "aa:bb:cc:dd:ee:02"},
+		"IPv6":                   {ip: net.ParseIP("2001:db8:0::2"), wantMAC: "aa:bb:cc:dd:ee:02"},
+		"no interface has it":    {ip: net.ParseIP("192.168.2.3"), shouldErr: true},
+		"no IP":                  {shouldErr: true},
+		"IPv4 address of a ipv6": {ip: net.ParseIP("::ffff:192.168.2.1"), wantMAC: "aa:bb:cc:dd:ee:01"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := ConvertByIP(context.Background(), tt.ip, tt.hw)
+			got, err := ConvertByIP(context.Background(), tt.ip, hw)
 			if tt.shouldErr {
 				if err == nil {
-					t.Fatal("expected error, got nil")
+					t.Fatal("expected an error")
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
+				t.Fatal(err)
 			}
-			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(netip.Addr{})); diff != "" {
-				t.Fatalf("mismatch (-got +want):\n%s", diff)
+			if got.DHCP.MACAddress.String() != tt.wantMAC {
+				t.Fatalf("got interface %v, want %v", got.DHCP.MACAddress, tt.wantMAC)
 			}
 		})
 	}
+	if _, err := ConvertByIP(context.Background(), net.ParseIP("192.168.2.1"), nil); err == nil {
+		t.Fatal("expected an error for nil hardware")
+	}
 }
+
+// TestConvertV1Alpha1Compat covers what Hardware created through v1alpha1 is
+// served from its v1alpha1 form.
+func TestConvertV1Alpha1Compat(t *testing.T) {
+	old := &v1alpha1.Hardware{Spec: v1alpha1.HardwareSpec{
+		Metadata: &v1alpha1.HardwareMetadata{Facility: &v1alpha1.MetadataFacility{FacilityCode: "onprem"}},
+		Interfaces: []v1alpha1.Interface{{
+			DHCP:    &v1alpha1.DHCP{MAC: testMAC.String(), IP: &v1alpha1.IP{Address: "192.168.2.10", Netmask: "255.255.255.0"}},
+			Netboot: &v1alpha1.Netboot{AllowPXE: ptrTo(true), OSIE: &v1alpha1.OSIE{BaseURL: "http://osie:8080", Kernel: "k"}},
+		}},
+	}}
+	converted := &v1alpha2.Hardware{}
+	if err := conversion.HardwareToV1Alpha2(old, converted); err != nil {
+		t.Fatal(err)
+	}
+	// The API server defaults it.
+	converted.Spec.NetworkInterfaces["aa:bb:cc:dd:ee:ff"].DHCP.IPv4.LeaseTimeSeconds = ptrTo[int64](86400)
+
+	t.Run("with the conversion annotation", func(t *testing.T) {
+		got, err := ConvertByMac(context.Background(), testMAC, converted)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Netboot.Facility != "onprem" {
+			t.Errorf("facility = %q, want onprem", got.Netboot.Facility)
+		}
+		if got.DHCP.LeaseTime != 0 || got.DHCPv6.LeaseTime != 0 {
+			t.Errorf("lease times = %d, %d, want the v1alpha1 unset lease time, 0", got.DHCP.LeaseTime, got.DHCPv6.LeaseTime)
+		}
+		want := OSIE{BaseURL: &url.URL{Scheme: "http", Host: "osie:8080"}, Kernel: "k"}
+		if diff := cmp.Diff(want, got.Netboot.OSIE); diff != "" {
+			t.Errorf("OSIE differs: %s", diff)
+		}
+	})
+
+	t.Run("without it", func(t *testing.T) {
+		hw := converted.DeepCopy()
+		delete(hw.Annotations, conversion.AnnotationV1Alpha1)
+		got, err := ConvertByMac(context.Background(), testMAC, hw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Netboot.Facility != "" {
+			t.Errorf("facility = %q, want none", got.Netboot.Facility)
+		}
+		if got.DHCP.LeaseTime != 86400 || got.DHCPv6.LeaseTime != 0 {
+			t.Errorf("lease times = %d, %d, want 86400 and the DHCPv6 default, 0", got.DHCP.LeaseTime, got.DHCPv6.LeaseTime)
+		}
+		want := OSIE{KernelURL: "http://osie:8080/k", InitrdURL: "http://osie:8080/initramfs-${arch}"}
+		if diff := cmp.Diff(want, got.Netboot.OSIE); diff != "" {
+			t.Errorf("OSIE differs: %s", diff)
+		}
+	})
+
+	t.Run("with a corrupt annotation", func(t *testing.T) {
+		hw := converted.DeepCopy()
+		hw.Annotations[conversion.AnnotationV1Alpha1] = "{"
+		got, err := ConvertByMac(context.Background(), testMAC, hw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Netboot.Facility != "" || got.DHCP.LeaseTime != 86400 {
+			t.Errorf("facility, lease time = %q, %d, want the v1alpha2 data alone", got.Netboot.Facility, got.DHCP.LeaseTime)
+		}
+	})
+}
+
+func ptrTo[T any](v T) *T { return &v }

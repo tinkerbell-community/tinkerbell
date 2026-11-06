@@ -21,10 +21,12 @@ import (
 	"github.com/insomniacslk/dhcp/iana"
 	"github.com/insomniacslk/dhcp/rfc1035label"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp"
 	"github.com/tinkerbell/tinkerbell/smee/internal/dhcp/otel"
+	"github.com/tinkerbell/tinkerbell/smee/internal/paritytest"
 	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/net/ipv4"
 	"golang.org/x/net/nettest"
@@ -57,7 +59,7 @@ type hwNotFoundError struct{}
 func (hwNotFoundError) NotFound() bool { return true }
 func (hwNotFoundError) Error() string  { return "not found" }
 
-func (m *mockBackend) FilterHardware(_ context.Context, _ data.HardwareFilter) (*tinkerbell.Hardware, error) {
+func (m *mockBackend) filterV1Alpha1(_ context.Context, _ data.HardwareFilter) (*tinkerbell.Hardware, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -1096,7 +1098,7 @@ func TestDHCPOnlyModeReflection(t *testing.T) {
 
 			// Get DHCP and Netboot data from backend
 			ctx := context.Background()
-			spec, err := handler.Backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: pkt.ClientHWAddr.String()})
+			spec, err := handler.Backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: pkt.ClientHWAddr.String()})
 			if err != nil {
 				t.Fatalf("Failed to get backend data: %v", err)
 			}
@@ -1147,4 +1149,14 @@ func TestDHCPOnlyModeReflection(t *testing.T) {
 			}
 		})
 	}
+}
+
+// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// it to a v1alpha2 reader.
+func (m *mockBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	hw, err := m.filterV1Alpha1(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return paritytest.ToV1Alpha2(hw)
 }

@@ -8,21 +8,22 @@ import (
 	"net/http"
 	"path"
 	"strconv"
+	"strings"
 
 	"github.com/go-logr/logr"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 )
 
 // ArchiveName is the file name the Handler serves.
 const ArchiveName = "bootstrap.cpio"
 
-var errNetbootNotAllowed = errors.New("netboot is not allowed for this hardware: netboot.allowPXE is false in the Hardware record")
+var errNetbootNotAllowed = errors.New("netboot is not allowed for this hardware: netboot.disabled is true in the Hardware record (netboot.allowPXE is false in v1alpha1)")
 
 // BackendReader is the interface for getting hardware data from a backend.
 type BackendReader interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error)
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Handler serves a Hardware's archive over HTTP, looked up by MAC address.
@@ -60,7 +61,7 @@ func (h *Handler) HandlerFunc() http.HandlerFunc {
 				return
 			}
 			if errors.Is(err, errNetbootNotAllowed) {
-				log.Info("netboot not allowed for this hardware, netboot.allowPXE is false", "mac", ha.String())
+				log.Info("netboot not allowed for this hardware, netboot is disabled", "mac", ha.String())
 				http.Error(w, err.Error(), http.StatusForbidden)
 				return
 			}
@@ -90,7 +91,7 @@ func (h *Handler) archiveFor(ctx context.Context, mac net.HardwareAddr) ([]byte,
 	if h.Backend == nil {
 		return nil, fmt.Errorf("no backend configured")
 	}
-	spec, err := h.Backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := h.Backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return nil, err
 	}
@@ -107,14 +108,15 @@ func (h *Handler) archiveFor(ctx context.Context, mac net.HardwareAddr) ([]byte,
 	return Archive(files, ModTime(spec))
 }
 
-// netbootAllowed reports the netboot.allowPXE of the interface with mac; unset is false.
-func netbootAllowed(hw *tinkerbell.Hardware, mac net.HardwareAddr) bool {
+// netbootAllowed reports whether the interface with mac may netboot: unless its
+// netboot.disabled is true. Hardware without that interface may not.
+func netbootAllowed(hw *v1alpha2.Hardware, mac net.HardwareAddr) bool {
 	if hw == nil {
 		return false
 	}
-	for _, i := range hw.Spec.Interfaces {
-		if i.DHCP != nil && i.DHCP.MAC == mac.String() {
-			return i.Netboot != nil && i.Netboot.AllowPXE != nil && *i.Netboot.AllowPXE
+	for m, i := range hw.Spec.NetworkInterfaces {
+		if strings.EqualFold(string(m), mac.String()) {
+			return i.Netboot == nil || !i.Netboot.Disabled
 		}
 	}
 	return false

@@ -18,8 +18,10 @@ import (
 	"github.com/insomniacslk/dhcp/iana"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/smee/internal/metric"
+	"github.com/tinkerbell/tinkerbell/smee/internal/paritytest"
 )
 
 type dhcpv6TestBackend struct {
@@ -27,7 +29,7 @@ type dhcpv6TestBackend struct {
 	err      error
 }
 
-func (b dhcpv6TestBackend) FilterHardware(context.Context, data.HardwareFilter) (*tinkerbell.Hardware, error) {
+func (b dhcpv6TestBackend) filterV1Alpha1(context.Context, data.HardwareFilter) (*tinkerbell.Hardware, error) {
 	return b.hardware, b.err
 }
 
@@ -1097,4 +1099,14 @@ func TestScriptHandlerPreservesIPv4AutoProxyFallbackWhenDHCPDisabled(t *testing.
 			}
 		})
 	}
+}
+
+// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// it to a v1alpha2 reader.
+func (b dhcpv6TestBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	hw, err := b.filterV1Alpha1(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	return paritytest.ToV1Alpha2(hw)
 }
