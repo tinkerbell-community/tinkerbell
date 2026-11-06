@@ -65,6 +65,9 @@ type Reconciler struct {
 	references  backend
 	metadataURL string
 	recorder    events.EventRecorder
+	// compatOnly keeps Workflows created through v1alpha1 in v1alpha1 compatibility mode instead of
+	// rewriting them onto Tasks. Tests of compatibility mode set it.
+	compatOnly bool
 }
 
 type Option func(*Reconciler)
@@ -166,6 +169,10 @@ func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reco
 	switch wflow.Status.Metadata.Workflow.State {
 	case 0:
 		journal.Log(ctx, "new workflow")
+		// A Workflow created through v1alpha1 runs its Template's Tasks when the Template translates.
+		if rewritten, err := r.rewriteToTasks(ctx, stored); err != nil || rewritten {
+			return reconcile.Result{}, err
+		}
 		resp, err := r.processNewWorkflow(ctx, logger, wflow)
 		// If the Workflow spec is disabled, just set the AgentID and return.
 		// The Agent ID is used as an index in the Tink Server backend, so it needs to be set even when the Workflow is disabled.

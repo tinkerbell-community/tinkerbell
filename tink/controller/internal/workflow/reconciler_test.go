@@ -1003,10 +1003,13 @@ tasks:
 		if tc.seedWorkflow != nil {
 			kc = kc.WithObjects(v2(t, tc.seedWorkflow))
 		}
+		// These show v1alpha1 compatibility mode renders as v1alpha1 did, so the Workflows are not
+		// rewritten onto Tasks; TestRewriteRendersTheSame shows rewritten Workflows render the same.
 		controller := &Reconciler{
 			client:     kc.Build(),
 			nowFunc:    TestTime.Now,
 			references: fakeReferences{},
+			compatOnly: true,
 		}
 
 		t.Run(tc.name, func(t *testing.T) {

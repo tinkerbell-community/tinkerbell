@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/tink/internal/engine"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -32,20 +34,26 @@ func TestReconcileMetadataURL(t *testing.T) {
 		opts        []Option
 		hardwareMap map[string]string
 		wantConfig  string
+		// wantRewritten says whether the Workflow is rewritten onto the Template's Tasks, which see
+		// .metadata_url too.
+		wantRewritten bool
 	}{
 		{
-			name:       "configured URL is available to templates",
-			opts:       []Option{WithMetadataURL("http://192.0.2.10:7080")},
-			wantConfig: "http://192.0.2.10:7080/2009-04-04/user-data",
+			name:          "configured URL is available to templates",
+			opts:          []Option{WithMetadataURL("http://192.0.2.10:7080")},
+			wantConfig:    "http://192.0.2.10:7080/2009-04-04/user-data",
+			wantRewritten: true,
 		},
 		{
+			// A Task's .metadata_url is always the configured one, so this Workflow is not rewritten.
 			name:        "hardwareMap entry overrides the configured URL",
 			opts:        []Option{WithMetadataURL("http://192.0.2.10:7080")},
 			hardwareMap: map[string]string{"metadata_url": "http://198.51.100.7:7080"},
 			wantConfig:  "http://198.51.100.7:7080/2009-04-04/user-data",
 		},
 		{
-			name: "unset URL fails the render instead of producing an empty URL",
+			name:          "unset URL fails the render instead of producing an empty URL",
+			wantRewritten: true,
 		},
 	}
 
@@ -80,12 +88,20 @@ func TestReconcileMetadataURL(t *testing.T) {
 			r.nowFunc = TestTime.Now
 
 			key := types.NamespacedName{Name: "talos", Namespace: "default"}
+			// The first reconcile rewrites a Workflow onto Tasks, the next renders them.
 			_, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: key})
+			if err == nil {
+				_, err = r.Reconcile(context.Background(), reconcile.Request{NamespacedName: key})
+			}
 
-			got, gerr := readV1Workflow(t, r.client, key)
-			if gerr != nil {
+			stored := &v1alpha2.Workflow{}
+			if gerr := r.client.Get(context.Background(), key, stored); gerr != nil {
 				t.Fatalf("getting workflow: %v", gerr)
 			}
+			if rewritten := !engine.Compat(stored); rewritten != tt.wantRewritten {
+				t.Fatalf("rewritten onto Tasks = %v, want %v", rewritten, tt.wantRewritten)
+			}
+			got := v1Workflow(t, stored)
 
 			if tt.wantConfig == "" {
 				if err == nil || !strings.Contains(err.Error(), "metadata_url") {
