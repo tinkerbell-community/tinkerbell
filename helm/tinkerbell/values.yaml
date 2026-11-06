@@ -15,7 +15,7 @@ deployment:
               app.kubernetes.io/name: '{{ include "tinkerbell.fullname" . }}'
               app.kubernetes.io/instance: "{{ .Release.Name }}"
           topologyKey: kubernetes.io/hostname
-  agentImage: ghcr.io/tinkerbell/tink-agent
+  agentImage: ghcr.io/tinkerbell-community/tink-agent
   # agentImageTag is here as a placeholder and to show its possible to be set.
   # It is not set because in the deployment.yaml a coalesce is used with this value
   # and the .Chart.AppVersion. This allows CI and the release process to set the value properly.
@@ -215,7 +215,7 @@ deployment:
       logLevel: 0
       urlPrefix: "/"
   hostNetwork: false
-  image: ghcr.io/tinkerbell/tinkerbell
+  image: ghcr.io/tinkerbell-community/tinkerbell
   imagePullPolicy: IfNotPresent
   initContainers: []
   # imageTag is here as a placeholder and to show its possible to be set.

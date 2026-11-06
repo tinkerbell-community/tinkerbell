@@ -49,9 +49,9 @@ LB_IP=192.168.2.116
 ARTIFACTS_FILE_SERVER=http://192.168.2.117:7173
 
 # Specify the Tinkerbell Helm chart version, here we use the latest release.
-TINKERBELL_CHART_VERSION=$(basename $(curl -Ls -o /dev/null -w %{url_effective} https://github.com/tinkerbell/tinkerbell/releases/latest))
+TINKERBELL_CHART_VERSION=$(basename $(curl -Ls -o /dev/null -w %{url_effective} https://github.com/tinkerbell-community/tinkerbell/releases/latest))
 
-helm install tinkerbell oci://ghcr.io/tinkerbell/charts/tinkerbell \
+helm install tinkerbell oci://ghcr.io/tinkerbell-community/charts/tinkerbell \
   --version $TINKERBELL_CHART_VERSION \
   --create-namespace \
   --namespace tinkerbell \
