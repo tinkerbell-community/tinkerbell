@@ -30,8 +30,7 @@ var schemeBuilder = runtime.NewSchemeBuilder(
 	bmc.AddToScheme,
 	// Jobs.
 	bmcv2.AddToScheme,
-	// Needed so the Machine controller can read/write the linked Hardware object's
-	// status.attributes.outOfBand field.
+	// Hardware: its BMC connection, conditions and status.attributes.outOfBand.
 	v1alpha2.AddToScheme,
 )
 
@@ -83,9 +82,31 @@ func NewReconciler(c client.Client) *Reconciler {
 	}
 }
 
+// SetupWithManager sets up the Rufio controllers with the Manager:
+//   - Jobs, which run BMC operations;
+//   - the deprecated bmc Tasks, still run as before;
+//   - the deprecated bmc Machines, polled for their power state and inventory;
+//   - Hardware with a BMC connection of its own, polled the same way;
+//   - the translation of bmc Machines into the Hardware that refers to them.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bmcClient ClientFunc, powerCheckInterval, inventoryRefreshInterval time.Duration, inventoryCollectionEnabled bool, opts ctrlcontroller.Options) error {
+	indexer := mgr.GetFieldIndexer()
+	if err := indexer.IndexField(ctx, &v1alpha2.Hardware{}, hardwareBMCRefIndexKey, hardwareBMCRefIndexFunc); err != nil {
+		return fmt.Errorf("unable to index Hardware by bmcRef: %w", err)
+	}
+	if err := indexer.IndexField(ctx, &v1alpha2.Hardware{}, hardwareMachineIndexKey, hardwareMachineIndexFunc); err != nil {
+		return fmt.Errorf("unable to index Hardware by translated Machine: %w", err)
+	}
+
 	if err := NewMachineReconciler(mgr.GetClient(), mgr.GetEventRecorder("machine-controller"), bmcClient, powerCheckInterval, inventoryRefreshInterval, inventoryCollectionEnabled).SetupWithManager(ctx, mgr, opts); err != nil {
 		return fmt.Errorf("unable to create Machines controller: %w", err)
+	}
+
+	if err := NewHardwareReconciler(mgr.GetClient(), mgr.GetEventRecorder("hardware-controller"), bmcClient, powerCheckInterval, inventoryRefreshInterval, inventoryCollectionEnabled).SetupWithManager(mgr, opts); err != nil {
+		return fmt.Errorf("unable to create Hardware controller: %w", err)
+	}
+
+	if err := NewMachineTranslationReconciler(mgr.GetClient()).SetupWithManager(mgr, opts); err != nil {
+		return fmt.Errorf("unable to create Machine translation controller: %w", err)
 	}
 
 	if err := NewJobReconciler(mgr.GetClient(), mgr.GetAPIReader(), bmcClient).SetupWithManager(ctx, mgr, opts); err != nil {

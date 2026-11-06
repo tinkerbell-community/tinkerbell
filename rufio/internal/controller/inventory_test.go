@@ -49,6 +49,7 @@ func newInventoryTestClient(objs ...ctrlclient.Object) ctrlclient.Client {
 		WithScheme(s).
 		WithStatusSubresource(&v1alpha2.Hardware{}).
 		WithIndex(&v1alpha2.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
+		WithIndex(&v1alpha2.Hardware{}, controller.HardwareMachineIndexKey, controller.HardwareMachineIndexFunc).
 		WithObjects(objs...).
 		Build()
 }

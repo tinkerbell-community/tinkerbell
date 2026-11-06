@@ -11,9 +11,12 @@ import (
 // Exported for use by tests in the controller_test package. This file is only
 // compiled during `go test` and never affects the package's real public API.
 var (
-	HardwareBMCRefIndexKey  = hardwareBMCRefIndexKey
-	HardwareBMCRefIndexFunc = hardwareBMCRefIndexFunc
-	OutOfBandAttributes     = outOfBandAttributes
+	HardwareBMCRefIndexKey   = hardwareBMCRefIndexKey
+	HardwareBMCRefIndexFunc  = hardwareBMCRefIndexFunc
+	HardwareMachineIndexKey  = hardwareMachineIndexKey
+	HardwareMachineIndexFunc = hardwareMachineIndexFunc
+	OutOfBandAttributes      = outOfBandAttributes
+	HardwareBMCChanged       = hardwareBMCChanged
 )
 
 // ReconcileInventoryIfDueForTest exposes reconcileInventoryIfDue so tests can

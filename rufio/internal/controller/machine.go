@@ -191,7 +191,9 @@ func (r *MachineReconciler) updatePowerState(ctx context.Context, bm *bmc.Machin
 
 // reconcileInventoryIfDue collects BMC inventory when it's due (see
 // dueForInventoryRefresh) and writes it to the linked Hardware's status: the
-// Hardware whose v1alpha1 bmcRef names the Machine.
+// Hardware whose v1alpha1 bmcRef names the Machine. A linked Hardware that has a
+// BMC connection of its own (not one translated from this Machine) is skipped:
+// the Hardware controller polls that connection and collects its inventory.
 // Failures are logged and evented but never block Machine reconciliation —
 // Hardware and Machine are reconciled independently, and an unreachable/
 // unsupported inventory source (e.g. IPMI-only BMCs, which bmclib cannot collect
@@ -207,7 +209,7 @@ func (r *MachineReconciler) reconcileInventoryIfDue(ctx context.Context, logger 
 		r.recorder.Eventf(bm, nil, corev1.EventTypeWarning, "HardwareLookupFailed", "FindLinkedHardware", "find linked Hardware: %v", err)
 		return
 	}
-	if hw == nil || hw.Annotations[disableOutOfBandInventoryAnnotation] == trueString || !dueForInventoryRefresh(hw, bm, r.inventoryRefreshInterval) {
+	if hw == nil || hasOwnBMCConnection(hw) || hw.Annotations[disableOutOfBandInventoryAnnotation] == trueString || !dueForInventoryRefresh(hw, bm, r.inventoryRefreshInterval) {
 		return
 	}
 	if err := reconcileInventory(ctx, r.client, logger, bmcClient, hw); err != nil {
@@ -216,6 +218,12 @@ func (r *MachineReconciler) reconcileInventoryIfDue(ctx context.Context, logger 
 		return
 	}
 	clearRefreshInventoryAnnotation(ctx, r.client, r.recorder, logger, bm)
+}
+
+// hasOwnBMCConnection reports whether hw has a BMC connection that Rufio polls
+// through the Hardware itself: one that was not translated from a bmc Machine.
+func hasOwnBMCConnection(hw *v1alpha2.Hardware) bool {
+	return hw.Spec.BMC != nil && hw.Spec.BMC.Connection != nil && hw.Annotations[conversion.AnnotationMachine] == ""
 }
 
 // patchStatus patches the specifies patch on the Machine.
@@ -227,22 +235,10 @@ func (r *MachineReconciler) patchStatus(ctx context.Context, bm *bmc.Machine, pa
 	return nil
 }
 
-// SetupWithManager sets up the controller with the Manager. When inventory
-// collection is disabled fleet-wide, the Hardware field index is skipped
-// entirely, so a disabled Machine controller doesn't pay for a Hardware
-// watch/cache it will never use.
-func (r *MachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, opts ctrlcontroller.Options) error {
-	if r.inventoryCollectionEnabled {
-		if err := mgr.GetFieldIndexer().IndexField(
-			ctx,
-			&v1alpha2.Hardware{},
-			hardwareBMCRefIndexKey,
-			hardwareBMCRefIndexFunc,
-		); err != nil {
-			return err
-		}
-	}
-
+// SetupWithManager sets up the controller with the Manager. The Hardware field
+// index it uses to find a Machine's Hardware is registered by
+// Reconciler.SetupWithManager, as the Hardware controllers need it too.
+func (r *MachineReconciler) SetupWithManager(_ context.Context, mgr ctrl.Manager, opts ctrlcontroller.Options) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		WithOptions(opts).
 		For(&bmc.Machine{}).

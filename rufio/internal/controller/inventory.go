@@ -40,14 +40,16 @@ import (
 )
 
 // defaultInventoryRefreshInterval is how often BMC inventory is refreshed per
-// Machine, unless overridden via NewMachineReconciler. Inventory collection is
-// slow (5-30s on Redfish), so it deliberately does not run on every power-poll
-// reconcile (every machineRequeueInterval/powerCheckInterval) — only once this
-// interval has elapsed since the last successful collection.
+// Machine or Hardware, unless overridden via NewMachineReconciler or
+// NewHardwareReconciler. Inventory collection is slow (5-30s on Redfish), so it
+// deliberately does not run on every power-poll reconcile (every
+// machineRequeueInterval/powerCheckInterval) — only once this interval has
+// elapsed since the last successful collection.
 const defaultInventoryRefreshInterval = 24 * time.Hour
 
-// refreshInventoryAnnotation, when set to "true" on a Machine, forces an immediate
-// inventory refresh regardless of the configured refresh interval.
+// refreshInventoryAnnotation, when set to "true" on a Machine, or on a Hardware
+// whose BMC Rufio polls itself, forces an immediate inventory refresh regardless
+// of the configured refresh interval.
 const refreshInventoryAnnotation = "tinkerbell.org/refresh-inventory"
 
 // disableOutOfBandInventoryAnnotation, when set to "true" on a Hardware, opts
@@ -97,7 +99,8 @@ func hardwareBMCRefIndexFunc(obj ctrlclient.Object) []string {
 // dueForInventoryRefresh returns true if inventory has never been collected, is
 // stale (older than interval, plus a per-source jitter — see
 // inventoryJitterFraction), or a manual refresh was explicitly requested via
-// refreshInventoryAnnotation. source is the object whose BMC is polled.
+// refreshInventoryAnnotation. source is the object whose BMC is polled: the
+// Machine, or the Hardware itself when it has its own BMC connection.
 func dueForInventoryRefresh(hw *v1alpha2.Hardware, source metav1.Object, interval time.Duration) bool {
 	if source.GetAnnotations()[refreshInventoryAnnotation] == trueString {
 		return true
@@ -141,7 +144,7 @@ func outOfBandAttributes(hw *v1alpha2.Hardware) *inventory.Attributes {
 }
 
 // clearRefreshInventoryAnnotation removes refreshInventoryAnnotation from the
-// source, the object whose BMC is polled, after a successful inventory
+// source (the Machine, or the Hardware itself) after a successful inventory
 // collection, so a manually-requested refresh doesn't keep forcing collection on
 // every reconcile if the caller forgets to remove the annotation themselves.
 func clearRefreshInventoryAnnotation(ctx context.Context, c ctrlclient.Client, recorder events.EventRecorder, logger logr.Logger, source ctrlclient.Object) {

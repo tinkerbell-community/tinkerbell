@@ -73,6 +73,7 @@ func newClientBuilder() *fake.ClientBuilder {
 		WithScheme(scheme).
 		WithObjectTracker(tracker).
 		WithIndex(&v1alpha2.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
+		WithIndex(&v1alpha2.Hardware{}, controller.HardwareMachineIndexKey, controller.HardwareMachineIndexFunc).
 		WithIndex(&bmc.Task{}, ".metadata.controller", controller.TaskOwnerIndexFunc).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
