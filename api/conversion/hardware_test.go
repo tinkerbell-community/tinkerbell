@@ -320,3 +320,13 @@ func TestHardwareRoundTripFuzz(t *testing.T) {
 		}
 	}
 }
+
+func TestHardwareBMCRef(t *testing.T) {
+	hub := toV2(t, v1Hardware())
+	if ref := HardwareBMCRef(hub); ref == nil || ref.Name != "bmc-hw1" {
+		t.Errorf("bmcRef: %+v", ref)
+	}
+	if ref := HardwareBMCRef(v2Hardware()); ref != nil {
+		t.Errorf("native v1alpha2 Hardware has no bmcRef, got %+v", ref)
+	}
+}

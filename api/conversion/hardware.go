@@ -14,6 +14,7 @@ import (
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
+	corev1 "k8s.io/api/core/v1"
 )
 
 const (
@@ -818,4 +819,15 @@ func copyPtr[T any](p *T) *T {
 	}
 	v := *p
 	return &v
+}
+
+// HardwareBMCRef returns the v1alpha1 bmcRef of a Hardware converted from
+// v1alpha1: the deprecated bmc Machine that holds its BMC connection. v1alpha2
+// has no such field; the reference survives in the conversion annotation.
+func HardwareBMCRef(hw *v1alpha2.Hardware) *corev1.TypedLocalObjectReference {
+	var spoke stash[v1alpha1.HardwareSpec, hardwareV1Status]
+	if found, err := takeStash(hw, hw.DeepCopy(), AnnotationV1Alpha1, &spoke); err != nil || !found {
+		return nil
+	}
+	return spoke.Spec.BMCRef
 }
