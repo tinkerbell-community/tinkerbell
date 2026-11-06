@@ -10,6 +10,10 @@ metadata:
     {{- include "tinkerbell.labels" . | nindent 4 }}
 spec:
   type: ClusterIP
+  # Tinkerbell becomes ready only after it has migrated the stored objects to
+  # v1alpha2, and the API server needs this webhook to read them, so the webhook
+  # must be reachable before the pod is ready.
+  publishNotReadyAddresses: true
   selector:
     {{- toYaml .Values.service.selector | nindent 4 }}
   ports:

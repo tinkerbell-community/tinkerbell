@@ -155,15 +155,28 @@ func TestUpgradeFromV1Alpha1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := &conversionwebhook.Server{Addr: "127.0.0.1:0", Handler: h, GetCertificate: certs.GetCertificate}
-	l, err := srv.Listen(ctx)
+	// The webhook becomes reachable only after the migration has started, as in a
+	// cluster, where the API server reaches it through a Service: a new pod's
+	// endpoint takes a moment to be routed. Until then connections are refused.
+	free, err := (&conversionwebhook.Server{Addr: "127.0.0.1:0"}).Listen(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() { _ = srv.Serve(ctx, l) }()
+	addr := free.Addr().String()
+	_ = free.Close()
+	go func() {
+		time.Sleep(3 * time.Second)
+		srv := &conversionwebhook.Server{Addr: addr, Handler: h, GetCertificate: certs.GetCertificate}
+		l, err := srv.Listen(ctx)
+		if err != nil {
+			t.Errorf("starting the webhook late: %v", err)
+			return
+		}
+		_ = srv.Serve(ctx, l)
+	}()
 
 	tb, err := NewTinkerbell(WithRestConfig(cfg), WithConversionWebhook(ConversionWebhook{
-		URL:      fmt.Sprintf("https://%s%s", l.Addr().String(), conversionwebhook.Path),
+		URL:      fmt.Sprintf("https://%s%s", addr, conversionwebhook.Path),
 		CABundle: ca,
 	}))
 	if err != nil {

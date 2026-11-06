@@ -60,6 +60,12 @@ const (
 	GroupBMC = "bmc.tinkerbell.org"
 
 	fieldManager = "Tinkerbell CLI"
+
+	// storageMigrationWait bounds how long MigrateStorage keeps retrying an
+	// object type whose objects it cannot read or rewrite. Reading them needs the
+	// conversion webhook, which the API server may not reach right away: a new
+	// pod's endpoint takes a moment to be routed, for example.
+	storageMigrationWait = 5 * time.Minute
 )
 
 // AvailableVersions lists all supported CRD API versions.
@@ -348,7 +354,7 @@ func (t Tinkerbell) MigrateStorage(ctx context.Context) error {
 		if t.Dynamic == nil {
 			return errors.New("migrating stored objects needs a dynamic client")
 		}
-		n, err := t.rewrite(ctx, c, storage)
+		n, err := t.rewriteWithRetry(ctx, c, storage)
 		if err != nil {
 			return fmt.Errorf("rewriting %s objects into %s: %w", c.Spec.Names.Plural, storage, err)
 		}
@@ -360,6 +366,34 @@ func (t Tinkerbell) MigrateStorage(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// rewriteWithRetry rewrites c's objects into version, starting over until it
+// succeeds or storageMigrationWait has passed. Rewriting an object that is
+// already stored in version changes nothing.
+func (t Tinkerbell) rewriteWithRetry(ctx context.Context, c *apiv1.CustomResourceDefinition, version string) (int, error) {
+	ctx, cancel := context.WithTimeout(ctx, storageMigrationWait)
+	defer cancel()
+	var n int
+	err := retry.Do(func() error {
+		var err error
+		n, err = t.rewrite(ctx, c, version)
+		return err
+	},
+		retry.Context(ctx),
+		retry.Attempts(0),
+		retry.Delay(time.Second),
+		retry.MaxDelay(15*time.Second),
+		retry.DelayType(retry.BackOffDelay),
+		retry.LastErrorOnly(true),
+		retry.OnRetry(func(attempt uint, err error) {
+			if t.Logger.GetSink() != nil {
+				t.Logger.Info("cannot migrate stored objects yet, retrying; reading them needs the conversion webhook",
+					"resource", c.Spec.Names.Plural, "attempt", attempt+1, "error", err.Error())
+			}
+		}),
+	)
+	return n, err
 }
 
 func (t Tinkerbell) rewrite(ctx context.Context, c *apiv1.CustomResourceDefinition, version string) (int, error) {

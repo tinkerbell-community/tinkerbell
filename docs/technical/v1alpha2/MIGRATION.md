@@ -19,7 +19,14 @@ With `--enable-crd-migrations` (the Helm chart's default), Tinkerbell does the f
    `--conversion-webhook-service-*` Service, or `--conversion-webhook-url` when it cannot
    reach Services.
 4. It rewrites every Hardware, Workflow and Job so it is stored as `v1alpha2`, then sets the
-   CRDs' `status.storedVersions` to `v1alpha2`.
+   CRDs' `status.storedVersions` to `v1alpha2`. Reading the objects stored as `v1alpha1` needs
+   the webhook, so the pod becomes ready only after this step, and the chart's webhook Service
+   publishes the pod before it is ready (`publishNotReadyAddresses`). Until the API server
+   reaches the webhook, Tinkerbell retries the rewrite for up to five minutes. Releases before
+   v0.28.2 lacked both, so their pod could not finish this step behind the Service and
+   restarted until it was replaced: upgrade from v0.26 or earlier straight to v0.28.2 or later.
+   A release that is stuck this way is fixed by upgrading it to v0.28.2 or later. Do not roll
+   back to v0.26: it cannot read objects whose CRDs already point at the webhook.
 5. It translates the kinds that only exist in `v1alpha1` (see below) and keeps translating
    them while they exist: the Tink controller translates Templates and rule sets, Rufio
    translates bmc Machines.
