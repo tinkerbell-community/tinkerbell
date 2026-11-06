@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	bmcv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/tink/internal/engine"
@@ -249,8 +250,27 @@ tasks:
 	tests := map[string]struct {
 		template   string
 		mutate     func(*v1alpha1.Workflow)
+		mutateHW   func(*v1alpha1.Hardware)
 		wantReason string
+		// wantRendered says compatibility mode renders the Workflow.
+		wantRendered bool
 	}{
+		"customboot media URL templated with v1alpha1 data": {
+			template: captTemplate,
+			mutate: func(wf *v1alpha1.Workflow) {
+				wf.Spec.BootOptions = v1alpha1.BootOptions{BootMode: v1alpha1.BootModeCustomboot, CustombootConfig: v1alpha1.CustombootConfig{
+					PreparingActions: []bmcv1alpha1.Action{{VirtualMediaAction: &bmcv1alpha1.VirtualMediaAction{MediaURL: `http://x/{{ (index .Hardware.Interfaces 0).DHCP.MAC }}.iso`, Kind: bmcv1alpha1.VirtualMediaCD}}},
+				}}
+			},
+			wantReason:   "do not render",
+			wantRendered: true,
+		},
+		"data v1alpha1 renders empty is missing": {
+			template:     captTemplate,
+			mutateHW:     func(hw *v1alpha1.Hardware) { hw.Spec.VendorData = nil },
+			wantReason:   "do not render",
+			wantRendered: true,
+		},
 		"template does not translate": {
 			template:   structural,
 			wantReason: "range",
@@ -280,6 +300,9 @@ tasks:
 			if tt.mutate != nil {
 				tt.mutate(wf)
 			}
+			if tt.mutateHW != nil {
+				tt.mutateHW(hw)
+			}
 			c := GetFakeClientBuilder().WithObjects(tpl, v2(t, hw), v2(t, wf)).Build()
 			rec := events.NewFakeRecorder(10)
 			r := NewReconciler(c, fakeReferences{}, WithMetadataURL("http://192.0.2.10:7080"), WithEventRecorder(rec))
@@ -292,6 +315,9 @@ tasks:
 			}
 			if !engine.Compat(got) {
 				t.Fatalf("the Workflow was rewritten: %+v", got.Spec)
+			}
+			if tt.wantRendered && !got.Status.HasCondition(v1alpha2.TemplateRenderedSuccess, metav1.ConditionTrue) {
+				t.Errorf("compatibility mode did not render: %+v", got.Status.Conditions)
 			}
 			select {
 			case e := <-rec.Events:

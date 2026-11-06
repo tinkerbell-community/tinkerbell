@@ -52,8 +52,8 @@ func TestReconcileMetadataURL(t *testing.T) {
 			wantConfig:  "http://198.51.100.7:7080/2009-04-04/user-data",
 		},
 		{
-			name:          "unset URL fails the render instead of producing an empty URL",
-			wantRewritten: true,
+			// Its Tasks do not render either, so it is not rewritten, and compatibility mode reports why.
+			name: "unset URL fails the render instead of producing an empty URL",
 		},
 	}
 

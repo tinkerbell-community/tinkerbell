@@ -150,24 +150,11 @@ func (r *Reconciler) renderCompat(ctx context.Context, logger logr.Logger, store
 // the rendered Workflow as .workflow, itself as .task, and .metadata_url. Each object's .references are its
 // own spec.references, resolved with the backend's reference policy.
 func (r *Reconciler) renderNative(ctx context.Context, stored *v1alpha2.Workflow) error {
-	if len(stored.Spec.Tasks) == 0 {
-		renderFailed(stored, "workflow has no tasks")
-		return fmt.Errorf("workflow %s/%s has no tasks", stored.Namespace, stored.Name)
-	}
-	rc := r.newRenderContext(stored)
-	renderedTasks := make([]v1alpha2.TaskWithMetadata, 0, len(stored.Spec.Tasks))
-	var wf0 *v1alpha2.Workflow
-	for i, t := range stored.Spec.Tasks {
-		rt, wf, err := rc.renderTask(ctx, i, t)
-		if err != nil {
-			journal.Log(ctx, "error rendering task", "task", i, "error", err)
-			renderFailed(stored, fmt.Sprintf("error rendering task %d: %v", i, err))
-			return err
-		}
-		if wf0 == nil {
-			wf0 = wf
-		}
-		renderedTasks = append(renderedTasks, rt)
+	renderedTasks, wf0, err := r.renderTasks(ctx, stored, nil)
+	if err != nil {
+		journal.Log(ctx, "error rendering tasks", "error", err)
+		renderFailed(stored, err.Error())
+		return err
 	}
 
 	stored.Status = v1alpha2.WorkflowStatus{
@@ -181,11 +168,36 @@ func (r *Reconciler) renderNative(ctx context.Context, stored *v1alpha2.Workflow
 	return nil
 }
 
+// renderTasks renders the tasks of a native Workflow and returns them with the Workflow rendered for the
+// first. Tasks named in tasks are used as given instead of being read.
+func (r *Reconciler) renderTasks(ctx context.Context, wf *v1alpha2.Workflow, tasks map[types.NamespacedName]*v1alpha2.Task) ([]v1alpha2.TaskWithMetadata, *v1alpha2.Workflow, error) {
+	if len(wf.Spec.Tasks) == 0 {
+		return nil, nil, fmt.Errorf("workflow %s/%s has no tasks", wf.Namespace, wf.Name)
+	}
+	rc := r.newRenderContext(wf)
+	rc.tasks = tasks
+	renderedTasks := make([]v1alpha2.TaskWithMetadata, 0, len(wf.Spec.Tasks))
+	var wf0 *v1alpha2.Workflow
+	for i, t := range wf.Spec.Tasks {
+		rt, rendered, err := rc.renderTask(ctx, i, t)
+		if err != nil {
+			return nil, nil, fmt.Errorf("error rendering task %d: %w", i, err)
+		}
+		if wf0 == nil {
+			wf0 = rendered
+		}
+		renderedTasks = append(renderedTasks, rt)
+	}
+	return renderedTasks, wf0, nil
+}
+
 // renderContext renders the objects of one Workflow, rendering each Hardware and
 // the Workflow for each Hardware once.
 type renderContext struct {
-	r        *Reconciler
-	wf       *v1alpha2.Workflow
+	r  *Reconciler
+	wf *v1alpha2.Workflow
+	// tasks are used instead of reading the Tasks they name.
+	tasks    map[types.NamespacedName]*v1alpha2.Task
 	hardware map[types.NamespacedName]renderedHardware
 	workflow map[types.NamespacedName]map[string]any
 	refs     map[string]any
@@ -319,7 +331,9 @@ func (rc *renderContext) renderTask(ctx context.Context, i int, t v1alpha2.Workf
 		taskKey.Namespace = rc.wf.Namespace
 	}
 	task := &v1alpha2.Task{}
-	if err := rc.r.client.Get(ctx, taskKey, task); err != nil {
+	if given, ok := rc.tasks[taskKey]; ok {
+		task = given.DeepCopy()
+	} else if err := rc.r.client.Get(ctx, taskKey, task); err != nil {
 		return none, nil, fmt.Errorf("getting task %s: %w", taskKey, err)
 	}
 	taskDoc, err := runtime.DefaultUnstructuredConverter.ToUnstructured(task)

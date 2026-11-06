@@ -11,6 +11,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/tink/controller/internal/translate"
 	"github.com/tinkerbell/tinkerbell/tink/internal/engine"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -23,8 +24,9 @@ const (
 
 // rewriteToTasks rewrites a Workflow created through v1alpha1, which has not started, to run the Tasks its
 // Template translates to, so that it runs natively (see conversion.RewriteWorkflowToTasks). It reports
-// whether it rewrote it; the next reconcile then renders the Tasks. A Workflow that cannot be rewritten runs
-// in v1alpha1 compatibility mode, and an event says why. Errors are those worth retrying.
+// whether it rewrote it; the next reconcile then renders the Tasks. A Workflow that cannot be rewritten, or
+// whose Tasks do not render, runs in v1alpha1 compatibility mode, and an event says why. Errors are those
+// worth retrying.
 func (r *Reconciler) rewriteToTasks(ctx context.Context, wf *v1alpha2.Workflow) (bool, error) {
 	if r.compatOnly || !engine.Compat(wf) || wf.Status.Metadata.Workflow.State != 0 || len(wf.Status.RenderedTasks) > 0 {
 		return false, nil
@@ -54,6 +56,17 @@ func (r *Reconciler) rewriteToTasks(ctx context.Context, wf *v1alpha2.Workflow) 
 	rewritten := wf.DeepCopy()
 	if err := conversion.RewriteWorkflowToTasks(rewritten, tpl, conv); err != nil {
 		return compat(err.Error())
+	}
+	// The translation keeps the meaning of the Template, but data a Template renders as empty can be missing
+	// in v1alpha2 (an unset .Hardware.UserData), and boot options are templated with v1alpha1 data (the
+	// customboot media URLs). A Workflow is only rewritten when it renders: compatibility mode is retried
+	// otherwise, and reports any error that is not the rewrite's.
+	tasks := map[types.NamespacedName]*v1alpha2.Task{}
+	for _, task := range conversion.TemplateTasks(tpl, conv) {
+		tasks[types.NamespacedName{Namespace: task.Namespace, Name: task.Name}] = &task
+	}
+	if _, _, err := r.renderTasks(ctx, rewritten, tasks); err != nil {
+		return compat(fmt.Sprintf("its Tasks do not render: %v", err))
 	}
 	// The Tasks the Template translates to, as the Template translator keeps them.
 	if err := translate.EnsureTemplateTasks(ctx, r.client, tpl, conv); err != nil {
