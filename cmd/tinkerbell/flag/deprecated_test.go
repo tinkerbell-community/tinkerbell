@@ -2,6 +2,7 @@ package flag
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -262,5 +263,36 @@ func probeValue(name string) string {
 		return "http://192.0.2.1/hook"
 	default:
 		return "probe"
+	}
+}
+
+// TestChartEnvRenames checks that the Helm chart renames exactly the environment variables
+// deprecatedNames retires, to the names that replace them: the chart derives deprecated names
+// from its value keys, and a deprecated name wins over the current one.
+func TestChartEnvRenames(t *testing.T) {
+	const path = "../../../helm/tinkerbell/templates/_env_renames.tpl"
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, table, ok := strings.Cut(string(b), `{{- define "tinkerbell.envRenames" -}}`)
+	if !ok {
+		t.Fatalf("%s does not define tinkerbell.envRenames", path)
+	}
+	table, _, _ = strings.Cut(table, "{{- end -}}")
+	got := map[string]string{}
+	for _, line := range strings.Split(strings.TrimSpace(table), "\n") {
+		from, to, ok := strings.Cut(line, ": ")
+		if !ok {
+			t.Fatalf("%s: line %q is not \"FROM: TO\"", path, line)
+		}
+		got[from] = to
+	}
+	want := map[string]string{}
+	for from, to := range deprecatedNames() {
+		want[envKey(from)] = envKey(to)
+	}
+	if d := cmp.Diff(want, got); d != "" {
+		t.Errorf("%s does not match deprecatedNames (-want +got):\n%s", path, d)
 	}
 }

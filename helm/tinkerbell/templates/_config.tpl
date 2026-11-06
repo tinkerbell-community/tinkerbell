@@ -1,10 +1,12 @@
 {{- /* Generate config map data */}}
 {{- define "tinkerbell.configData" -}}
 {{- $values := .Values.deployment.envs -}}
+{{- $renames := include "tinkerbell.envRenames" . | fromYaml -}}
 {{- range $kk, $vv := $values }}
 {{- if kindIs "map" $vv }}
 {{- range $k, $v := $vv }}
 {{- $key := (list "TINKERBELL" (ternary "" (snakecase $kk | upper) (eq (upper $kk) "GLOBALS")) (snakecase $k | upper) | compact | join "_") }}
+{{- $key = get $renames $key | default $key }}
 {{- if kindIs "invalid" $v }}
 {{ $key }}:
 {{- else if kindIs "map" $v }}

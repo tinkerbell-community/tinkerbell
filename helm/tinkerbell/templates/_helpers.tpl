@@ -108,10 +108,12 @@ Generate environment variables from a values structure.
 Usage: {{ include "tinkerbell.generateEnvVars" (dict "values" .Values.deployment.envs.globals) }}
 */}}
 {{- define "tinkerbell.generateEnvVars" -}}
+{{- $renames := include "tinkerbell.envRenames" . | fromYaml }}
 {{- range $sKey, $sValue := . }}
 {{- range $key, $value := $sValue }}
 {{- if $value }}
-- name: {{ list "TINKERBELL" (ternary "" (snakecase $sKey | upper) (eq (upper $sKey) "GLOBALS")) (snakecase $key | upper) | compact | join "_" }}
+{{- $name := list "TINKERBELL" (ternary "" (snakecase $sKey | upper) (eq (upper $sKey) "GLOBALS")) (snakecase $key | upper) | compact | join "_" }}
+- name: {{ get $renames $name | default $name }}
   value: {{ quote $value }}
 {{- end }}
 {{- end }}
