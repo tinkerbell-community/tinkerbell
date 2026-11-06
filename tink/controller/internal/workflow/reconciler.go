@@ -140,7 +140,37 @@ func (r *Reconciler) newState(wf *v1alpha2.Workflow) *state {
 
 // Reconcile handles Workflow objects. This includes Task rendering, optional Hardware netboot
 // toggling, and optional Hardware one-time netbooting, ISO booting and custom boot operations.
+// conflictRequeue is how soon a Workflow is reconciled again after its status could not be
+// written because it changed since it was read.
+const conflictRequeue = time.Second
+
 func (r *Reconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
+	result, err := r.reconcileWorkflow(ctx, req)
+	if err != nil && onlyConflicts(err) {
+		// The Workflow changed since it was read, so its status was not written. That is
+		// expected while the Agent reports progress; reconcile again from the new version
+		// rather than report it as an error.
+		ctrl.LoggerFrom(ctx).V(1).Info("workflow changed meanwhile, reconciling again", "error", err.Error())
+		return reconcile.Result{RequeueAfter: conflictRequeue}, nil
+	}
+	return result, err
+}
+
+// onlyConflicts reports whether err, or every error it joins, is a conflict.
+func onlyConflicts(err error) bool {
+	var joined interface{ Unwrap() []error }
+	if errors.As(err, &joined) {
+		for _, e := range joined.Unwrap() {
+			if e != nil && !onlyConflicts(e) {
+				return false
+			}
+		}
+		return true
+	}
+	return kerrors.IsConflict(err)
+}
+
+func (r *Reconciler) reconcileWorkflow(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	ctx = journal.New(ctx)
 	logger := ctrl.LoggerFrom(ctx)
 	defer func() {

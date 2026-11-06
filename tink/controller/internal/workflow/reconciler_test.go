@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -2116,8 +2118,9 @@ func TestReconcileFailedWorkflowWinsStalePatch(t *testing.T) {
 	}
 	req := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(workflow)}
 
-	if _, err := controller.Reconcile(context.Background(), req); !kerrors.IsConflict(err) {
-		t.Fatalf("expected stale status patch conflict, got %v", err)
+	// The stale patch conflicts: Reconcile tries again shortly instead of reporting an error.
+	if res, err := controller.Reconcile(context.Background(), req); err != nil || res.RequeueAfter != conflictRequeue {
+		t.Fatalf("stale status patch: got %+v, %v, want a requeue after %v and no error", res, err, conflictRequeue)
 	}
 	if committed == nil {
 		t.Fatal("expected cancellation to be committed before the stale patch")
@@ -2139,5 +2142,28 @@ func TestReconcileFailedWorkflowWinsStalePatch(t *testing.T) {
 	}
 	if diff := cmp.Diff(committed, got); diff != "" {
 		t.Fatalf("committed FAILED workflow changed (-want +got):\n%s", diff)
+	}
+}
+
+func TestOnlyConflicts(t *testing.T) {
+	conflict := kerrors.NewConflict(schema.GroupResource{Group: "tinkerbell.org", Resource: "workflows"}, "wf", errors.New("the object has been modified"))
+	tests := map[string]struct {
+		err  error
+		want bool
+	}{
+		"conflict":                    {conflict, true},
+		"wrapped conflict":            {fmt.Errorf("error patching status of workflow: wf, error: %w", conflict), true},
+		"joined with nil":             {errors.Join(nil, conflict), true},
+		"two conflicts":               {errors.Join(conflict, fmt.Errorf("again: %w", conflict)), true},
+		"conflict and another error":  {errors.Join(errors.New("rendering failed"), conflict), false},
+		"other error":                 {errors.New("rendering failed"), false},
+		"not found is not a conflict": {kerrors.NewNotFound(schema.GroupResource{Resource: "workflows"}, "wf"), false},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := onlyConflicts(tt.err); got != tt.want {
+				t.Errorf("onlyConflicts(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
 	}
 }
