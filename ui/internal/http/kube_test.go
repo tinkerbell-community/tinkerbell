@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	bmcv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	tinkv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/ui/templates"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -20,193 +21,6 @@ import (
 
 func init() {
 	gin.SetMode(gin.TestMode)
-}
-
-func TestGetHardwareInterfaces(t *testing.T) {
-	tests := []struct {
-		name     string
-		hardware tinkv1alpha1.Hardware
-		want     []templates.HardwareInterface
-	}{
-		{
-			name: "no interfaces",
-			hardware: tinkv1alpha1.Hardware{
-				Spec: tinkv1alpha1.HardwareSpec{
-					Interfaces: nil,
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "single interface with MAC and IP",
-			hardware: tinkv1alpha1.Hardware{
-				Spec: tinkv1alpha1.HardwareSpec{
-					Interfaces: []tinkv1alpha1.Interface{
-						{
-							DHCP: &tinkv1alpha1.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-								IP: &tinkv1alpha1.IP{
-									Address: "192.168.1.100",
-								},
-							},
-						},
-					},
-				},
-			},
-			want: []templates.HardwareInterface{
-				{MAC: "aa:bb:cc:dd:ee:ff", IP: "192.168.1.100"},
-			},
-		},
-		{
-			name: "interface with MAC only",
-			hardware: tinkv1alpha1.Hardware{
-				Spec: tinkv1alpha1.HardwareSpec{
-					Interfaces: []tinkv1alpha1.Interface{
-						{
-							DHCP: &tinkv1alpha1.DHCP{
-								MAC: "aa:bb:cc:dd:ee:ff",
-							},
-						},
-					},
-				},
-			},
-			want: []templates.HardwareInterface{
-				{MAC: "aa:bb:cc:dd:ee:ff", IP: ""},
-			},
-		},
-		{
-			name: "multiple interfaces",
-			hardware: tinkv1alpha1.Hardware{
-				Spec: tinkv1alpha1.HardwareSpec{
-					Interfaces: []tinkv1alpha1.Interface{
-						{
-							DHCP: &tinkv1alpha1.DHCP{
-								MAC: "aa:bb:cc:dd:ee:01",
-								IP: &tinkv1alpha1.IP{
-									Address: "192.168.1.101",
-								},
-							},
-						},
-						{
-							DHCP: &tinkv1alpha1.DHCP{
-								MAC: "aa:bb:cc:dd:ee:02",
-								IP: &tinkv1alpha1.IP{
-									Address: "192.168.1.102",
-								},
-							},
-						},
-					},
-				},
-			},
-			want: []templates.HardwareInterface{
-				{MAC: "aa:bb:cc:dd:ee:01", IP: "192.168.1.101"},
-				{MAC: "aa:bb:cc:dd:ee:02", IP: "192.168.1.102"},
-			},
-		},
-		{
-			name: "interface with nil DHCP",
-			hardware: tinkv1alpha1.Hardware{
-				Spec: tinkv1alpha1.HardwareSpec{
-					Interfaces: []tinkv1alpha1.Interface{
-						{
-							DHCP: nil,
-						},
-					},
-				},
-			},
-			want: nil,
-		},
-		{
-			name: "interface with empty MAC and IP skipped",
-			hardware: tinkv1alpha1.Hardware{
-				Spec: tinkv1alpha1.HardwareSpec{
-					Interfaces: []tinkv1alpha1.Interface{
-						{
-							DHCP: &tinkv1alpha1.DHCP{
-								MAC: "",
-								IP:  nil,
-							},
-						},
-					},
-				},
-			},
-			want: nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetHardwareInterfaces(tt.hardware)
-
-			if len(got) != len(tt.want) {
-				t.Errorf("GetHardwareInterfaces() returned %d interfaces, want %d", len(got), len(tt.want))
-				return
-			}
-
-			for i, iface := range got {
-				if iface.MAC != tt.want[i].MAC {
-					t.Errorf("Interface[%d].MAC = %s, want %s", i, iface.MAC, tt.want[i].MAC)
-				}
-				if iface.IP != tt.want[i].IP {
-					t.Errorf("Interface[%d].IP = %s, want %s", i, iface.IP, tt.want[i].IP)
-				}
-			}
-		})
-	}
-}
-
-func TestGetHardwareStatus(t *testing.T) {
-	tests := []struct {
-		name     string
-		hardware tinkv1alpha1.Hardware
-		want     string
-	}{
-		{
-			name: "provisioning state",
-			hardware: tinkv1alpha1.Hardware{
-				Status: tinkv1alpha1.HardwareStatus{
-					State: "provisioning",
-				},
-			},
-			want: "Provisioning",
-		},
-		{
-			name: "failed state",
-			hardware: tinkv1alpha1.Hardware{
-				Status: tinkv1alpha1.HardwareStatus{
-					State: "failed",
-				},
-			},
-			want: "Offline",
-		},
-		{
-			name: "empty state defaults to Online",
-			hardware: tinkv1alpha1.Hardware{
-				Status: tinkv1alpha1.HardwareStatus{
-					State: "",
-				},
-			},
-			want: "Online",
-		},
-		{
-			name: "unknown state defaults to Online",
-			hardware: tinkv1alpha1.Hardware{
-				Status: tinkv1alpha1.HardwareStatus{
-					State: "something-else",
-				},
-			},
-			want: "Online",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := GetHardwareStatus(tt.hardware)
-			if got != tt.want {
-				t.Errorf("GetHardwareStatus() = %s, want %s", got, tt.want)
-			}
-		})
-	}
 }
 
 func TestGetBMCJobStatus(t *testing.T) {
@@ -605,6 +419,7 @@ func TestKubeClientInNamespace(t *testing.T) {
 	mapper := meta.NewDefaultRESTMapper(nil)
 	for _, kind := range []string{"Hardware", "HardwareList", "Workflow", "WorkflowList"} {
 		mapper.Add(tinkv1alpha1.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
+		mapper.Add(tinkv1alpha2.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
 	}
 	c := fake.NewClientBuilder().WithScheme(newTestScheme()).WithRESTMapper(mapper).WithRuntimeObjects(
 		newTestHardware("in", "tink", "", ""), newTestHardware("out", "other", "", ""),
@@ -642,6 +457,7 @@ func TestKubeClientInSeveralNamespaces(t *testing.T) {
 	mapper := meta.NewDefaultRESTMapper(nil)
 	for _, kind := range []string{"Hardware", "HardwareList", "Workflow", "WorkflowList"} {
 		mapper.Add(tinkv1alpha1.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
+		mapper.Add(tinkv1alpha2.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
 	}
 	var listed []string
 	c := fake.NewClientBuilder().WithScheme(newTestScheme()).WithRESTMapper(mapper).WithRuntimeObjects(

@@ -3,7 +3,7 @@ package templates_test
 import (
 	"testing"
 
-	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	"github.com/tinkerbell/tinkerbell/ui/templates"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -17,34 +17,34 @@ func TestOutOfBandAttributesFromStatusNil(t *testing.T) {
 func TestOutOfBandAttributesFromStatus(t *testing.T) {
 	now := metav1.Now()
 	postCode := int32(0)
-	attrs := &tinkv1alpha1.Attributes{
+	attrs := &inventory.Attributes{
 		LastUpdated:      &now,
 		CollectionMethod: "redfish",
-		BIOS: &tinkv1alpha1.BIOS{
+		BIOS: &inventory.BIOS{
 			Vendor:          "Dell Inc.",
 			FirmwareVersion: "2.10.2",
-			Status:          &tinkv1alpha1.ComponentStatus{Health: "OK", PostCode: &postCode, PostCodeStatus: "success"},
+			Status:          &inventory.ComponentStatus{Health: "OK", PostCode: &postCode, PostCodeStatus: "success"},
 		},
-		CPU: &tinkv1alpha1.CPU{
+		CPU: &inventory.CPU{
 			TotalCores:   24,
 			TotalThreads: 48,
-			Sockets: []tinkv1alpha1.CPUSocket{
+			Sockets: []inventory.CPUSocket{
 				{Vendor: "Intel", Model: "Xeon Gold 6248R", Cores: 24, Threads: 48},
 			},
 		},
-		PSUs: []tinkv1alpha1.PSU{
-			{Vendor: "Dell", Status: &tinkv1alpha1.ComponentStatus{Health: "OK"}, PowerCapacityWatts: 800},
+		PSUs: []inventory.PSU{
+			{Vendor: "Dell", Status: &inventory.ComponentStatus{Health: "OK"}, PowerCapacityWatts: 800},
 		},
-		NetworkInterfaces: []tinkv1alpha1.NetworkInterface{
+		NetworkInterfaces: []inventory.NetworkInterface{
 			{
 				Vendor: "Broadcom",
-				Ports: []tinkv1alpha1.NetworkPort{
+				Ports: []inventory.NetworkPort{
 					{PortID: "1", MAC: "aa:bb:cc:dd:ee:ff", LinkStatus: "Up", SpeedMbps: 25000},
 					{PortID: "2", MAC: "aa:bb:cc:dd:ee:00", LinkStatus: "Down"},
 				},
 			},
 		},
-		StorageControllers: []tinkv1alpha1.StorageController{
+		StorageControllers: []inventory.StorageController{
 			{Vendor: "Broadcom", Model: "HBA 9500-8i", FirmwareVersion: "24.16.0"},
 		},
 	}
@@ -95,7 +95,7 @@ func TestOutOfBandAttributesFromStatusEmptyComponents(t *testing.T) {
 	// Attributes with only the top-level fields set (no BIOS/BMC/Baseboard) must
 	// not panic — this is the common case per the data-completeness findings in
 	// #844 (IPMI-only/ASRockRack drivers report much less than Redfish).
-	got := templates.OutOfBandAttributesFromStatus(&tinkv1alpha1.Attributes{CollectionMethod: "asrockrack"})
+	got := templates.OutOfBandAttributesFromStatus(&inventory.Attributes{CollectionMethod: "asrockrack"})
 	if got == nil {
 		t.Fatal("OutOfBandAttributesFromStatus() = nil, want populated")
 	}
@@ -105,11 +105,11 @@ func TestOutOfBandAttributesFromStatusEmptyComponents(t *testing.T) {
 }
 
 func TestOutOfBandAttributesFromStatusBMCNIC(t *testing.T) {
-	attrs := &tinkv1alpha1.Attributes{
-		BMC: &tinkv1alpha1.BMC{
+	attrs := &inventory.Attributes{
+		BMC: &inventory.BMC{
 			Vendor: "Dell",
-			NIC: &tinkv1alpha1.NetworkInterface{
-				Ports: []tinkv1alpha1.NetworkPort{{MAC: "aa:bb:cc:dd:ee:ff"}},
+			NIC: &inventory.NetworkInterface{
+				Ports: []inventory.NetworkPort{{MAC: "aa:bb:cc:dd:ee:ff"}},
 			},
 		},
 	}

@@ -50,23 +50,8 @@ func GetHardwareList(c *gin.Context, log logr.Logger) ([]string, templates.Hardw
 		return namespaces, GetPaginatedHardware(hardware, page, itemsPerPage)
 	}
 
-	for _, hw := range hardwareList.Items {
-		mac := "N/A"
-		ip := "N/A"
-		if len(hw.Spec.Interfaces) > 0 && hw.Spec.Interfaces[0].DHCP != nil {
-			mac = hw.Spec.Interfaces[0].DHCP.MAC
-			if hw.Spec.Interfaces[0].DHCP.IP != nil {
-				ip = hw.Spec.Interfaces[0].DHCP.IP.Address
-			}
-		}
-		webHW := templates.Hardware{
-			Name:        hw.Name,
-			Namespace:   hw.Namespace,
-			MAC:         mac,
-			IPv4Address: ip,
-			CreatedAt:   hw.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-		}
-		hardware = append(hardware, webHW)
+	for i := range hardwareList.Items {
+		hardware = append(hardware, hardwareRow(&hardwareList.Items[i]))
 	}
 
 	return namespaces, GetPaginatedHardware(hardware, page, itemsPerPage)
@@ -143,25 +128,8 @@ func HandleHardwareData(c *gin.Context, log logr.Logger) {
 	if err != nil {
 		log.V(1).Info("Failed to list "+namePluralHardware, "error", err)
 	} else {
-		for _, hw := range hardwareList.Items {
-			mac := "N/A"
-			ip := "N/A"
-			if len(hw.Spec.Interfaces) > 0 {
-				if hw.Spec.Interfaces[0].DHCP != nil {
-					mac = hw.Spec.Interfaces[0].DHCP.MAC
-					if hw.Spec.Interfaces[0].DHCP.IP != nil {
-						ip = hw.Spec.Interfaces[0].DHCP.IP.Address
-					}
-				}
-			}
-			webHW := templates.Hardware{
-				Name:        hw.Name,
-				Namespace:   hw.Namespace,
-				MAC:         mac,
-				IPv4Address: ip,
-				CreatedAt:   hw.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-			}
-			hardware = append(hardware, webHW)
+		for i := range hardwareList.Items {
+			hardware = append(hardware, hardwareRow(&hardwareList.Items[i]))
 		}
 	}
 
@@ -225,30 +193,10 @@ func HandleHardwareDetail(c *gin.Context, log logr.Logger) {
 		return
 	}
 
-	var agentAttrs *templates.AgentAttributes
-	if hw.Status.Attributes != nil {
-		agentAttrs = templates.AgentAttributesFromInBand(hw.Status.Attributes.InBand)
-	}
-
-	var outOfBand *templates.OutOfBandAttributes
-	if hw.Status.Attributes != nil {
-		outOfBand = templates.OutOfBandAttributesFromStatus(hw.Status.Attributes.OutOfBand)
-	}
-
-	hwDetail := templates.HardwareDetail{
-		Name:            hw.Name,
-		Namespace:       hw.Namespace,
-		Interfaces:      GetHardwareInterfaces(*hw),
-		Status:          GetHardwareStatus(*hw),
-		CreatedAt:       hw.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-		Labels:          hw.Labels,
-		Annotations:     hw.Annotations,
-		AgentAttributes: agentAttrs,
-		OutOfBand:       outOfBand,
-		SpecYAML:        string(specYAML),
-		StatusYAML:      string(statusYAML),
-		YAML:            string(yamlBytes),
-	}
+	hwDetail := hardwareDetail(hw, GetBaseURL(c))
+	hwDetail.SpecYAML = string(specYAML)
+	hwDetail.StatusYAML = string(statusYAML)
+	hwDetail.YAML = string(yamlBytes)
 
 	cfg := templates.PageConfig{
 		BaseURL:    GetBaseURL(c),

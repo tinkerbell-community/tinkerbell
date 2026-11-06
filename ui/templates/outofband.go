@@ -1,14 +1,14 @@
 package templates
 
 import (
-	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 )
 
 // OutOfBandAttributesFromStatus converts the typed
 // Hardware.status.attributes.outOfBand field into the template's flattened
 // OutOfBandAttributes type. Unlike AgentAttributes, which is parsed from a JSON
 // annotation, this is a plain Go-to-Go mapping.
-func OutOfBandAttributesFromStatus(attrs *tinkv1alpha1.Attributes) *OutOfBandAttributes {
+func OutOfBandAttributesFromStatus(attrs *inventory.Attributes) *OutOfBandAttributes {
 	if attrs == nil {
 		return nil
 	}
@@ -142,7 +142,7 @@ func OutOfBandAttributesFromStatus(attrs *tinkv1alpha1.Attributes) *OutOfBandAtt
 	return out
 }
 
-func statusFromAPI(s *tinkv1alpha1.ComponentStatus) OOBStatus {
+func statusFromAPI(s *inventory.ComponentStatus) OOBStatus {
 	if s == nil {
 		return OOBStatus{}
 	}
@@ -157,7 +157,7 @@ func statusFromAPI(s *tinkv1alpha1.ComponentStatus) OOBStatus {
 	return st
 }
 
-func productFromAPI(p *tinkv1alpha1.Product) OOBProduct {
+func productFromAPI(p *inventory.Product) OOBProduct {
 	if p == nil {
 		return OOBProduct{}
 	}
@@ -170,7 +170,7 @@ func productFromAPI(p *tinkv1alpha1.Product) OOBProduct {
 	}
 }
 
-func biosFromAPI(b *tinkv1alpha1.BIOS) OOBBIOS {
+func biosFromAPI(b *inventory.BIOS) OOBBIOS {
 	if b == nil {
 		return OOBBIOS{}
 	}
@@ -184,7 +184,7 @@ func biosFromAPI(b *tinkv1alpha1.BIOS) OOBBIOS {
 	}
 }
 
-func bmcFromAPI(b *tinkv1alpha1.BMC) OOBBMC {
+func bmcFromAPI(b *inventory.BMC) OOBBMC {
 	if b == nil {
 		return OOBBMC{}
 	}
@@ -216,7 +216,7 @@ func bmcFromAPI(b *tinkv1alpha1.BMC) OOBBMC {
 	return out
 }
 
-func baseboardFromAPI(b *tinkv1alpha1.Baseboard) OOBComponent {
+func baseboardFromAPI(b *inventory.Baseboard) OOBComponent {
 	if b == nil {
 		return OOBComponent{}
 	}
@@ -230,7 +230,7 @@ func baseboardFromAPI(b *tinkv1alpha1.Baseboard) OOBComponent {
 	}
 }
 
-func chassisFromAPI(c *tinkv1alpha1.Chassis) OOBComponent {
+func chassisFromAPI(c *inventory.Chassis) OOBComponent {
 	if c == nil {
 		return OOBComponent{}
 	}

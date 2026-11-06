@@ -3,13 +3,13 @@ package templates
 import (
 	"strconv"
 
-	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 )
 
 // AgentAttributesFromInBand converts the shared Attributes schema, as reported
 // by the Tink Agent and stored at Hardware.status.attributes.inBand, into the
 // shape the "In-Band Attributes" section of the Hardware detail page renders.
-func AgentAttributesFromInBand(attrs *tinkv1alpha1.Attributes) *AgentAttributes {
+func AgentAttributesFromInBand(attrs *inventory.Attributes) *AgentAttributes {
 	if attrs == nil {
 		return nil
 	}

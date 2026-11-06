@@ -131,8 +131,9 @@ func TestHandleHardwareDetail_Found(t *testing.T) {
 }
 
 func TestHandleHardwareDetail_WithOutOfBandAttributes(t *testing.T) {
-	hw := newTestHardware("hw-1", "default", "aa:bb:cc:dd:ee:01", "192.168.1.1")
-	hw.Status.Attributes = &tinkv1alpha1.HardwareAttributes{
+	// Attributes reported through v1alpha1 show as before.
+	v1 := newTestHardwareV1Alpha1("hw-1", "default", "aa:bb:cc:dd:ee:01", "192.168.1.1")
+	v1.Status.Attributes = &tinkv1alpha1.HardwareAttributes{
 		OutOfBand: &tinkv1alpha1.Attributes{
 			LastUpdated:      &metav1.Time{},
 			CollectionMethod: "redfish",
@@ -151,7 +152,7 @@ func TestHandleHardwareDetail_WithOutOfBandAttributes(t *testing.T) {
 
 	kubeClient := newFakeKubeClient(
 		newTestNamespace("default"),
-		hw,
+		hardwareV1Alpha2(v1),
 	)
 
 	c, w := setupTestContext("/hardware/default/hw-1", kubeClient)
@@ -219,8 +220,9 @@ func TestHandleHardwareDetail_NotFound(t *testing.T) {
 }
 
 func TestHandleHardwareDetail_WithInBandAttributes(t *testing.T) {
-	hw := newTestHardware("hw-1", "default", "aa:bb:cc:dd:ee:01", "192.168.1.1")
-	hw.Status.Attributes = &tinkv1alpha1.HardwareAttributes{
+	// Attributes reported through v1alpha1 show as before.
+	v1 := newTestHardwareV1Alpha1("hw-1", "default", "aa:bb:cc:dd:ee:01", "192.168.1.1")
+	v1.Status.Attributes = &tinkv1alpha1.HardwareAttributes{
 		InBand: &tinkv1alpha1.Attributes{
 			CollectionMethod: "agent",
 			CPU: &tinkv1alpha1.CPU{
@@ -257,7 +259,7 @@ func TestHandleHardwareDetail_WithInBandAttributes(t *testing.T) {
 	}
 	kubeClient := newFakeKubeClient(
 		newTestNamespace("default"),
-		hw,
+		hardwareV1Alpha2(v1),
 	)
 
 	c, w := setupTestContext("/hardware/default/hw-1", kubeClient)

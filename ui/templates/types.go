@@ -26,7 +26,10 @@ type Hardware struct {
 	Namespace   string
 	Description string
 	MAC         string
+	// IPv4Address and IPv6Address are the addresses of the Hardware's first
+	// network interface, empty when it has none of that family.
 	IPv4Address string
+	IPv6Address string
 	Status      string
 	CreatedAt   string
 }
@@ -164,10 +167,35 @@ type BMCTaskPageData struct {
 	Pagination PaginationData
 }
 
-// HardwareInterface represents a single network interface.
+// HardwareInterface is a network interface of a Hardware: its MAC and the
+// network configuration Tinkerbell serves for it.
 type HardwareInterface struct {
 	MAC string
-	IP  string
+	// IPv4Address and IPv6Address are the interface's IPAM addresses, empty
+	// when it has none of that family.
+	IPv4Address string
+	IPv6Address string
+	// IPv4 and IPv6 describe ipam.ipv4 and ipam.ipv6, DHCP the DHCP options and
+	// Netboot the network boot options. Rows with no value are not shown.
+	IPv4    []InfoRow
+	IPv6    []InfoRow
+	DHCP    []InfoRow
+	Netboot []InfoRow
+}
+
+// Condition is a status condition of a resource.
+type Condition struct {
+	Type    string
+	Status  string
+	Reason  string
+	Message string
+	Time    string
+}
+
+// NamedText is a named block of text, such as cloud-init user data.
+type NamedText struct {
+	Name string
+	Text string
 }
 
 // AgentProcessor represents a processor from agent attributes.
@@ -287,22 +315,35 @@ type AgentAttributes struct {
 
 // HardwareDetail is the data for the hardware detail page.
 type HardwareDetail struct {
-	Name            string
-	Namespace       string
-	Interfaces      []HardwareInterface
-	Status          string
-	CreatedAt       string
-	Labels          map[string]string
-	Annotations     map[string]string
-	AgentAttributes *AgentAttributes
-	OutOfBand       *OutOfBandAttributes
-	SpecYAML        string
-	StatusYAML      string
-	YAML            string
+	Name        string
+	Namespace   string
+	Interfaces  []HardwareInterface
+	Status      string
+	CreatedAt   string
+	Labels      map[string]string
+	Annotations map[string]string
+	// Spec describes the Hardware as a whole: architecture, Agent, enrollment
+	// and storage devices. References lists spec.references, one row each.
+	Spec       []InfoRow
+	References []InfoRow
+	// Instance describes spec.instance; InstanceData holds its cloud-init
+	// documents (user data, vendor data, meta-data, network config).
+	Instance     []InfoRow
+	InstanceData []NamedText
+	// BMC describes spec.bmc, and the deprecated bmc Machine of Hardware created
+	// through v1alpha1. BMCProviderOptions is the connection's provider options as YAML.
+	BMC                []InfoRow
+	BMCProviderOptions string
+	Conditions         []Condition
+	AgentAttributes    *AgentAttributes
+	OutOfBand          *OutOfBandAttributes
+	SpecYAML           string
+	StatusYAML         string
+	YAML               string
 }
 
 // OOBStatus is health/state info for a component, as reported out-of-band.
-// Mirrors api/v1alpha1/tinkerbell.ComponentStatus, flattened to a value type
+// Mirrors api/v1alpha2/tinkerbell/inventory.ComponentStatus, flattened to a value type
 // for template convenience.
 type OOBStatus struct {
 	Health string
@@ -467,7 +508,7 @@ type OOBGPU struct {
 }
 
 // OutOfBandAttributes is hardware data collected out-of-band via the BMC,
-// mirroring api/v1alpha1/tinkerbell.Attributes (the
+// mirroring api/v1alpha2/tinkerbell/inventory.Attributes (the
 // status.attributes.outOfBand subtree). Every field is optional: BMC
 // vendors/protocols vary widely in what they report, so an empty field here
 // reflects what the BMC/collection driver reports, not an error.
@@ -597,6 +638,16 @@ type InfoRow struct {
 	Value string
 	Link  string // If set, Value is rendered as a hyperlink to this URL.
 	Hide  bool
+}
+
+// HasValues reports whether NameValueTable shows any of rows.
+func HasValues(rows []InfoRow) bool {
+	for _, r := range rows {
+		if !r.Hide && r.Value != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // SchemaField represents a field in a CRD schema for display.

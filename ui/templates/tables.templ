@@ -172,7 +172,17 @@ templ HardwareTableContent(hardwareData HardwarePageData) {
 							<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-darkBorderSoft dark:text-gray-300">{ hw.Namespace }</span>
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 dark:text-gray-300">{ hw.MAC }</td>
-						<td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 dark:text-gray-300">{ hw.IPv4Address }</td>
+						<td class="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-600 dark:text-gray-300">
+							if hw.IPv4Address == "" && hw.IPv6Address == "" {
+								N/A
+							}
+							if hw.IPv4Address != "" {
+								<div>{ hw.IPv4Address }</div>
+							}
+							if hw.IPv6Address != "" {
+								<div>{ hw.IPv6Address }</div>
+							}
+						</td>
 						<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{ hw.CreatedAt }</td>
 					</tr>
 					}

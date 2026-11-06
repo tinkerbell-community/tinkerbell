@@ -3,7 +3,7 @@ package templates
 import (
 	"testing"
 
-	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 )
 
 func TestAgentAttributesFromInBandNil(t *testing.T) {
@@ -13,7 +13,7 @@ func TestAgentAttributesFromInBandNil(t *testing.T) {
 }
 
 func TestAgentAttributesFromInBandEmpty(t *testing.T) {
-	got := AgentAttributesFromInBand(&tinkv1alpha1.Attributes{})
+	got := AgentAttributesFromInBand(&inventory.Attributes{})
 	if got == nil {
 		t.Fatal("AgentAttributesFromInBand() = nil, want populated")
 	}
@@ -26,34 +26,34 @@ func TestAgentAttributesFromInBandEmpty(t *testing.T) {
 }
 
 func TestAgentAttributesFromInBand(t *testing.T) {
-	attrs := &tinkv1alpha1.Attributes{
-		CPU: &tinkv1alpha1.CPU{
+	attrs := &inventory.Attributes{
+		CPU: &inventory.CPU{
 			TotalCores:   8,
 			TotalThreads: 16,
-			Sockets: []tinkv1alpha1.CPUSocket{
+			Sockets: []inventory.CPUSocket{
 				{Slot: "2", Vendor: "GenuineIntel", Model: "i7", Cores: 8, Threads: 16, Capabilities: []string{"fpu", "vme"}},
 			},
 		},
-		Memory: &tinkv1alpha1.Memory{
+		Memory: &inventory.Memory{
 			TotalBytes:  8_000_000_000,
 			UsableBytes: 7_500_000_000,
 		},
-		BlockDevices: []tinkv1alpha1.BlockDevice{
+		BlockDevices: []inventory.BlockDevice{
 			{Name: "nvme0n1", Vendor: "Samsung", SerialNumber: "S1", Path: "pci-0000:17:00.0-nvme-1", SizeBytes: 20_000_000_000},
 		},
-		NetworkInterfaces: []tinkv1alpha1.NetworkInterface{
+		NetworkInterfaces: []inventory.NetworkInterface{
 			{
 				Name: "eno1",
-				Ports: []tinkv1alpha1.NetworkPort{
+				Ports: []inventory.NetworkPort{
 					{MAC: "aa:bb:cc:dd:ee:ff", SpeedMbps: 100, EnabledCapabilities: []string{"tso"}},
 				},
 			},
 			{
 				Name: "eno2",
-				Ports: []tinkv1alpha1.NetworkPort{
+				Ports: []inventory.NetworkPort{
 					{
 						MAC: "aa:bb:cc:dd:ee:00", SpeedMbps: 25000,
-						LLDPNeighbors: []tinkv1alpha1.LLDPNeighbor{
+						LLDPNeighbors: []inventory.LLDPNeighbor{
 							{
 								ChassisID: "aa:bb:cc:00:11:22", SystemName: "switch01",
 								PortID: "Gi1/0/1", PortDescription: "uplink",
@@ -64,16 +64,16 @@ func TestAgentAttributesFromInBand(t *testing.T) {
 				},
 			},
 		},
-		PCIDevices: []tinkv1alpha1.PCIDevice{
+		PCIDevices: []inventory.PCIDevice{
 			{Vendor: "Intel", Model: "Ethernet Controller", Class: "0200", Driver: "ixgbe"},
 		},
-		GPUDevices: []tinkv1alpha1.GPUDevice{
+		GPUDevices: []inventory.GPUDevice{
 			{Vendor: "NVIDIA", Model: "A100", Class: "0300", Driver: "nvidia"},
 		},
-		Chassis:   &tinkv1alpha1.Chassis{Vendor: "Dell", SerialNumber: "CH1"},
-		BIOS:      &tinkv1alpha1.BIOS{Vendor: "Dell Inc.", FirmwareVersion: "2.10.2", ReleaseDate: "01/01/2024"},
-		Baseboard: &tinkv1alpha1.Baseboard{Vendor: "Dell", Model: "0ABC123", FirmwareVersion: "A01", SerialNumber: "BB1"},
-		Product:   &tinkv1alpha1.Product{Name: "PowerEdge R750", Vendor: "Dell Inc.", SerialNumber: "SN1"},
+		Chassis:   &inventory.Chassis{Vendor: "Dell", SerialNumber: "CH1"},
+		BIOS:      &inventory.BIOS{Vendor: "Dell Inc.", FirmwareVersion: "2.10.2", ReleaseDate: "01/01/2024"},
+		Baseboard: &inventory.Baseboard{Vendor: "Dell", Model: "0ABC123", FirmwareVersion: "A01", SerialNumber: "BB1"},
+		Product:   &inventory.Product{Name: "PowerEdge R750", Vendor: "Dell Inc.", SerialNumber: "SN1"},
 	}
 
 	got := AgentAttributesFromInBand(attrs)
@@ -148,9 +148,9 @@ func TestAgentAttributesFromInBandNonNumericSlotFallsBackToIndex(t *testing.T) {
 	// Out-of-band reports Slot as a physical socket label (e.g. "CPU1"), not a
 	// number; when it doesn't parse, the array index is used instead of erroring
 	// or leaving a zero-value ID for every socket.
-	attrs := &tinkv1alpha1.Attributes{
-		CPU: &tinkv1alpha1.CPU{
-			Sockets: []tinkv1alpha1.CPUSocket{
+	attrs := &inventory.Attributes{
+		CPU: &inventory.CPU{
+			Sockets: []inventory.CPUSocket{
 				{Slot: "CPU1", Model: "i7"},
 				{Slot: "CPU2", Model: "i9"},
 			},

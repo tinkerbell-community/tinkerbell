@@ -13,6 +13,8 @@ import (
 	"github.com/go-logr/logr"
 	bmcv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	tinkv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"github.com/tinkerbell/tinkerbell/ui/templates"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -295,17 +297,31 @@ func NewKubeClientFromTokenAndServer(token, apiServer string, insecureSkipVerify
 	return NewKubeClientFromRestConfig(config)
 }
 
+// NewScheme returns the scheme of the types the web UI reads: Hardware,
+// Workflows, Tasks, Policies and bmc Jobs as v1alpha2, and the deprecated kinds
+// that only exist in v1alpha1 (Templates, WorkflowRuleSets, bmc Machines and
+// bmc Tasks).
+func NewScheme() (*runtime.Scheme, error) {
+	scheme := runtime.NewScheme()
+	for name, add := range map[string]func(*runtime.Scheme) error{
+		"core":                corev1.AddToScheme,
+		"tinkerbell v1alpha1": tinkv1alpha1.AddToScheme,
+		"tinkerbell v1alpha2": tinkv1alpha2.AddToScheme,
+		"bmc v1alpha1":        bmcv1alpha1.AddToScheme,
+		"bmc v1alpha2":        bmcv1alpha2.AddToScheme,
+	} {
+		if err := add(scheme); err != nil {
+			return nil, fmt.Errorf("failed to add %s types to scheme: %w", name, err)
+		}
+	}
+	return scheme, nil
+}
+
 // NewKubeClientFromRestConfig creates a Kubernetes client from an existing REST config.
 func NewKubeClientFromRestConfig(config *rest.Config) (*KubeClient, error) {
-	scheme := runtime.NewScheme()
-	if err := corev1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("failed to add core types to scheme: %w", err)
-	}
-	if err := tinkv1alpha1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("failed to add tinkerbell types to scheme: %w", err)
-	}
-	if err := bmcv1alpha1.AddToScheme(scheme); err != nil {
-		return nil, fmt.Errorf("failed to add bmc types to scheme: %w", err)
+	scheme, err := NewScheme()
+	if err != nil {
+		return nil, err
 	}
 
 	c, err := client.New(config, client.Options{Scheme: scheme})
@@ -343,23 +359,26 @@ func (k *KubeClient) ListNamespaces(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-// ListHardware returns all hardware resources, optionally filtered by namespace.
-func (k *KubeClient) ListHardware(ctx context.Context, namespace string) (*tinkv1alpha1.HardwareList, error) {
-	var hwList tinkv1alpha1.HardwareList
-	opts := []client.ListOption{}
-	if namespace != "" && namespace != templates.AllNamespace {
-		opts = append(opts, client.InNamespace(namespace))
+// inNamespace returns the List options for namespace: none for all namespaces.
+func inNamespace(namespace string) []client.ListOption {
+	if namespace == "" || namespace == templates.AllNamespace {
+		return nil
 	}
+	return []client.ListOption{client.InNamespace(namespace)}
+}
 
-	if err := k.List(ctx, &hwList, opts...); err != nil {
+// ListHardware returns all hardware resources, optionally filtered by namespace.
+func (k *KubeClient) ListHardware(ctx context.Context, namespace string) (*tinkv1alpha2.HardwareList, error) {
+	var hwList tinkv1alpha2.HardwareList
+	if err := k.List(ctx, &hwList, inNamespace(namespace)...); err != nil {
 		return nil, fmt.Errorf("failed to list hardware: %w", err)
 	}
 	return &hwList, nil
 }
 
 // GetHardware returns a specific hardware resource.
-func (k *KubeClient) GetHardware(ctx context.Context, namespace, name string) (*tinkv1alpha1.Hardware, error) {
-	var hw tinkv1alpha1.Hardware
+func (k *KubeClient) GetHardware(ctx context.Context, namespace, name string) (*tinkv1alpha2.Hardware, error) {
+	var hw tinkv1alpha2.Hardware
 	if err := k.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &hw); err != nil {
 		return nil, fmt.Errorf("failed to get hardware: %w", err)
 	}
@@ -605,38 +624,6 @@ func RenderComponent(ctx context.Context, w io.Writer, component templ.Component
 // IsHTMXRequest checks if the request is an HTMX request.
 func IsHTMXRequest(c *gin.Context) bool {
 	return c.GetHeader("HX-Request") == htmxRequestTrue
-}
-
-// GetHardwareInterfaces extracts all network interfaces from hardware.
-func GetHardwareInterfaces(hw tinkv1alpha1.Hardware) []templates.HardwareInterface {
-	var interfaces []templates.HardwareInterface
-	for _, iface := range hw.Spec.Interfaces {
-		if iface.DHCP != nil {
-			mac := iface.DHCP.MAC
-			ip := ""
-			if iface.DHCP.IP != nil {
-				ip = iface.DHCP.IP.Address
-			}
-			if mac != "" || ip != "" {
-				interfaces = append(interfaces, templates.HardwareInterface{
-					MAC: mac,
-					IP:  ip,
-				})
-			}
-		}
-	}
-	return interfaces
-}
-
-// GetHardwareStatus determines hardware status.
-func GetHardwareStatus(hw tinkv1alpha1.Hardware) string {
-	if hw.Status.State == "provisioning" {
-		return "Provisioning"
-	}
-	if hw.Status.State == "failed" {
-		return "Offline"
-	}
-	return "Online"
 }
 
 // GetKubeNamespaces fetches namespaces from the Kubernetes cluster.

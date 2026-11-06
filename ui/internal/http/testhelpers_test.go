@@ -6,8 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	bmcv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	tinkv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -22,10 +24,10 @@ func init() {
 
 // newTestScheme creates a scheme with all required types registered.
 func newTestScheme() *runtime.Scheme {
-	scheme := runtime.NewScheme()
-	_ = corev1.AddToScheme(scheme)
-	_ = tinkv1alpha1.AddToScheme(scheme)
-	_ = bmcv1alpha1.AddToScheme(scheme)
+	scheme, err := NewScheme()
+	if err != nil {
+		panic(err)
+	}
 	return scheme
 }
 
@@ -58,7 +60,24 @@ func newTestNamespace(name string) *corev1.Namespace {
 	}
 }
 
-func newTestHardware(name, namespace, mac, ip string) *tinkv1alpha1.Hardware {
+// newTestHardware returns a Hardware created through v1alpha1, as the API
+// server stores it: converted to v1alpha2.
+func newTestHardware(name, namespace, mac, ip string) *tinkv1alpha2.Hardware {
+	return hardwareV1Alpha2(newTestHardwareV1Alpha1(name, namespace, mac, ip))
+}
+
+// hardwareV1Alpha2 converts a Hardware created through v1alpha1 as the
+// conversion webhook does.
+func hardwareV1Alpha2(hw *tinkv1alpha1.Hardware) *tinkv1alpha2.Hardware {
+	var out tinkv1alpha2.Hardware
+	if err := conversion.HardwareToV1Alpha2(hw, &out); err != nil {
+		panic(err)
+	}
+	return &out
+}
+
+// newTestHardwareV1Alpha1 returns a Hardware as a v1alpha1 client creates it.
+func newTestHardwareV1Alpha1(name, namespace, mac, ip string) *tinkv1alpha1.Hardware {
 	hw := &tinkv1alpha1.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              name,

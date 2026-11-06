@@ -81,6 +81,67 @@ templ NameValueTable(rows []InfoRow) {
 	</div>
 }
 
+// SubsectionRows - a titled NameValueTable within a section, shown only when a row has a value
+templ SubsectionRows(title string, rows []InfoRow) {
+	if HasValues(rows) {
+		<div class="py-2">
+			<h4 class="mt-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">{ title }</h4>
+			@NameValueTable(rows)
+		</div>
+	}
+}
+
+// HardwareInterfaceCard - a network interface of a Hardware with its IPAM, DHCP and netboot configuration
+templ HardwareInterfaceCard(iface HardwareInterface) {
+	<div class="rounded-md border border-gray-200 dark:border-darkBorder">
+		<div class="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-darkBorder bg-gray-50 dark:bg-darkBg rounded-t-md">
+			<span class="text-sm font-mono font-medium text-gray-900 dark:text-white">{ iface.MAC }</span>
+			if iface.IPv4Address != "" {
+				<span class="text-sm font-mono text-gray-600 dark:text-gray-300">{ iface.IPv4Address }</span>
+			}
+			if iface.IPv6Address != "" {
+				<span class="text-sm font-mono text-gray-600 dark:text-gray-300">{ iface.IPv6Address }</span>
+			}
+		</div>
+		<div class="grid gap-x-6 px-4 md:grid-cols-2">
+			@SubsectionRows("IPv4", iface.IPv4)
+			@SubsectionRows("IPv6", iface.IPv6)
+			@SubsectionRows("DHCP", iface.DHCP)
+			@SubsectionRows("Netboot", iface.Netboot)
+		</div>
+	</div>
+}
+
+// ConditionsTable - status conditions of a resource
+templ ConditionsTable(conditions []Condition) {
+	<div class="overflow-x-auto">
+		<table class="min-w-full">
+			<thead>
+				<tr class="border-b border-gray-200 dark:border-darkBorder">
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Type</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Status</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Reason</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Message</th>
+					<th class="py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">Last Update</th>
+				</tr>
+			</thead>
+			<tbody>
+				for _, c := range conditions {
+					<tr class="border-b border-gray-100 dark:border-darkBorder last:border-b-0">
+						<td class="py-2 pr-4 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{ c.Type }</td>
+						<td class="py-2 pr-4 text-sm whitespace-nowrap">
+							@StatusBadge(c.Status)
+						</td>
+						<td class="py-2 pr-4 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{ c.Reason }</td>
+						<td class="py-2 pr-4 text-sm text-gray-700 dark:text-gray-300 break-words">{ c.Message }</td>
+						<td class="py-2 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{ c.Time }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}
+
 // LabelChips - Display labels as inline chips
 templ LabelChips(labels map[string]string) {
 	if len(labels) > 0 {

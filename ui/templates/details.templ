@@ -12,30 +12,68 @@ templ HardwareDetailContent(hw HardwareDetail, baseURL string) {
 		@MetadataTable(hw.Name, hw.Namespace, hw.CreatedAt, hw.Labels, hw.Annotations)
 	}
 	
+	<!-- Hardware Details -->
+	if HasValues(hw.Spec) {
+		@SectionBox("Hardware Details") {
+			@NameValueTable(hw.Spec)
+		}
+	}
+
 	<!-- Network Interfaces -->
 	if len(hw.Interfaces) > 0 {
 		@SectionBox("Network Interfaces") {
-			<div class="overflow-x-auto">
-				<table class="min-w-full">
-					<thead>
-						<tr class="border-b border-gray-200 dark:border-darkBorder">
-							<th class="py-3 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">MAC Address</th>
-							<th class="py-3 text-left text-sm font-medium text-gray-500 dark:text-gray-400 whitespace-nowrap">IP Address</th>
-						</tr>
-					</thead>
-					<tbody>
-						for _, iface := range hw.Interfaces {
-							<tr class="border-b border-gray-100 dark:border-darkBorder last:border-b-0">
-								<td class="py-3 pr-4 text-sm font-mono text-gray-900 dark:text-white whitespace-nowrap">{ iface.MAC }</td>
-								<td class="py-3 text-sm font-mono text-gray-900 dark:text-white whitespace-nowrap">{ iface.IP }</td>
-							</tr>
-						}
-					</tbody>
-				</table>
+			<div class="space-y-4">
+				for _, iface := range hw.Interfaces {
+					@HardwareInterfaceCard(iface)
+				}
 			</div>
 		}
 	}
-	
+
+	<!-- Instance -->
+	if HasValues(hw.Instance) || len(hw.InstanceData) > 0 {
+		@SectionBox("Instance") {
+			@NameValueTable(hw.Instance)
+			for _, doc := range hw.InstanceData {
+				<details class="mt-3">
+					<summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-tink-teal-600 dark:hover:text-tink-teal-400">{ doc.Name }</summary>
+					<div class="mt-2">
+						@CodeBlock(doc.Text)
+					</div>
+				</details>
+			}
+		}
+	}
+
+	<!-- BMC -->
+	if HasValues(hw.BMC) {
+		@SectionBox("BMC") {
+			@NameValueTable(hw.BMC)
+			if hw.BMCProviderOptions != "" {
+				<details class="mt-3">
+					<summary class="cursor-pointer text-sm font-medium text-gray-700 dark:text-gray-300 hover:text-tink-teal-600 dark:hover:text-tink-teal-400">Provider Options</summary>
+					<div class="mt-2">
+						@CodeBlockYAML(hw.BMCProviderOptions)
+					</div>
+				</details>
+			}
+		}
+	}
+
+	<!-- References -->
+	if HasValues(hw.References) {
+		@SectionBox("References") {
+			@NameValueTable(hw.References)
+		}
+	}
+
+	<!-- Conditions -->
+	if len(hw.Conditions) > 0 {
+		@SectionBox("Conditions") {
+			@ConditionsTable(hw.Conditions)
+		}
+	}
+
 	<!-- In-Band Attributes -->
 	if hw.AgentAttributes != nil {
 		@SectionBoxCollapsible("In-Band Attributes", true) {
