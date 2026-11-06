@@ -15,10 +15,12 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
+	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	apiresource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -98,19 +100,19 @@ func (f *fakeInformers) informer(obj client.Object) *safeInformer {
 // fakeHardware is the stored Hardware the store reads.
 type fakeHardware struct {
 	mu  sync.Mutex
-	hws map[types.NamespacedName]*tinkerbell.Hardware
+	hws map[types.NamespacedName]*v1alpha2.Hardware
 }
 
-func (f *fakeHardware) set(hw *tinkerbell.Hardware) {
+func (f *fakeHardware) set(hw *v1alpha2.Hardware) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.hws == nil {
-		f.hws = map[types.NamespacedName]*tinkerbell.Hardware{}
+		f.hws = map[types.NamespacedName]*v1alpha2.Hardware{}
 	}
 	f.hws[client.ObjectKeyFromObject(hw)] = hw
 }
 
-func (f *fakeHardware) get(_ context.Context, key types.NamespacedName) (*tinkerbell.Hardware, error) {
+func (f *fakeHardware) get(_ context.Context, key types.NamespacedName) (*v1alpha2.Hardware, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if hw, ok := f.hws[key]; ok {
@@ -126,7 +128,7 @@ type fakeResolver struct {
 	calls int
 }
 
-func (f *fakeResolver) resolve(_ context.Context, _ *tinkerbell.Hardware) (map[string]any, error) {
+func (f *fakeResolver) resolve(_ context.Context, _ types.NamespacedName, _ map[string]v1alpha2.Reference) (map[string]any, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.calls++
@@ -170,14 +172,46 @@ func newTestStore(hws *fakeHardware, res *fakeResolver, inf *fakeInformers) *ren
 	return store
 }
 
-func templated(rv string) *tinkerbell.Hardware {
-	return &tinkerbell.Hardware{
+// templated is a v1alpha2 Hardware, rendered natively, whose userdata uses a reference.
+func templated(rv string) *v1alpha2.Hardware {
+	return &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "m1", Namespace: "tink", ResourceVersion: rv},
-		Spec: tinkerbell.HardwareSpec{
-			References: map[string]tinkerbell.Reference{"net": {Version: "v1", Resource: "configmaps", Namespace: "tink", Name: "net1"}},
+		Spec: v1alpha2.HardwareSpec{
+			References: map[string]v1alpha2.Reference{"net": {Version: "v1", Resource: "configmaps", Namespace: "tink", Name: "net1"}},
+			Instance:   &v1alpha2.Instance{Userdata: ptr("domain={{ .references.net.data.domain }}")},
+		},
+	}
+}
+
+// templatedV1Alpha1 is the v1alpha1 counterpart of templated("1").
+func templatedV1Alpha1() *v1alpha1.Hardware {
+	return &v1alpha1.Hardware{
+		ObjectMeta: metav1.ObjectMeta{Name: "m1", Namespace: "tink", ResourceVersion: "1"},
+		Spec: v1alpha1.HardwareSpec{
+			References: map[string]v1alpha1.Reference{"net": {Version: "v1", Resource: "configmaps", Namespace: "tink", Name: "net1"}},
 			UserData:   ptr("domain={{ .references.net.data.domain }}"),
 		},
 	}
+}
+
+// createdAsV1Alpha1 returns hw as the API server stores a Hardware created through v1alpha1.
+func createdAsV1Alpha1(tb testing.TB, hw *v1alpha1.Hardware) *v1alpha2.Hardware {
+	tb.Helper()
+	stored := &v1alpha2.Hardware{}
+	if err := conversion.HardwareToV1Alpha2(hw, stored); err != nil {
+		tb.Fatal(err)
+	}
+	return stored
+}
+
+// servedAsV1Alpha1 returns hw as the API server serves it to v1alpha1 readers.
+func servedAsV1Alpha1(tb testing.TB, hw *v1alpha2.Hardware) *v1alpha1.Hardware {
+	tb.Helper()
+	served := &v1alpha1.Hardware{}
+	if err := conversion.HardwareToV1Alpha1(hw, served); err != nil {
+		tb.Fatal(err)
+	}
+	return served
 }
 
 func netRefs(domain string) map[string]any {
@@ -201,12 +235,123 @@ func TestRenderStoreServesRenderedHardware(t *testing.T) {
 		t.Fatalf("resolved references %d times and stored %d entries, want 1 each", res.calls, len(s.entries))
 	}
 	got, ok := s.rendered(hw)
-	if !ok || *got.Spec.UserData != "domain=example.org" {
+	if !ok || *got.Spec.Instance.Userdata != "domain=example.org" {
 		t.Fatalf("rendered = %v, %v", got, ok)
 	}
-	got.Spec.UserData = ptr("mutated")
-	if again, _ := s.rendered(hw); *again.Spec.UserData != "domain=example.org" {
+	got.Spec.Instance.Userdata = ptr("mutated")
+	if again, _ := s.rendered(hw); *again.Spec.Instance.Userdata != "domain=example.org" {
 		t.Fatal("a caller's copy must not change the stored rendering")
+	}
+}
+
+// TestRenderStoreV1Alpha1Readers serves v1alpha1 readers the store's v1alpha2
+// renderings, for Hardware created through either version.
+func TestRenderStoreV1Alpha1Readers(t *testing.T) {
+	ctx := context.Background()
+	for name, stored := range map[string]*v1alpha2.Hardware{
+		"created through v1alpha1": createdAsV1Alpha1(t, templatedV1Alpha1()),
+		"created as v1alpha2":      templated("1"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			hws, res := &fakeHardware{}, &fakeResolver{refs: netRefs("example.org")}
+			s := newTestStore(hws, res, &fakeInformers{})
+			defer s.queue.ShutDown()
+			stored.UID = "uid1"
+			hws.set(stored)
+			served := servedAsV1Alpha1(t, stored)
+			if _, ok, err := s.renderedV1Alpha1(served); ok || err != nil {
+				t.Fatalf("served before rendering: %v, %v", ok, err)
+			}
+			if !s.render(ctx, client.ObjectKeyFromObject(stored)) {
+				t.Fatal("render failed")
+			}
+			got, ok, err := s.renderedV1Alpha1(served)
+			if err != nil || !ok || *got.Spec.UserData != "domain=example.org" {
+				t.Fatalf("v1alpha1 rendering = %v, %v, %v", got, ok, err)
+			}
+			got.Spec.UserData = ptr("mutated")
+			if again, _, _ := s.renderedV1Alpha1(served); *again.Spec.UserData != "domain=example.org" {
+				t.Fatal("a caller's copy must not change the stored rendering")
+			}
+			if v2, ok := s.rendered(stored); !ok || *v2.Spec.Instance.Userdata != "domain=example.org" {
+				t.Fatalf("v1alpha2 rendering = %v, %v", v2, ok)
+			}
+
+			// The v1alpha1 reader may see a newer version before the store does.
+			newer := served.DeepCopy()
+			newer.ResourceVersion = "2"
+			if got, ok, _ := s.renderedV1Alpha1(newer); !ok || *got.Spec.UserData != "domain=example.org" {
+				t.Fatalf("got %v, %v; want the previous rendering while the edit is pending", got, ok)
+			}
+			newer.Spec.UserData = ptr("#cloud-config")
+			if got, ok, _ := s.renderedV1Alpha1(newer); !ok || got != newer {
+				t.Fatal("a pending untemplated version must be served as read")
+			}
+			replaced := served.DeepCopy()
+			replaced.UID = "uid2"
+			if _, ok, _ := s.renderedV1Alpha1(replaced); ok {
+				t.Fatal("a replacement must not inherit the previous UID's rendering")
+			}
+		})
+	}
+}
+
+func TestRenderStoreV1Alpha1ReaderIdentity(t *testing.T) {
+	hws, res := &fakeHardware{}, &fakeResolver{}
+	s := newTestStore(hws, res, &fakeInformers{})
+	defer s.queue.ShutDown()
+	literal := templatedV1Alpha1()
+	literal.Spec.UserData = ptr("#cloud-config")
+	stored := createdAsV1Alpha1(t, literal)
+	hws.set(stored)
+	if !s.render(context.Background(), client.ObjectKeyFromObject(stored)) {
+		t.Fatal("render failed")
+	}
+	served := servedAsV1Alpha1(t, stored)
+	if got, ok, err := s.renderedV1Alpha1(served); err != nil || !ok || got != served {
+		t.Fatal("untemplated Hardware must be served to v1alpha1 readers as read")
+	}
+}
+
+// TestRenderStoreV1Alpha1ReaderDecision uses the decision made for the stored
+// v1alpha2 version when a v1alpha1 reader holds that version.
+func TestRenderStoreV1Alpha1ReaderDecision(t *testing.T) {
+	s := newTestStore(&fakeHardware{}, &fakeResolver{}, &fakeInformers{})
+	defer s.queue.ShutDown()
+	stored := createdAsV1Alpha1(t, templatedV1Alpha1())
+	stored.UID = "uid1"
+	s.hardwareHandler().OnAdd(stored, false)
+	served := servedAsV1Alpha1(t, stored)
+	if _, ok, _ := s.renderedV1Alpha1(served); ok {
+		t.Fatal("a version decided as templated must not be served before it renders")
+	}
+	literal := stored.DeepCopy()
+	literal.ResourceVersion = "2"
+	s.mu.Lock()
+	s.decisions[client.ObjectKeyFromObject(literal)] = renderDecision{uid: literal.UID, resourceVersion: "2"}
+	s.mu.Unlock()
+	served.ResourceVersion = "2"
+	if got, ok, _ := s.renderedV1Alpha1(served); !ok || got != served {
+		t.Fatal("a version decided as untemplated must be served as read")
+	}
+}
+
+func TestRenderStoreV1Alpha1ConversionError(t *testing.T) {
+	s := newTestStore(&fakeHardware{}, &fakeResolver{}, &fakeInformers{})
+	defer s.queue.ShutDown()
+	stored := templated("1")
+	key := client.ObjectKeyFromObject(stored)
+	s.entries[key] = &renderEntry{resourceVersion: "1", good: stored, asV1Alpha1: func() (*v1alpha1.Hardware, error) {
+		return nil, errors.New("conversion failed")
+	}}
+	b := &Backend{store: s}
+	if _, err := b.RenderedHardware(context.Background(), servedAsV1Alpha1(t, stored)); err == nil || apierrors.IsNotFound(err) {
+		t.Fatalf("err = %v, want the conversion error", err)
+	}
+	// Entries made without a v1alpha1 form convert on each read.
+	s.entries[key] = &renderEntry{resourceVersion: "1", good: stored}
+	if got, err := b.RenderedHardware(context.Background(), servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *stored.Spec.Instance.Userdata {
+		t.Fatalf("got %v, %v; want the entry converted", got, err)
 	}
 }
 
@@ -215,7 +360,7 @@ func TestRenderStoreUntemplatedHardware(t *testing.T) {
 	hws, res := &fakeHardware{}, &fakeResolver{err: errors.New("reference denied")}
 	s := newTestStore(hws, res, &fakeInformers{})
 	hw := templated("1")
-	hw.Spec.UserData = ptr("#cloud-config")
+	hw.Spec.Instance.Userdata = ptr("#cloud-config")
 	hws.set(hw)
 
 	if got, ok := s.rendered(hw); !ok || got != hw {
@@ -236,8 +381,8 @@ func TestRenderStoreSkippedJinja(t *testing.T) {
 	hws, res := &fakeHardware{}, &fakeResolver{err: errors.New("reference denied")}
 	s := newTestStore(hws, res, &fakeInformers{})
 	hw := templated("1")
-	hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.userData"]`}
-	hw.Spec.UserData = ptr("{{ ds.meta_data.hostname }}")
+	hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.instance.userdata"]`}
+	hw.Spec.Instance.Userdata = ptr("{{ ds.meta_data.hostname }}")
 	hws.set(hw)
 	if got, ok := s.rendered(hw); !ok || got != hw {
 		t.Fatal("skipped Jinja must be served unchanged before rendering")
@@ -257,7 +402,7 @@ func TestRenderStoreInvalidSkipAnnotation(t *testing.T) {
 	hws, res := &fakeHardware{}, &fakeResolver{}
 	s := newTestStore(hws, res, &fakeInformers{})
 	hw := templated("1")
-	hw.Spec.UserData = ptr("#cloud-config")
+	hw.Spec.Instance.Userdata = ptr("#cloud-config")
 	hw.Annotations = map[string]string{templateSkipAnnotation: "null"}
 	hws.set(hw)
 	if _, ok := s.rendered(hw); ok {
@@ -275,13 +420,13 @@ func TestRenderStoreUnusedDeniedReference(t *testing.T) {
 	hws, res := &fakeHardware{}, &fakeResolver{refs: map[string]any{}, err: errors.New("reference denied")}
 	s := newTestStore(hws, res, &fakeInformers{})
 	hw := templated("1")
-	hw.Spec.UserData = ptr("host={{ .hardware.metadata.name }}")
+	hw.Spec.Instance.Userdata = ptr("host={{ .hardware.metadata.name }}")
 	hws.set(hw)
 
 	if !s.render(context.Background(), client.ObjectKeyFromObject(hw)) {
 		t.Fatal("a denied reference no template uses must not fail the render")
 	}
-	if got, ok := s.rendered(hw); !ok || *got.Spec.UserData != "host=m1" {
+	if got, ok := s.rendered(hw); !ok || *got.Spec.Instance.Userdata != "host=m1" {
 		t.Fatalf("rendered = %v, %v", got, ok)
 	}
 }
@@ -297,9 +442,9 @@ func TestRenderStoreFailureIsNotServed(t *testing.T) {
 	}
 
 	broken := templated("2")
-	broken.Spec.UserData = ptr("{{ .references.missing.x }}")
+	broken.Spec.Instance.Userdata = ptr("{{ .references.missing.x }}")
 	hws.set(broken)
-	if got, ok := s.rendered(broken); !ok || *got.Spec.UserData != "domain=example.org" {
+	if got, ok := s.rendered(broken); !ok || *got.Spec.Instance.Userdata != "domain=example.org" {
 		t.Fatalf("rendered = %v, %v; want the previous rendering while the edit is pending", got, ok)
 	}
 	if s.render(ctx, key) {
@@ -318,7 +463,7 @@ func TestRenderStoreFailureIsNotServed(t *testing.T) {
 	if !s.render(ctx, key) {
 		t.Fatal("render after the fix failed")
 	}
-	if got, ok := s.rendered(fixed); !ok || *got.Spec.UserData != "domain=fixed.org" {
+	if got, ok := s.rendered(fixed); !ok || *got.Spec.Instance.Userdata != "domain=fixed.org" {
 		t.Fatalf("rendered = %v, %v after the fix", got, ok)
 	}
 }
@@ -360,7 +505,7 @@ func TestRenderStoreRecreatedHardware(t *testing.T) {
 			original := templated("1")
 			original.UID = "old-uid"
 			if test.identity {
-				original.Spec.UserData = ptr("#cloud-config")
+				original.Spec.Instance.Userdata = ptr("#cloud-config")
 			}
 			hws.set(original)
 			key := client.ObjectKeyFromObject(original)
@@ -369,7 +514,7 @@ func TestRenderStoreRecreatedHardware(t *testing.T) {
 			}
 			replacement := templated(test.resourceVersion)
 			replacement.UID = "new-uid"
-			replacement.Spec.UserData = ptr("{{ .references.missing.x }}")
+			replacement.Spec.Instance.Userdata = ptr("{{ .references.missing.x }}")
 			hws.set(replacement)
 			if _, ok := s.rendered(replacement); ok {
 				t.Fatal("replacement must not inherit the previous UID's rendering before its first render")
@@ -388,7 +533,7 @@ func TestRenderStoreNeverRendered(t *testing.T) {
 	hws, res := &fakeHardware{}, &fakeResolver{}
 	s := newTestStore(hws, res, &fakeInformers{})
 	hw := templated("1")
-	hw.Spec.UserData = ptr("{{ .references.missing.x }}")
+	hw.Spec.Instance.Userdata = ptr("{{ .references.missing.x }}")
 	hws.set(hw)
 
 	if s.render(context.Background(), client.ObjectKeyFromObject(hw)) {
@@ -471,7 +616,7 @@ func TestRenderStoreCrossNamespaceReference(t *testing.T) {
 	if !s.processNext(ctx) {
 		t.Fatal("worker stopped before processing reference change")
 	}
-	if got, ok := s.rendered(hw); !ok || *got.Spec.UserData != "domain=new.org" {
+	if got, ok := s.rendered(hw); !ok || *got.Spec.Instance.Userdata != "domain=new.org" {
 		t.Fatalf("rendered = %v, %v; want updated cross-namespace data", got, ok)
 	}
 	if len(hardwareInformers.byID) != 0 {
@@ -540,7 +685,7 @@ func TestRenderStoreTrackSkipsOutOfScopeReferences(t *testing.T) {
 	store := newTestStore(&fakeHardware{}, &fakeResolver{}, &fakeInformers{})
 	store.namespaces = []string{"tink-system", "tink-other"}
 	key := types.NamespacedName{Namespace: "tink-system", Name: "machine1"}
-	references := map[string]tinkerbell.Reference{
+	references := map[string]v1alpha2.Reference{
 		"same-namespace":    {Name: "cm2", Namespace: "tink-system", Version: "v1", Resource: "configmaps"},
 		"watched-namespace": {Name: "cm3", Namespace: "tink-other", Version: "v1", Resource: "configmaps"},
 		"other-namespace":   {Name: "cm1", Namespace: "shared", Version: "v1", Resource: "configmaps"},
@@ -625,10 +770,10 @@ func TestRenderStoreEmptyListReconcilesReferrers(t *testing.T) {
 				}
 				oldWatch.Error(&metav1.Status{Status: metav1.StatusFailure, Reason: metav1.StatusReasonExpired, Code: 410, Message: "expired"})
 			}
-			fleet := []*tinkerbell.Hardware{templated("1"), templated("1")}
+			fleet := []*v1alpha2.Hardware{templated("1"), templated("1")}
 			for index, hw := range fleet {
 				hw.Name = fmt.Sprintf("machine-%d", index)
-				hw.Spec.UserData = ptr(`{{ if hasKey .references "net" }}present{{ else }}absent{{ end }}`)
+				hw.Spec.Instance.Userdata = ptr(`{{ if hasKey .references "net" }}present{{ else }}absent{{ end }}`)
 				hws.set(hw)
 				s.queue.Add(client.ObjectKeyFromObject(hw))
 				s.processNext(ctx)
@@ -639,7 +784,7 @@ func TestRenderStoreEmptyListReconcilesReferrers(t *testing.T) {
 						t.Fatal("controlled metadata LIST did not start")
 					}
 				}
-				if got, ok := s.rendered(hw); !ok || *got.Spec.UserData != "present" {
+				if got, ok := s.rendered(hw); !ok || *got.Spec.Instance.Userdata != "present" {
 					t.Fatal("live reference must be present before the controlled deletion")
 				}
 			}
@@ -654,7 +799,7 @@ func TestRenderStoreEmptyListReconcilesReferrers(t *testing.T) {
 				s.processNext(ctx)
 			}
 			for _, hw := range fleet {
-				if got, ok := s.rendered(hw); !ok || *got.Spec.UserData != "absent" {
+				if got, ok := s.rendered(hw); !ok || *got.Spec.Instance.Userdata != "absent" {
 					t.Fatal("reconciliation must observe the deletion rather than retain a successful stale result")
 				}
 			}
@@ -743,7 +888,7 @@ func TestRenderStoreHandlerRegistrationRetry(t *testing.T) {
 	inf := s.referenceInformers[0].ForResource(schema.GroupVersionResource{Version: "v1", Resource: "configmaps"}).Informer().(*safeInformer)
 	inf.failRegistrations = 1
 	hw := templated("1")
-	hw.Spec.UserData = ptr("host={{ .hardware.metadata.name }}")
+	hw.Spec.Instance.Userdata = ptr("host={{ .hardware.metadata.name }}")
 	res.err = errors.New("unused reference denied")
 	hws.set(hw)
 	key := client.ObjectKeyFromObject(hw)
@@ -793,7 +938,7 @@ func TestRenderStoreWatchRegistrationRetry(t *testing.T) {
 	key := client.ObjectKeyFromObject(hw)
 	s.queue.Add(key)
 	s.processNext(context.Background())
-	if got, ok := s.rendered(hw); !ok || *got.Spec.UserData != "domain=example.org" {
+	if got, ok := s.rendered(hw); !ok || *got.Spec.Instance.Userdata != "domain=example.org" {
 		t.Fatal("successful rendering must remain available while watch setup retries")
 	}
 	if s.queue.NumRequeues(key) != 1 || len(s.watched) != 0 {
@@ -849,7 +994,7 @@ func TestRenderStoreMetricsAndNotifications(t *testing.T) {
 	<-s.Changes()
 	broken := hw.DeepCopy()
 	broken.ResourceVersion = "2"
-	broken.Spec.UserData = ptr("{{ .references.missing }}")
+	broken.Spec.Instance.Userdata = ptr("{{ .references.missing }}")
 	hws.set(broken)
 	if s.render(ctx, key) {
 		t.Fatal("broken template must fail")
@@ -906,35 +1051,35 @@ func TestRenderStoreNotificationsSlowConsumer(t *testing.T) {
 }
 
 func TestRenderStoreHardwareUpdateFilter(t *testing.T) {
-	before := &tinkerbell.Hardware{
+	before := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "m1", Namespace: "tink", UID: "uid-1", ResourceVersion: "1"},
-		Spec:       tinkerbell.HardwareSpec{UserData: ptr("literal"), Resources: map[string]apiresource.Quantity{"memory": apiresource.MustParse("1Gi")}},
-		Status: tinkerbell.HardwareStatus{Attributes: &tinkerbell.HardwareAttributes{
-			InBand: &tinkerbell.Attributes{CPU: &tinkerbell.CPU{TotalCores: math.MaxUint32}},
+		Spec:       v1alpha2.HardwareSpec{Instance: &v1alpha2.Instance{Userdata: ptr("literal")}},
+		Status: v1alpha2.HardwareStatus{Attributes: &inventory.HardwareAttributes{
+			InBand: &inventory.Attributes{CPU: &inventory.CPU{TotalCores: math.MaxUint32}},
 		}},
 	}
 	for _, test := range []struct {
 		name   string
-		mutate func(*tinkerbell.Hardware)
+		mutate func(*v1alpha2.Hardware)
 		want   bool
 	}{
-		{name: "unchanged", mutate: func(*tinkerbell.Hardware) {}},
-		{name: "resource version", mutate: func(hw *tinkerbell.Hardware) { hw.ResourceVersion = "2" }},
-		{name: "managed fields", mutate: func(hw *tinkerbell.Hardware) {
+		{name: "unchanged", mutate: func(*v1alpha2.Hardware) {}},
+		{name: "resource version", mutate: func(hw *v1alpha2.Hardware) { hw.ResourceVersion = "2" }},
+		{name: "managed fields", mutate: func(hw *v1alpha2.Hardware) {
 			hw.ManagedFields = []metav1.ManagedFieldsEntry{{Manager: "hardware-controller"}}
 		}},
-		{name: "skip annotation", mutate: func(hw *tinkerbell.Hardware) {
-			hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.userData"]`}
+		{name: "skip annotation", mutate: func(hw *v1alpha2.Hardware) {
+			hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.instance.userdata"]`}
 		}, want: true},
-		{name: "label", mutate: func(hw *tinkerbell.Hardware) { hw.Labels = map[string]string{"rack": "new"} }, want: true},
-		{name: "quantity respelled", mutate: func(hw *tinkerbell.Hardware) {
-			hw.Spec.Resources["memory"] = apiresource.MustParse("1073741824")
+		{name: "label", mutate: func(hw *v1alpha2.Hardware) { hw.Labels = map[string]string{"rack": "new"} }, want: true},
+		{name: "v1alpha1 form", mutate: func(hw *v1alpha2.Hardware) {
+			hw.Annotations = map[string]string{conversion.AnnotationV1Alpha1: `{"spec":{}}`}
 		}, want: true},
-		{name: "nil to empty slice", mutate: func(hw *tinkerbell.Hardware) { hw.Spec.Interfaces = []tinkerbell.Interface{} }, want: true},
-		{name: "attribute", mutate: func(hw *tinkerbell.Hardware) { hw.Status.Attributes.InBand.CollectionMethod = "agent" }, want: true},
-		{name: "unsigned attribute", mutate: func(hw *tinkerbell.Hardware) { hw.Status.Attributes.InBand.CPU.TotalCores-- }, want: true},
-		{name: "spec", mutate: func(hw *tinkerbell.Hardware) { hw.Spec.UserData = ptr("changed") }, want: true},
-		{name: "UID", mutate: func(hw *tinkerbell.Hardware) { hw.UID = "uid-2" }, want: true},
+		{name: "nil to empty slice", mutate: func(hw *v1alpha2.Hardware) { hw.Spec.StorageDevices = []v1alpha2.StorageDevice{} }, want: true},
+		{name: "attribute", mutate: func(hw *v1alpha2.Hardware) { hw.Status.Attributes.InBand.CollectionMethod = "agent" }, want: true},
+		{name: "unsigned attribute", mutate: func(hw *v1alpha2.Hardware) { hw.Status.Attributes.InBand.CPU.TotalCores-- }, want: true},
+		{name: "spec", mutate: func(hw *v1alpha2.Hardware) { hw.Spec.Instance.Userdata = ptr("changed") }, want: true},
+		{name: "UID", mutate: func(hw *v1alpha2.Hardware) { hw.UID = "uid-2" }, want: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			after := before.DeepCopy()
@@ -959,28 +1104,28 @@ func BenchmarkRenderStoreLookup(b *testing.B) {
 			b.Run(kind+"/"+state, func(b *testing.B) {
 				s := newTestStore(&fakeHardware{}, &fakeResolver{}, &fakeInformers{})
 				defer s.queue.ShutDown()
-				s.get = func(context.Context, types.NamespacedName) (*tinkerbell.Hardware, error) {
+				s.get = func(context.Context, types.NamespacedName) (*v1alpha2.Hardware, error) {
 					panic("lookup must not read Hardware")
 				}
-				s.resolve = func(context.Context, *tinkerbell.Hardware) (map[string]any, error) {
+				s.resolve = func(context.Context, types.NamespacedName, map[string]v1alpha2.Reference) (map[string]any, error) {
 					panic("lookup must not resolve references")
 				}
-				fleet := make([]*tinkerbell.Hardware, 10000)
+				fleet := make([]*v1alpha2.Hardware, 10000)
 				for index := range fleet {
 					hw := templated("2")
 					hw.Name = fmt.Sprintf("machine-%d", index)
 					hw.UID = types.UID(hw.Name)
 					switch kind {
 					case "literal":
-						hw.Spec.UserData = ptr("#cloud-config")
+						hw.Spec.Instance.Userdata = ptr("#cloud-config")
 					case "skipped-Jinja":
-						hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.userData"]`}
-						hw.Spec.UserData = ptr("{{ ds.meta_data.hostname }}")
+						hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.instance.userdata"]`}
+						hw.Spec.Instance.Userdata = ptr("{{ ds.meta_data.hostname }}")
 					}
 					fleet[index] = hw
 					if state != "startup" && state != "startup-observed" {
 						good := hw.DeepCopy()
-						good.Spec.UserData = ptr("rendered")
+						good.Spec.Instance.Userdata = ptr("rendered")
 						version := hw.ResourceVersion
 						if strings.HasPrefix(state, "version-mismatch") {
 							version = "1"
@@ -1008,8 +1153,8 @@ func TestRenderStoreDecisionIdentity(t *testing.T) {
 	defer s.queue.ShutDown()
 	hw := templated("1")
 	hw.UID = "original"
-	hw.Spec.UserData = ptr("{{ ds.meta_data.hostname }}")
-	hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.userData"]`}
+	hw.Spec.Instance.Userdata = ptr("{{ ds.meta_data.hostname }}")
+	hw.Annotations = map[string]string{templateSkipAnnotation: `["spec.instance.userdata"]`}
 	s.hardwareHandler().OnAdd(hw, false)
 	key := client.ObjectKeyFromObject(hw)
 	if decision := s.decisions[key]; decision.needed || decision.uid != hw.UID || decision.resourceVersion != hw.ResourceVersion {
@@ -1041,7 +1186,7 @@ func TestRenderStoreDecisionIdentity(t *testing.T) {
 
 func TestRenderStoreStartupFailure(t *testing.T) {
 	inf := &fakeInformers{}
-	inf.informer(&tinkerbell.Hardware{}).failRegistrations = 1
+	inf.informer(&v1alpha2.Hardware{}).failRegistrations = 1
 	s := newTestStore(&fakeHardware{}, &fakeResolver{}, inf)
 	if err := s.Start(context.Background(), 2); err == nil {
 		t.Fatal("initial handler registration must fail")
@@ -1065,10 +1210,10 @@ func TestRenderStoreStart(t *testing.T) {
 	hws.set(hw)
 	// Re-send the event until Start has registered its handler and a worker rendered it.
 	for ; ; time.Sleep(time.Millisecond) {
-		inf.informer(&tinkerbell.Hardware{}).Add(hw)
+		inf.informer(&v1alpha2.Hardware{}).Add(hw)
 		if got, ok := s.rendered(hw); ok {
-			if *got.Spec.UserData != "domain=example.org" {
-				t.Fatalf("userData = %q", *got.Spec.UserData)
+			if *got.Spec.Instance.Userdata != "domain=example.org" {
+				t.Fatalf("userData = %q", *got.Spec.Instance.Userdata)
 			}
 			break
 		}

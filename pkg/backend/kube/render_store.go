@@ -12,7 +12,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/template/render"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -32,6 +33,10 @@ import (
 // renderStore renders Hardware in the background, so that request paths such as
 // DHCP and iPXE only look up results and never render or call the API server.
 //
+// It watches and renders v1alpha2 Hardware, and serves v1alpha1 readers the
+// same renderings converted, so that there is one rendering per Hardware
+// whichever version a component reads.
+//
 // Referenced objects are read live by the workers. Informers on their types
 // hold metadata only and are used just to notice changes.
 type renderStore struct {
@@ -39,8 +44,8 @@ type renderStore struct {
 	referenceInformers metadataInformerFactories
 	namespaces         []string
 	mapper             meta.RESTMapper
-	get                func(context.Context, types.NamespacedName) (*tinkerbell.Hardware, error)
-	resolve            func(context.Context, *tinkerbell.Hardware) (map[string]any, error)
+	get                func(context.Context, types.NamespacedName) (*v1alpha2.Hardware, error)
+	resolve            func(context.Context, types.NamespacedName, map[string]v1alpha2.Reference) (map[string]any, error)
 	queue              workqueue.TypedRateLimitingInterface[types.NamespacedName]
 	log                logr.Logger
 	renders            *prometheus.CounterVec
@@ -118,11 +123,35 @@ func (r *metadataListResource) List(ctx context.Context, options metav1.ListOpti
 
 // renderEntry is replaced whole, never modified, so readers need no lock on it.
 type renderEntry struct {
-	uid             types.UID            // of the Hardware owning this entry
-	resourceVersion string               // of the Hardware last rendered
-	err             error                // rendering that resourceVersion failed
-	good            *tinkerbell.Hardware // rendering of resourceVersion, nil if it failed
-	identity        bool                 // good is the stored object: nothing needed rendering
+	uid             types.UID          // of the Hardware owning this entry
+	resourceVersion string             // of the Hardware last rendered
+	err             error              // rendering that resourceVersion failed
+	good            *v1alpha2.Hardware // rendering of resourceVersion, nil if it failed
+	identity        bool               // good is the stored object: nothing needed rendering
+	// asV1Alpha1 returns good as v1alpha1, for readers not yet moved to v1alpha2.
+	// Optional: without it good is converted on each call.
+	asV1Alpha1 func() (*v1alpha1.Hardware, error)
+}
+
+// newRenderEntry returns the entry for good, a rendering of hw. asV1Alpha1 is
+// the v1alpha1 form of good when it is known, otherwise it is converted once,
+// when a v1alpha1 reader first asks.
+func newRenderEntry(hw, good *v1alpha2.Hardware, asV1Alpha1 *v1alpha1.Hardware) *renderEntry {
+	e := &renderEntry{uid: hw.UID, resourceVersion: hw.ResourceVersion, good: good, identity: good == hw}
+	if asV1Alpha1 != nil {
+		e.asV1Alpha1 = func() (*v1alpha1.Hardware, error) { return asV1Alpha1, nil }
+	} else {
+		e.asV1Alpha1 = sync.OnceValues(func() (*v1alpha1.Hardware, error) { return hardwareToV1Alpha1(good) })
+	}
+	return e
+}
+
+// goodV1Alpha1 returns good as v1alpha1. Callers must not modify it.
+func (e *renderEntry) goodV1Alpha1() (*v1alpha1.Hardware, error) {
+	if e.asV1Alpha1 != nil {
+		return e.asV1Alpha1()
+	}
+	return hardwareToV1Alpha1(e.good)
 }
 
 type renderDecision struct {
@@ -141,8 +170,8 @@ func newRenderStore(
 	mapper meta.RESTMapper,
 	metadataClient metadata.Interface,
 	namespaces []string,
-	get func(context.Context, types.NamespacedName) (*tinkerbell.Hardware, error),
-	resolve func(context.Context, *tinkerbell.Hardware) (map[string]any, error),
+	get func(context.Context, types.NamespacedName) (*v1alpha2.Hardware, error),
+	resolve func(context.Context, types.NamespacedName, map[string]v1alpha2.Reference) (map[string]any, error),
 	registry prometheus.Registerer,
 ) *renderStore {
 	store := &renderStore{
@@ -205,7 +234,8 @@ func (s *renderStore) publishLocked(key types.NamespacedName, entry *renderEntry
 	}
 }
 
-func needsRendering(hw *tinkerbell.Hardware) bool {
+// needsRendering reports whether a v1alpha1 Hardware has templates to render.
+func needsRendering(hw *v1alpha1.Hardware) bool {
 	skip, err := hardwareRenderSkip(hw)
 	if err != nil {
 		return true
@@ -217,8 +247,8 @@ func needsRendering(hw *tinkerbell.Hardware) bool {
 	return render.HasTemplates(doc, render.WithSkip(skip))
 }
 
-func (s *renderStore) rememberDecision(hw *tinkerbell.Hardware) bool {
-	decision := renderDecision{uid: hw.UID, resourceVersion: hw.ResourceVersion, needed: needsRendering(hw)}
+func (s *renderStore) rememberDecision(hw *v1alpha2.Hardware) bool {
+	decision := renderDecision{uid: hw.UID, resourceVersion: hw.ResourceVersion, needed: needsRenderingV1Alpha2(hw)}
 	s.mu.Lock()
 	s.decisions[client.ObjectKeyFromObject(hw)] = decision
 	s.mu.Unlock()
@@ -229,7 +259,7 @@ func (s *renderStore) rememberDecision(hw *tinkerbell.Hardware) bool {
 func (s *renderStore) Start(ctx context.Context, workers int) error {
 	defer close(s.notify)
 	defer s.queue.ShutDown()
-	inf, err := s.informers.GetInformer(ctx, &tinkerbell.Hardware{}, cache.BlockUntilSynced(false))
+	inf, err := s.informers.GetInformer(ctx, &v1alpha2.Hardware{}, cache.BlockUntilSynced(false))
 	if err != nil {
 		return err
 	}
@@ -256,30 +286,68 @@ func (s *renderStore) Start(ctx context.Context, workers int) error {
 // A failed rendering is never served. While a newer resourceVersion is still
 // rendering, the previous rendering is served if it succeeded, so that status
 // updates during provisioning do not briefly take the Hardware away.
-func (s *renderStore) rendered(hw *tinkerbell.Hardware) (*tinkerbell.Hardware, bool) {
+func (s *renderStore) rendered(hw *v1alpha2.Hardware) (*v1alpha2.Hardware, bool) {
+	e, stored := s.serve(hw, func() bool { return needsRenderingV1Alpha2(hw) })
+	switch {
+	case stored:
+		return hw, true
+	case e != nil:
+		return e.good.DeepCopy(), true
+	default:
+		return nil, false
+	}
+}
+
+// renderedV1Alpha1 is rendered for a v1alpha1 reader: hw is the v1alpha1 form of
+// a Hardware the store renders as v1alpha2, and the rendering is served as
+// v1alpha1. The API server serves both versions of a Hardware with the same UID
+// and resourceVersion, so they identify the rendering.
+func (s *renderStore) renderedV1Alpha1(hw *v1alpha1.Hardware) (*v1alpha1.Hardware, bool, error) {
+	e, stored := s.serve(hw, func() bool { return needsRendering(hw) })
+	switch {
+	case stored:
+		return hw, true, nil
+	case e != nil:
+		good, err := e.goodV1Alpha1()
+		if err != nil {
+			return nil, false, err
+		}
+		return good.DeepCopy(), true, nil
+	default:
+		return nil, false, nil
+	}
+}
+
+// serve decides what to serve for obj, the version of a Hardware a reader holds:
+// obj itself (stored), the rendering in e, or, when both are zero, nothing.
+// needsRendering reports whether obj has templates; it is only called when no
+// decision is recorded for obj's version.
+func (s *renderStore) serve(obj metav1.Object, needsRendering func() bool) (e *renderEntry, stored bool) {
+	key := types.NamespacedName{Namespace: obj.GetNamespace(), Name: obj.GetName()}
+	uid, resourceVersion := obj.GetUID(), obj.GetResourceVersion()
 	s.mu.RLock()
-	e := s.entries[client.ObjectKeyFromObject(hw)]
-	decision, known := s.decisions[client.ObjectKeyFromObject(hw)]
+	e = s.entries[key]
+	decision, known := s.decisions[key]
 	s.mu.RUnlock()
-	if e != nil && e.uid != hw.UID {
+	if e != nil && e.uid != uid {
 		e = nil
 	}
 
-	if e != nil && e.resourceVersion == hw.ResourceVersion && e.err == nil && e.identity {
-		return hw, true
+	if e != nil && e.resourceVersion == resourceVersion && e.err == nil && e.identity {
+		return nil, true
 	}
-	if e == nil || e.resourceVersion != hw.ResourceVersion {
+	if e == nil || e.resourceVersion != resourceVersion {
 		// Not rendered at this version yet; only the startup and edit windows get here.
 		needed := decision.needed
-		if !known || decision.uid != hw.UID || decision.resourceVersion != hw.ResourceVersion {
-			needed = needsRendering(hw)
+		if !known || decision.uid != uid || decision.resourceVersion != resourceVersion {
+			needed = needsRendering()
 		}
 		if !needed {
-			return hw, true
+			return nil, true
 		}
 	}
 	if e != nil && e.good != nil {
-		return e.good.DeepCopy(), true
+		return e, false
 	}
 	return nil, false
 }
@@ -322,20 +390,20 @@ func (s *renderStore) render(ctx context.Context, key types.NamespacedName) (suc
 	if !s.rememberDecision(hw) {
 		s.mu.Lock()
 		s.setRefs(key, nil)
-		s.publishLocked(key, &renderEntry{uid: hw.UID, resourceVersion: hw.ResourceVersion, good: hw, identity: true})
+		s.publishLocked(key, newRenderEntry(hw, hw, nil))
 		s.mu.Unlock()
 		return true
 	}
 	watchErr := s.track(ctx, key, hw.Spec.References)
 
-	e := &renderEntry{uid: hw.UID, resourceVersion: hw.ResourceVersion}
 	// A denied or unreadable reference only fails the render if a template uses it.
-	refs, refErr := s.resolve(ctx, hw)
-	e.good, err = renderHardware(hw, refs)
-	e.identity = e.good == hw
+	refs, refErr := s.resolve(ctx, key, hw.Spec.References)
+	var e *renderEntry
+	good, asV1Alpha1, err := renderHardwareV1Alpha2(hw, refs)
 	if err != nil {
-		e.err = errors.Join(refErr, err)
-		e.good, e.identity = nil, false
+		e = &renderEntry{uid: hw.UID, resourceVersion: hw.ResourceVersion, err: errors.Join(refErr, err)}
+	} else {
+		e = newRenderEntry(hw, good, asV1Alpha1)
 	}
 	s.mu.Lock()
 	s.publishLocked(key, e)
@@ -358,10 +426,10 @@ func (s *renderStore) forget(key types.NamespacedName) {
 
 // track records what key references, so that a change to a referenced object
 // re-renders it, and starts watching referenced types not yet watched.
-func (s *renderStore) track(ctx context.Context, key types.NamespacedName, references map[string]tinkerbell.Reference) error {
+func (s *renderStore) track(ctx context.Context, key types.NamespacedName, references map[string]v1alpha2.Reference) error {
 	if len(s.namespaces) > 0 {
 		references = maps.Clone(references)
-		maps.DeleteFunc(references, func(_ string, r tinkerbell.Reference) bool { return !slices.Contains(s.namespaces, r.Namespace) })
+		maps.DeleteFunc(references, func(_ string, r v1alpha2.Reference) bool { return !slices.Contains(s.namespaces, r.Namespace) })
 	}
 	refs := make([]refKey, 0, len(references))
 	for _, r := range references {
@@ -468,14 +536,14 @@ func (s *renderStore) hardwareHandler() toolscache.ResourceEventHandler {
 	handler := s.enqueueHandler(func(key types.NamespacedName) { s.queue.Add(key) })
 	enqueue := handler.AddFunc
 	handler.AddFunc = func(object any) {
-		if hw, ok := object.(*tinkerbell.Hardware); ok {
+		if hw, ok := object.(*v1alpha2.Hardware); ok {
 			s.rememberDecision(hw)
 		}
 		enqueue(object)
 	}
 	handler.UpdateFunc = func(before, after any) {
-		oldHardware, oldOK := before.(*tinkerbell.Hardware)
-		newHardware, newOK := after.(*tinkerbell.Hardware)
+		oldHardware, oldOK := before.(*v1alpha2.Hardware)
+		newHardware, newOK := after.(*v1alpha2.Hardware)
 		if !oldOK || !newOK || hardwareInputsChanged(oldHardware, newHardware) {
 			handler.AddFunc(after)
 		} else {
@@ -485,14 +553,14 @@ func (s *renderStore) hardwareHandler() toolscache.ResourceEventHandler {
 	return handler
 }
 
-func hardwareInputsChanged(before, after *tinkerbell.Hardware) bool {
+func hardwareInputsChanged(before, after *v1alpha2.Hardware) bool {
 	b, a := before.DeepCopy(), after.DeepCopy()
-	for _, hw := range []*tinkerbell.Hardware{b, a} {
+	for _, hw := range []*v1alpha2.Hardware{b, a} {
 		hw.ResourceVersion = ""
 		hw.ManagedFields = nil
 	}
-	// Not equality.Semantic: it ignores differences templates can see, such as 1Gi vs
-	// 1073741824 or a nil vs empty slice.
+	// Not equality.Semantic: it ignores differences templates can see, such as a nil
+	// vs empty slice.
 	return !reflect.DeepEqual(b, a)
 }
 

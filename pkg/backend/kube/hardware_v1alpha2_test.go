@@ -31,7 +31,7 @@ func TestFilterHardwareV1Alpha2(t *testing.T) {
 	b := newFakeBackend(t, Backend{},
 		hardwareV1Alpha2("machine1", "3c:ec:ef:4c:4f:54", "172.16.10.100", "2001:db8::100"),
 		hardwareV1Alpha2("machine2", "3c:ec:ef:4c:4f:55", "172.16.10.101", "2001:db8::101"),
-		templated("1"),
+		templatedV1Alpha1(),
 	)
 	tests := map[string]struct {
 		filter       data.HardwareFilter
