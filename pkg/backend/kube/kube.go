@@ -87,6 +87,8 @@ func NewBackend(cfg Backend, opts ...cluster.Option) (*Backend, error) {
 		return nil, err
 	}
 
+	// v1alpha1 is registered for the kinds only it has: the deprecated
+	// WorkflowRuleSet and bmc Machine.
 	if err := tinkerbell.AddToScheme(rs); err != nil {
 		return nil, err
 	}
@@ -95,7 +97,6 @@ func NewBackend(cfg Backend, opts ...cluster.Option) (*Backend, error) {
 		return nil, err
 	}
 
-	// v1alpha2 is registered next to v1alpha1 while components move to it.
 	if err := v1alpha2.AddToScheme(rs); err != nil {
 		return nil, err
 	}

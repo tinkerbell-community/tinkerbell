@@ -20,8 +20,8 @@ type SecondStarConfig struct {
 }
 
 var KubeIndexesSecondStar = map[kube.IndexType]kube.Index{
-	kube.IndexTypeHardwareName: kube.Indexes[kube.IndexTypeHardwareName],
-	kube.IndexTypeMachineName:  kube.Indexes[kube.IndexTypeMachineName],
+	kube.IndexTypeHardwareNameV1Alpha2: kube.Indexes[kube.IndexTypeHardwareNameV1Alpha2],
+	kube.IndexTypeMachineName:          kube.Indexes[kube.IndexTypeMachineName],
 }
 
 func RegisterSecondStarFlags(fs *Set, ssc *SecondStarConfig) {

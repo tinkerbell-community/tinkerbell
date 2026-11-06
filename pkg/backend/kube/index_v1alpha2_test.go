@@ -1,7 +1,6 @@
 package kube
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -81,31 +80,5 @@ func TestWorkflowIndexesV1Alpha2(t *testing.T) {
 				t.Errorf("index values (-want +got):\n%s", diff)
 			}
 		})
-	}
-}
-
-// TestV1Alpha2Counterparts checks that every v1alpha1 index on a kind v1alpha2
-// has comes with registered v1alpha2 counterparts on the v1alpha2 kind.
-func TestV1Alpha2Counterparts(t *testing.T) {
-	v1alpha2Kinds := map[reflect.Type]reflect.Type{
-		reflect.TypeFor[*v1alpha1.Hardware](): reflect.TypeFor[*v1alpha2.Hardware](),
-		reflect.TypeFor[*v1alpha1.Workflow](): reflect.TypeFor[*v1alpha2.Workflow](),
-	}
-	for t1, index := range Indexes {
-		v2Kind, hasV2Kind := v1alpha2Kinds[reflect.TypeOf(index.Obj)]
-		counterparts := V1Alpha2Counterparts(t1)
-		if hasV2Kind != (len(counterparts) > 0) {
-			t.Errorf("index %q has v1alpha2 counterparts %v, want them exactly when its kind is in v1alpha2", t1, counterparts)
-		}
-		for _, t2 := range counterparts {
-			counterpart, ok := Indexes[t2]
-			if !ok {
-				t.Errorf("counterpart %q of %q is not in Indexes", t2, t1)
-				continue
-			}
-			if reflect.TypeOf(counterpart.Obj) != v2Kind {
-				t.Errorf("counterpart %q of %q indexes %T, want %v", t2, t1, counterpart.Obj, v2Kind)
-			}
-		}
 	}
 }

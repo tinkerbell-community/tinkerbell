@@ -9,8 +9,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// v1alpha2 indexes. Field indexes are registered per type, so the v1alpha2 ones
-// share field names with their v1alpha1 counterparts where the paths agree.
+// v1alpha2 indexes. Field indexes are registered per type: the Hardware name
+// and agent ID indexes use NameIndex and HardwareAgentIDIndex.
 const (
 	IndexTypeMACAddrV1Alpha2             IndexType = "v1alpha2" + MACAddrIndexV1Alpha2
 	IndexTypeIPAddrV1Alpha2              IndexType = "v1alpha2" + IPAddrIndexV1Alpha2
@@ -41,29 +41,6 @@ const (
 	// Agent can be found before they start.
 	WorkflowTaskAgentIDIndexV1Alpha2 = ".spec.tasks.agentID"
 )
-
-// V1Alpha2Counterparts returns the v1alpha2 indexes that serve the lookups the
-// v1alpha1 index t serves, so that a component finds its indexes whichever
-// version it reads during the move to v1alpha2. It returns nil for indexes
-// without a v1alpha2 counterpart, such as those on kinds v1alpha2 does not have.
-func V1Alpha2Counterparts(t IndexType) []IndexType {
-	switch t {
-	case IndexTypeMACAddr:
-		return []IndexType{IndexTypeMACAddrV1Alpha2}
-	case IndexTypeIPAddr:
-		return []IndexType{IndexTypeIPAddrV1Alpha2}
-	case IndexTypeHardwareName:
-		return []IndexType{IndexTypeHardwareNameV1Alpha2}
-	case IndexTypeHardwareAgentID:
-		return []IndexType{IndexTypeHardwareAgentIDV1Alpha2}
-	case IndexTypeInstanceID:
-		return []IndexType{IndexTypeLookupIDV1Alpha2}
-	case IndexTypeWorkflowAgentID:
-		return []IndexType{IndexTypeWorkflowAgentIDV1Alpha2, IndexTypeWorkflowTaskAgentIDV1Alpha2}
-	default:
-		return nil
-	}
-}
 
 // MACAddrsV1Alpha2 returns the MAC addresses of a v1alpha2 Hardware, in lower case.
 func MACAddrsV1Alpha2(obj client.Object) []string {

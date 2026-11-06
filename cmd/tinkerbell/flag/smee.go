@@ -77,8 +77,8 @@ func conduitTypeParser(s string) (ConduitType, error) {
 }
 
 var KubeIndexesSmee = map[kube.IndexType]kube.Index{
-	kube.IndexTypeMACAddr: kube.Indexes[kube.IndexTypeMACAddr],
-	kube.IndexTypeIPAddr:  kube.Indexes[kube.IndexTypeIPAddr],
+	kube.IndexTypeMACAddrV1Alpha2: kube.Indexes[kube.IndexTypeMACAddrV1Alpha2],
+	kube.IndexTypeIPAddrV1Alpha2:  kube.Indexes[kube.IndexTypeIPAddrV1Alpha2],
 }
 
 // URLBuilder breaks out the fields of a url.URL so they can be set individually from the CLI.

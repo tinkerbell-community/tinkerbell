@@ -29,13 +29,9 @@ import (
 // object can only be read in the version it was given in.
 func newFakeBackend(t *testing.T, cfg Backend, objs ...client.Object) *Backend {
 	t.Helper()
-	scheme := runtime.NewScheme()
-	builder := runtime.NewSchemeBuilder(corev1.AddToScheme, tinkerbell.AddToScheme, bmc.AddToScheme, v1alpha2.AddToScheme, bmcv1alpha2.AddToScheme)
-	if err := builder.AddToScheme(scheme); err != nil {
-		t.Fatal(err)
-	}
+	scheme := testScheme(t)
 	clientBuilder := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
-		WithStatusSubresource(&tinkerbell.Hardware{}, &tinkerbell.Workflow{}, &v1alpha2.Hardware{}, &v1alpha2.Workflow{})
+		WithStatusSubresource(&v1alpha2.Hardware{}, &v1alpha2.Workflow{})
 	for _, index := range Indexes {
 		clientBuilder = clientBuilder.WithIndex(index.Obj, index.Field, index.ExtractValue)
 	}
@@ -53,6 +49,17 @@ func newFakeBackend(t *testing.T, cfg Backend, objs ...client.Object) *Backend {
 		t.Fatal(err)
 	}
 	return b
+}
+
+// testScheme returns a scheme with every kind the backend reads.
+func testScheme(t *testing.T) *runtime.Scheme {
+	t.Helper()
+	scheme := runtime.NewScheme()
+	builder := runtime.NewSchemeBuilder(corev1.AddToScheme, tinkerbell.AddToScheme, bmc.AddToScheme, v1alpha2.AddToScheme, bmcv1alpha2.AddToScheme)
+	if err := builder.AddToScheme(scheme); err != nil {
+		t.Fatal(err)
+	}
+	return scheme
 }
 
 func TestNewBackendRendering(t *testing.T) {

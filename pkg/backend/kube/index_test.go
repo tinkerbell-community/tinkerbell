@@ -1,169 +1,28 @@
 package kube
 
 import (
-	"reflect"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
-	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func TestMACAddrs(t *testing.T) {
+func TestMachineName(t *testing.T) {
 	tests := map[string]struct {
-		hw   client.Object
+		obj  client.Object
 		want []string
 	}{
-		"not a v1alpha1.Hardware object": {hw: &v1alpha1.Workflow{}, want: nil},
-		"2 MACs": {hw: &v1alpha1.Hardware{
-			Spec: v1alpha1.HardwareSpec{
-				Interfaces: []v1alpha1.Interface{
-					{
-						DHCP: &v1alpha1.DHCP{
-							MAC: "00:00:00:00:00:00",
-						},
-					},
-					{
-						DHCP: &v1alpha1.DHCP{
-							MAC: "00:00:00:00:00:01",
-						},
-					},
-					{
-						DHCP: &v1alpha1.DHCP{},
-					},
-				},
-			},
-		}, want: []string{"00:00:00:00:00:00", "00:00:00:00:00:01"}},
-		"no interfaces": {hw: &v1alpha1.Hardware{}, want: nil},
+		"bmc Machine":     {obj: &bmc.Machine{ObjectMeta: metav1.ObjectMeta{Name: "bmc1"}}, want: []string{"bmc1"}},
+		"not a Machine":   {obj: &v1alpha2.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "bmc1"}}},
+		"Machine no name": {obj: &bmc.Machine{}, want: []string{""}},
 	}
-	for name, tc := range tests {
+	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			macs := MACAddrs(tc.hw)
-			if diff := cmp.Diff(macs, tc.want); diff != "" {
-				t.Errorf("unexpected MACs (+want -got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestIPAddrs(t *testing.T) {
-	tests := map[string]struct {
-		hw   client.Object
-		want []string
-	}{
-		"not a v1alpha1.Hardware object": {hw: &v1alpha1.Workflow{}, want: nil},
-		"2 IPs": {hw: &v1alpha1.Hardware{
-			Spec: v1alpha1.HardwareSpec{
-				Interfaces: []v1alpha1.Interface{
-					{
-						DHCP: &v1alpha1.DHCP{
-							IP: &v1alpha1.IP{
-								Address: "192.168.2.1",
-							},
-						},
-					},
-					{
-						DHCP: &v1alpha1.DHCP{
-							IP: &v1alpha1.IP{
-								Address: "192.168.2.2",
-							},
-						},
-					},
-					{
-						DHCP: &v1alpha1.DHCP{},
-					},
-					{
-						DHCP: &v1alpha1.DHCP{
-							IP: &v1alpha1.IP{},
-						},
-					},
-				},
-			},
-		}, want: []string{"192.168.2.1", "192.168.2.2"}},
-		"no interfaces": {hw: &v1alpha1.Hardware{}, want: nil},
-	}
-	for name, tc := range tests {
-		t.Run(name, func(t *testing.T) {
-			got := IPAddrs(tc.hw)
-			if diff := cmp.Diff(tc.want, got); diff != "" {
-				t.Errorf("unexpected IPs (-want +got):\n%s", diff)
-			}
-		})
-	}
-}
-
-func TestWorkflowByAgentIDFunc(t *testing.T) {
-	cases := []struct {
-		name           string
-		input          client.Object
-		wantStateAddrs []string
-	}{
-		{
-			"noworkflow",
-			&v1alpha1.Hardware{},
-			nil,
-		},
-		{
-			"emptyworkflow",
-			&v1alpha1.Workflow{
-				Status: v1alpha1.WorkflowStatus{},
-			},
-			[]string{},
-		},
-		{
-			"pendingworkflow",
-			&v1alpha1.Workflow{
-				Status: v1alpha1.WorkflowStatus{
-					State:   v1alpha1.WorkflowStatePending,
-					AgentID: "agent1",
-					Tasks: []v1alpha1.Task{
-						{
-							AgentID: "agent1",
-						},
-					},
-				},
-			},
-			[]string{"agent1"},
-		},
-		{
-			"runningworkflow",
-			&v1alpha1.Workflow{
-				Status: v1alpha1.WorkflowStatus{
-					State:   v1alpha1.WorkflowStateRunning,
-					AgentID: "agent1",
-					Tasks: []v1alpha1.Task{
-						{
-							AgentID: "agent1",
-						},
-						{
-							AgentID: "agent2",
-						},
-					},
-				},
-			},
-			[]string{"agent1"},
-		},
-		{
-			"completeworkflow",
-			&v1alpha1.Workflow{
-				Status: v1alpha1.WorkflowStatus{
-					State: v1alpha1.WorkflowStateSuccess,
-					Tasks: []v1alpha1.Task{
-						{
-							AgentID: "agent1",
-						},
-					},
-				},
-			},
-			[]string{},
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			gotStateAddrs := WorkflowAgentID(tc.input)
-			if !reflect.DeepEqual(tc.wantStateAddrs, gotStateAddrs) {
-				t.Errorf("Unexpected WorkflowByAgentIDFunc workflow response: wanted %#v, got %#v", tc.wantStateAddrs, gotStateAddrs)
+			if diff := cmp.Diff(tt.want, MachineName(tt.obj)); diff != "" {
+				t.Errorf("index values (-want +got):\n%s", diff)
 			}
 		})
 	}

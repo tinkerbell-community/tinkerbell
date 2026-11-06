@@ -12,8 +12,8 @@ type TootlesConfig struct {
 }
 
 var KubeIndexesTootles = map[kube.IndexType]kube.Index{
-	kube.IndexTypeIPAddr:     kube.Indexes[kube.IndexTypeIPAddr],
-	kube.IndexTypeInstanceID: kube.Indexes[kube.IndexTypeInstanceID],
+	kube.IndexTypeIPAddrV1Alpha2:   kube.Indexes[kube.IndexTypeIPAddrV1Alpha2],
+	kube.IndexTypeLookupIDV1Alpha2: kube.Indexes[kube.IndexTypeLookupIDV1Alpha2],
 }
 
 func RegisterTootlesFlags(fs *Set, h *TootlesConfig) {
