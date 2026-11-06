@@ -64,6 +64,10 @@ spec:
           {{- if not (.Values.createConfigmap) }}
           env:
             {{- include "tinkerbell.generateEnvVars" .Values.deployment.envs | nindent 12 }}
+            {{- range $k, $v := (include "tinkerbell.topLevelEnv" . | fromYaml) }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
           {{- end }}
           {{- /* Open env: when using configmap but extra downward-API vars are needed */}}
           {{- $needsExtraEnv := or .Values.deployment.hostNetwork .Values.deployment.envs.dhcp.conduitEnabled .Values.deployment.additionalEnvs true }}

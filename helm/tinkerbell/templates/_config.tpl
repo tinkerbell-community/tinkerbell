@@ -34,4 +34,24 @@
 {{- end }}
 {{- end }}
 {{- end }}
+{{- range $k, $v := (include "tinkerbell.topLevelEnv" . | fromYaml) }}
+{{ $k }}: {{ $v | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
+tinkerbell.topLevelEnv renders, as YAML, the environment for the top-level
+publicIP and trustedProxies values. deployment.envs.globals.publicIpv4 and
+deployment.envs.globals.trustedProxies take precedence: they are rendered with
+the other globals, so the top-level values are left out when those are set.
+*/}}
+{{- define "tinkerbell.topLevelEnv" -}}
+{{- $env := dict }}
+{{- if and .Values.trustedProxies (not .Values.deployment.envs.globals.trustedProxies) }}
+{{- $_ := set $env "TINKERBELL_TRUSTED_PROXIES" (join "," .Values.trustedProxies) }}
+{{- end }}
+{{- if and .Values.publicIP (not .Values.deployment.envs.globals.publicIpv4) }}
+{{- $_ := set $env "TINKERBELL_PUBLIC_IP_V4" (toString .Values.publicIP) }}
+{{- end }}
+{{- toYaml $env }}
 {{- end -}}
