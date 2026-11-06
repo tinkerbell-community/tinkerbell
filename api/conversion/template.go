@@ -254,32 +254,49 @@ func rewriteAction(a *parse.ActionNode, workerTask map[string]int) (string, erro
 	if len(a.Pipe.Decl) > 0 {
 		return "", notConvertible("action %s declares variables", a)
 	}
-	for _, cmd := range a.Pipe.Cmds {
-		if len(cmd.Args) == 0 {
-			continue
-		}
-		if id, ok := cmd.Args[0].(*parse.IdentifierNode); ok && slices.Contains(structureFuncs, id.Ident) {
-			return "", notConvertible("action %s uses %s, which produces YAML structure", a, id.Ident)
-		}
-		// {{ index .Hardware.Disks N }}: v1alpha2 storage devices are objects.
-		if id, ok := cmd.Args[0].(*parse.IdentifierNode); ok && id.Ident == "index" && len(cmd.Args) == 3 {
-			if f, ok := cmd.Args[1].(*parse.FieldNode); ok && slices.Equal(f.Ident, []string{identHardwareV1, "Disks"}) {
-				devices := &parse.FieldNode{NodeType: parse.NodeField, Ident: []string{identHardware, identSpec, "storageDevices"}}
-				inner := &parse.CommandNode{NodeType: parse.NodeCommand, Args: []parse.Node{cmd.Args[0], devices, cmd.Args[2]}}
-				pipe := &parse.PipeNode{NodeType: parse.NodePipe, Cmds: []*parse.CommandNode{inner}}
-				cmd.Args = []parse.Node{&parse.ChainNode{NodeType: parse.NodeChain, Node: pipe, Field: []string{"name"}}}
-				continue
-			}
-		}
-		for i, arg := range cmd.Args {
-			repl, err := rewriteNode(arg, workerTask)
-			if err != nil {
-				return "", err
-			}
-			cmd.Args[i] = repl
-		}
+	if err := rewritePipe(a.Pipe, workerTask); err != nil {
+		return "", err
 	}
 	return a.String(), nil
+}
+
+// rewritePipe rewrites every command of a pipeline, including the pipelines
+// nested in parentheses, such as {{ formatPartition (index .Hardware.Disks 0) 3 }}.
+func rewritePipe(p *parse.PipeNode, workerTask map[string]int) error {
+	for _, cmd := range p.Cmds {
+		if err := rewriteCommand(cmd, workerTask); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rewriteCommand(cmd *parse.CommandNode, workerTask map[string]int) error {
+	if len(cmd.Args) == 0 {
+		return nil
+	}
+	if id, ok := cmd.Args[0].(*parse.IdentifierNode); ok && slices.Contains(structureFuncs, id.Ident) {
+		return notConvertible("it uses %s, which produces YAML structure", id.Ident)
+	}
+	// index .Hardware.Disks N: v1alpha2 storage devices are objects, so the
+	// command becomes (index .hardware.spec.storageDevices N).name.
+	if id, ok := cmd.Args[0].(*parse.IdentifierNode); ok && id.Ident == "index" && len(cmd.Args) == 3 {
+		if f, ok := cmd.Args[1].(*parse.FieldNode); ok && slices.Equal(f.Ident, []string{identHardwareV1, "Disks"}) {
+			devices := &parse.FieldNode{NodeType: parse.NodeField, Ident: []string{identHardware, identSpec, "storageDevices"}}
+			inner := &parse.CommandNode{NodeType: parse.NodeCommand, Args: []parse.Node{cmd.Args[0], devices, cmd.Args[2]}}
+			pipe := &parse.PipeNode{NodeType: parse.NodePipe, Cmds: []*parse.CommandNode{inner}}
+			cmd.Args = []parse.Node{&parse.ChainNode{NodeType: parse.NodeChain, Node: pipe, Field: []string{"name"}}}
+			return nil
+		}
+	}
+	for i, arg := range cmd.Args {
+		repl, err := rewriteNode(arg, workerTask)
+		if err != nil {
+			return err
+		}
+		cmd.Args[i] = repl
+	}
+	return nil
 }
 
 func rewriteNode(n parse.Node, workerTask map[string]int) (parse.Node, error) {
@@ -297,14 +314,11 @@ func rewriteNode(n parse.Node, workerTask map[string]int) (parse.Node, error) {
 	case *parse.DotNode:
 		return nil, notConvertible("it uses the whole template data (.)")
 	case *parse.PipeNode:
-		for _, cmd := range n.Cmds {
-			for i, arg := range cmd.Args {
-				repl, err := rewriteNode(arg, workerTask)
-				if err != nil {
-					return nil, err
-				}
-				cmd.Args[i] = repl
-			}
+		if len(n.Decl) > 0 {
+			return nil, notConvertible("it declares variables in %s", n)
+		}
+		if err := rewritePipe(n, workerTask); err != nil {
+			return nil, err
 		}
 		return n, nil
 	case *parse.ChainNode:
