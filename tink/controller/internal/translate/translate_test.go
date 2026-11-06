@@ -362,3 +362,42 @@ func TestRuleSetsUsing(t *testing.T) {
 		t.Errorf("(-want +got):\n%s", d)
 	}
 }
+
+// TestStoredPolicySpec verifies a translated Policy compares equal to itself as the API server stores it,
+// whatever the spacing and key order of the rule set's rules, so it is not updated on every reconcile.
+func TestStoredPolicySpec(t *testing.T) {
+	tpl := template(oneTask)
+	rs := ruleSet("enroll", tpl.Name, "device_1")
+	rs.Spec.Rules = []string{`{"networkInterfaces": {"mac": [{"wildcard": "52:54:*"}, {"prefix": "aa"}]}, "cpu": {"totalCores": [{"numeric": [">=", 8]}]}}`}
+	c := newClient(t, tpl, rs)
+	r := NewRuleSetReconciler(c, events.NewFakeRecorder(10))
+	req := reconcile.Request{NamespacedName: client.ObjectKeyFromObject(rs)}
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	policy := &v1alpha2.Policy{}
+	if err := c.Get(context.Background(), req.NamespacedName, policy); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := storedPolicySpec(policy.Spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := cmp.Diff(stored, policy.Spec); d != "" {
+		t.Errorf("the created Policy is not in stored form (-stored +created):\n%s", d)
+	}
+	got := string(policy.Spec.Rules.WorkflowAutoCreation[0].Rules[0].NetworkInterfaces.Mac[0].Raw)
+	if got != `{"wildcard":"52:54:*"}` {
+		t.Errorf("pattern = %s, want it compacted", got)
+	}
+	rv := policy.ResourceVersion
+	if _, err := r.Reconcile(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Get(context.Background(), req.NamespacedName, policy); err != nil {
+		t.Fatal(err)
+	}
+	if policy.ResourceVersion != rv {
+		t.Error("an unchanged Policy was updated")
+	}
+}

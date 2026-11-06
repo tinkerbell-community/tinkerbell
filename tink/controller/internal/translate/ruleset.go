@@ -2,6 +2,7 @@ package translate
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/tinkerbell/tinkerbell/api/conversion"
@@ -130,6 +131,11 @@ func (r *RuleSetReconciler) translate(ctx context.Context, rs *v1alpha1.Workflow
 		UID:        rs.UID,
 		Controller: ptr(true),
 	}}
+	spec, err := storedPolicySpec(policy.Spec)
+	if err != nil {
+		return fmt.Errorf("encoding the policy of rule set %s/%s: %w", rs.Namespace, rs.Name, err)
+	}
+	policy.Spec = spec
 	return ensureOwned(ctx, r.client, policy, &v1alpha2.Policy{}, rs.UID, func(existing, want *v1alpha2.Policy) bool {
 		if equality.Semantic.DeepEqual(existing.Spec, want.Spec) {
 			return false
@@ -137,6 +143,28 @@ func (r *RuleSetReconciler) translate(ctx context.Context, rs *v1alpha1.Workflow
 		existing.Spec = want.Spec
 		return true
 	})
+}
+
+// storedPolicySpec returns s as the API server stores it. Its patterns hold raw JSON, which the rule set's
+// rules give as they were written; the API server stores it compacted, with object keys sorted, so a Policy
+// compares equal to its translation once stored.
+func storedPolicySpec(s v1alpha2.PolicySpec) (v1alpha2.PolicySpec, error) {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return s, err
+	}
+	var doc any
+	if err := json.Unmarshal(b, &doc); err != nil {
+		return s, err
+	}
+	if b, err = json.Marshal(doc); err != nil {
+		return s, err
+	}
+	var out v1alpha2.PolicySpec
+	if err := json.Unmarshal(b, &out); err != nil {
+		return s, err
+	}
+	return out, nil
 }
 
 // deletePolicy deletes the Policy translated from rs, if it has one.
