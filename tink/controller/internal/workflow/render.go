@@ -19,6 +19,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/pkg/template/render"
 	"github.com/tinkerbell/tinkerbell/tink/internal/engine"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -54,7 +55,8 @@ func (r *Reconciler) renderCompat(ctx context.Context, logger logr.Logger, store
 	templateRef := stored.Annotations[conversion.AnnotationTemplate]
 	tpl := &v1alpha1.Template{}
 	if err := r.client.Get(ctx, ctrlclient.ObjectKey{Name: templateRef, Namespace: stored.Namespace}, tpl); err != nil {
-		if kerrors.IsNotFound(err) {
+		// No match: the Template CRD was removed, with every Template.
+		if kerrors.IsNotFound(err) || meta.IsNoMatchError(err) {
 			// Throw an error to raise awareness and take advantage of immediate requeue.
 			logger.Error(err, "error getting Template object in processNewWorkflow function")
 			journal.Log(ctx, "template not found")

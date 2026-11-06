@@ -11,6 +11,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
+	"github.com/tinkerbell/tinkerbell/pkg/kubeapi"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
@@ -67,6 +68,10 @@ type Index struct {
 	Obj          client.Object
 	Field        string
 	ExtractValue client.IndexerFunc
+	// Optional skips the index when the API server does not serve the kind of
+	// Obj, as for the kinds that only exist in v1alpha1 once their CRDs are
+	// removed.
+	Optional bool
 }
 
 // NewBackend returns a controller-runtime cluster.Cluster with the Tinkerbell v1alpha1
@@ -128,6 +133,15 @@ func NewBackend(cfg Backend, opts ...cluster.Option) (*Backend, error) {
 	}
 
 	for _, i := range cfg.Indexes {
+		if i.Optional {
+			served, err := kubeapi.Served(c.GetClient(), i.Obj)
+			if err != nil {
+				return nil, fmt.Errorf("failed to setup indexer(%s): %w", i.Field, err)
+			}
+			if !served {
+				continue
+			}
+		}
 		if err := c.GetFieldIndexer().IndexField(context.Background(), i.Obj, i.Field, i.ExtractValue); err != nil {
 			return nil, fmt.Errorf("failed to setup indexer(%s): %w", i.Field, err)
 		}

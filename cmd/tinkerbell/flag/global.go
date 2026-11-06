@@ -39,13 +39,17 @@ type GlobalConfig struct {
 	EnableSecondStar      bool
 	EnableUI              bool
 	EnableCRDMigrations   bool
-	MaxprocsEnable        bool
-	MemlimitRatio         float64
-	EmbeddedGlobalConfig  EmbeddedGlobalConfig
-	BackendKubeOptions    BackendKubeOptions
-	ConversionWebhook     ConversionWebhookConfig
-	TLS                   TLSConfig
-	PrintVersion          bool
+	// EnableDeprecatedCRDRemoval removes the CRDs of the kinds that only exist
+	// in v1alpha1 once their objects have moved to v1alpha2. It needs
+	// EnableCRDMigrations.
+	EnableDeprecatedCRDRemoval bool
+	MaxprocsEnable             bool
+	MemlimitRatio              float64
+	EmbeddedGlobalConfig       EmbeddedGlobalConfig
+	BackendKubeOptions         BackendKubeOptions
+	ConversionWebhook          ConversionWebhookConfig
+	TLS                        TLSConfig
+	PrintVersion               bool
 }
 
 type EmbeddedGlobalConfig struct {
@@ -120,6 +124,7 @@ func RegisterGlobal(fs *Set, gc *GlobalConfig) {
 	fs.Register(EnableSecondStar, ffval.NewValueDefault(&gc.EnableSecondStar, gc.EnableSecondStar))
 	fs.Register(EnableUI, ffval.NewValueDefault(&gc.EnableUI, gc.EnableUI))
 	fs.Register(EnableCRDMigrations, ffval.NewValueDefault(&gc.EnableCRDMigrations, gc.EnableCRDMigrations))
+	fs.Register(EnableDeprecatedCRDRemoval, ffval.NewValueDefault(&gc.EnableDeprecatedCRDRemoval, gc.EnableDeprecatedCRDRemoval))
 	fs.Register(LogLevelConfig, ffval.NewValueDefault(&gc.LogLevel, gc.LogLevel))
 	fs.Register(OTELEndpoint, ffval.NewValueDefault(&gc.OTELEndpoint, gc.OTELEndpoint))
 	fs.Register(OTELInsecure, ffval.NewValueDefault(&gc.OTELInsecure, gc.OTELInsecure))
@@ -294,6 +299,11 @@ var EnableETCD = Config{
 var EnableCRDMigrations = Config{
 	Name:  "enable-crd-migrations",
 	Usage: "create CRDs in the cluster and move stored objects to the current API version; defaults to false when the backend namespace is set",
+}
+
+var EnableDeprecatedCRDRemoval = Config{
+	Name:  "enable-deprecated-crd-removal",
+	Usage: "with --enable-crd-migrations, remove the CRDs of the kinds that only exist in v1alpha1 (Template, WorkflowRuleSet, bmc Machine and Task) once their objects have moved to v1alpha2; clients that still create those kinds must move to v1alpha2 first",
 }
 
 var ConversionWebhookBindAddr = Config{

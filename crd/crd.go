@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	sigsyaml "sigs.k8s.io/yaml"
 )
 
@@ -45,6 +46,11 @@ type Tinkerbell struct {
 	Logger     logr.Logger
 	restConfig *rest.Config
 	webhook    *ConversionWebhook
+	// removeDeprecated enables RemoveDeprecated; see WithDeprecatedCRDRemoval.
+	removeDeprecated bool
+	// kube reads and patches the objects RemoveDeprecated checks. It is created
+	// from the rest config when deprecated CRD removal is enabled.
+	kube client.Client
 }
 
 const (
@@ -63,7 +69,7 @@ var AvailableVersions = []string{"v1alpha1", "v1alpha2"}
 // exist in both API versions are served in both and stored as v1alpha2, with
 // v1alpha1 converted by the conversion webhook. Kinds that only exist in
 // v1alpha1 (Template, WorkflowRuleSet, and the bmc Machine and Task) are
-// deprecated.
+// deprecated (DeprecatedCRDs); WithDeprecatedCRDRemoval removes them.
 var TinkerbellDefaults = map[string][]byte{
 	"hardware.tinkerbell.org":         mustReadCRD("bases/tinkerbell.org_hardware.yaml"),
 	"workflows.tinkerbell.org":        mustReadCRD("bases/tinkerbell.org_workflows.yaml"),
@@ -149,6 +155,17 @@ func WithConversionWebhook(w ConversionWebhook) ConfigOption {
 	}
 }
 
+// WithDeprecatedCRDRemoval makes MigrateAndReady remove the CRDs of the kinds
+// that only exist in v1alpha1 once their objects have moved to v1alpha2 (see
+// RemoveDeprecated), and stops it from installing them again. Clients that
+// still create those kinds must have moved to v1alpha2 first: their objects
+// are deleted with the CRD.
+func WithDeprecatedCRDRemoval() ConfigOption {
+	return func(t *Tinkerbell) {
+		t.removeDeprecated = true
+	}
+}
+
 // logrWarningHandler adapts a logr.Logger to the rest.WarningHandler interface.
 type logrWarningHandler struct {
 	logger logr.Logger
@@ -173,18 +190,13 @@ func NewTinkerbell(opts ...ConfigOption) (Tinkerbell, error) {
 		if tbell.Logger.GetSink() != nil {
 			cfg.WarningHandler = logrWarningHandler{logger: tbell.Logger}
 		}
-		client, err := clientset.NewForConfig(cfg)
+		crdClient, err := clientset.NewForConfig(cfg)
 		if err != nil {
 			return Tinkerbell{}, fmt.Errorf("failed to create CRD client: %w", err)
 		}
-		tbell.Client = client
-		if tbell.Dynamic == nil {
-			// Conversions of deprecated versions warn on every object; don't log those.
-			dcfg := rest.CopyConfig(tbell.restConfig)
-			dcfg.WarningHandler = rest.NoWarnings{}
-			if tbell.Dynamic, err = dynamic.NewForConfig(dcfg); err != nil {
-				return Tinkerbell{}, fmt.Errorf("failed to create dynamic client: %w", err)
-			}
+		tbell.Client = crdClient
+		if err := tbell.objectClients(); err != nil {
+			return Tinkerbell{}, err
 		}
 	}
 
@@ -195,8 +207,36 @@ func NewTinkerbell(opts ...ConfigOption) (Tinkerbell, error) {
 	return tbell, nil
 }
 
+// objectClients creates, from the rest config, the clients of the Tinkerbell
+// objects that are not set: the dynamic client, and the client deprecated CRD
+// removal reads and patches objects with.
+func (t *Tinkerbell) objectClients() error {
+	// Conversions of deprecated versions warn on every object; don't log those.
+	cfg := rest.CopyConfig(t.restConfig)
+	cfg.WarningHandler = rest.NoWarnings{}
+	var err error
+	if t.Dynamic == nil {
+		if t.Dynamic, err = dynamic.NewForConfig(cfg); err != nil {
+			return fmt.Errorf("failed to create dynamic client: %w", err)
+		}
+	}
+	if !t.removeDeprecated || t.kube != nil {
+		return nil
+	}
+	scheme, err := deprecatedScheme()
+	if err != nil {
+		return fmt.Errorf("failed to create scheme: %w", err)
+	}
+	if t.kube, err = client.New(cfg, client.Options{Scheme: scheme}); err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+	return nil
+}
+
 // MigrateAndReady installs or upgrades the CRDs, waits for them to be
 // established, and then rewrites existing objects into the storage version.
+// With WithDeprecatedCRDRemoval, it then removes the CRDs of the kinds that only
+// exist in v1alpha1 whose objects have all moved to v1alpha2.
 func (t Tinkerbell) MigrateAndReady(ctx context.Context) error {
 	if err := t.Migrate(ctx); err != nil {
 		return err
@@ -204,13 +244,26 @@ func (t Tinkerbell) MigrateAndReady(ctx context.Context) error {
 	if err := t.Ready(ctx); err != nil {
 		return err
 	}
-	return t.MigrateStorage(ctx)
+	if err := t.MigrateStorage(ctx); err != nil {
+		return err
+	}
+	if t.removeDeprecated {
+		return t.RemoveDeprecated(ctx)
+	}
+	return nil
 }
 
-// Migrate applies the CRDs to the cluster.
+// Migrate applies the CRDs to the cluster. With WithDeprecatedCRDRemoval, a
+// deprecated CRD that was removed, or is being removed, is not applied.
 func (t Tinkerbell) Migrate(ctx context.Context) error {
 	decoder := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
-	for _, raw := range t.CRDs {
+	for name, raw := range t.CRDs {
+		if ok, err := t.managed(ctx, name); err != nil || !ok {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		obj := &unstructured.Unstructured{}
 		if _, _, err := decoder.Decode(raw, nil, obj); err != nil {
 			return fmt.Errorf("failed to decode YAML: %w", err)
@@ -273,6 +326,12 @@ func (t Tinkerbell) setConversion(obj *unstructured.Unstructured) error {
 // to v1alpha2; the API server converts each one through the webhook.
 func (t Tinkerbell) MigrateStorage(ctx context.Context) error {
 	for name := range t.CRDs {
+		if ok, err := t.managed(ctx, name); err != nil || !ok {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		c, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return fmt.Errorf("failed to get CRD %s: %w", name, err)
@@ -361,6 +420,12 @@ func (t Tinkerbell) setStoredVersions(ctx context.Context, name, version string)
 func (t Tinkerbell) Ready(ctx context.Context) error {
 	// Get the CRDs from the cluster to verify they are available and usable.
 	for name := range t.CRDs {
+		if ok, err := t.managed(ctx, name); err != nil || !ok {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 		if err := retry.Do(func() error {
 			crd, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
 			if err != nil {

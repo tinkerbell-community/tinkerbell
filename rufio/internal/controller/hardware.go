@@ -46,6 +46,9 @@ type HardwareReconciler struct {
 	inventoryRefreshInterval   time.Duration
 	inventoryCollectionEnabled bool
 	nowFunc                    func() time.Time
+	// machines is whether bmc Machines are served. Once their CRD is removed,
+	// a connection translated from a Machine is polled like any other.
+	machines bool
 }
 
 // NewHardwareReconciler returns a new HardwareReconciler. Its intervals and the
@@ -59,6 +62,7 @@ func NewHardwareReconciler(c client.Client, recorder events.EventRecorder, bmcCl
 		inventoryRefreshInterval:   ternary(inventoryRefreshInterval > 0, inventoryRefreshInterval, defaultInventoryRefreshInterval),
 		inventoryCollectionEnabled: inventoryCollectionEnabled,
 		nowFunc:                    time.Now,
+		machines:                   true,
 	}
 }
 
@@ -87,7 +91,7 @@ func (r *HardwareReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		err        error
 	)
 	switch {
-	case hw.Annotations[conversion.AnnotationMachine] != "":
+	case r.machines && hw.Annotations[conversion.AnnotationMachine] != "":
 		conditions, err = r.machineConditions(ctx, hw)
 	case hw.Spec.BMC != nil && hw.Spec.BMC.Connection != nil:
 		conditions, result, err = r.poll(ctx, logger, hw)
@@ -276,12 +280,14 @@ var hardwareBMCChanged = predicate.Funcs{
 // SetupWithManager sets up the controller with the Manager. It needs the
 // hardwareMachineIndexKey index.
 func (r *HardwareReconciler) SetupWithManager(mgr ctrl.Manager, opts ctrlcontroller.Options) error {
-	return ctrl.NewControllerManagedBy(mgr).
+	b := ctrl.NewControllerManagedBy(mgr).
 		Named("hardware").
 		WithOptions(opts).
-		For(&v1alpha2.Hardware{}, builder.WithPredicates(hardwareBMCChanged)).
-		Watches(&bmcv1.Machine{}, handler.EnqueueRequestsFromMapFunc(r.translatedHardware)).
-		Complete(r)
+		For(&v1alpha2.Hardware{}, builder.WithPredicates(hardwareBMCChanged))
+	if r.machines {
+		b = b.Watches(&bmcv1.Machine{}, handler.EnqueueRequestsFromMapFunc(r.translatedHardware))
+	}
+	return b.Complete(r)
 }
 
 // translatedHardware maps a Machine to the Hardware whose connection was

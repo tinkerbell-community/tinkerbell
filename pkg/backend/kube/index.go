@@ -90,11 +90,13 @@ var Indexes = map[IndexType]Index{
 		ExtractValue: WorkflowTaskAgentIDs,
 	},
 	// The deprecated bmc Machine only exists in v1alpha1. SecondStar reads the
-	// one a Hardware created through v1alpha1 names in its bmcRef.
+	// one a Hardware created through v1alpha1 names in its bmcRef, while the
+	// Machine CRD exists.
 	IndexTypeMachineName: {
 		Obj:          &bmc.Machine{},
 		Field:        NameIndex,
 		ExtractValue: MachineName,
+		Optional:     true,
 	},
 }
 

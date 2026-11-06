@@ -435,8 +435,15 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 			cliLog.Info("WARNING: conversion webhook not started; v1alpha1 objects can only be served if another webhook converts them", "error", err.Error())
 		}
 
+		if globals.EnableDeprecatedCRDRemoval && !globals.EnableCRDMigrations {
+			cliLog.Info("WARNING: deprecated CRD removal needs CRD migrations; not removing deprecated CRDs", "flag", flag.EnableDeprecatedCRDRemoval.Name)
+		}
 		if globals.EnableCRDMigrations {
-			tb, err := crd.NewTinkerbell(crd.WithLogger(cliLog), crd.WithRestConfig(backendNoIndexes.ClientConfig), crd.WithConversionWebhook(webhook))
+			crdOpts := []crd.ConfigOption{crd.WithLogger(cliLog), crd.WithRestConfig(backendNoIndexes.ClientConfig), crd.WithConversionWebhook(webhook)}
+			if globals.EnableDeprecatedCRDRemoval {
+				crdOpts = append(crdOpts, crd.WithDeprecatedCRDRemoval())
+			}
+			tb, err := crd.NewTinkerbell(crdOpts...)
 			if err != nil {
 				return startupErr(fmt.Errorf("failed to create CRD migrator: %w", err))
 			}

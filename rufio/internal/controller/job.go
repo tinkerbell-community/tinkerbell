@@ -56,6 +56,9 @@ type JobReconciler struct {
 	reader           client.Reader
 	bmcClientFactory ClientFunc
 	nowFunc          func() time.Time
+	// tasks is whether bmc Tasks are served. Once their CRD is removed, there
+	// are no Tasks of an older Rufio's Jobs to take over.
+	tasks bool
 }
 
 // NewJobReconciler returns a new JobReconciler. reader is used to read the Jobs
@@ -66,6 +69,7 @@ func NewJobReconciler(c client.Client, reader client.Reader, bmcClientFactory Cl
 		reader:           reader,
 		bmcClientFactory: bmcClientFactory,
 		nowFunc:          time.Now,
+		tasks:            true,
 	}
 }
 
@@ -267,6 +271,9 @@ func (r *JobReconciler) setCondition(job *bmc.Job, t bmc.ConditionType, message 
 // operation). It reports whether to wait for a Task that is still running; the
 // Task controller finishes it. A failed Task fails the Job.
 func (r *JobReconciler) takeOverV1Alpha1Tasks(ctx context.Context, job *bmc.Job) (bool, error) {
+	if !r.tasks {
+		return false, nil
+	}
 	tasks := &bmcv1.TaskList{}
 	if err := r.client.List(ctx, tasks, client.MatchingFields{jobOwnerKey: job.Name}, client.InNamespace(job.Namespace)); err != nil {
 		return false, fmt.Errorf("failed to list owned Tasks for Job %s/%s: %w", job.Namespace, job.Name, err)
@@ -352,6 +359,13 @@ func closeBMC(ctx context.Context, logger logr.Logger, bmcClient *bmclib.Client)
 // not cause another round of BMC calls. Tasks of Jobs the v1alpha1 Job
 // controller started are watched so those Jobs continue when their Task ends.
 func (r *JobReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, opts ctrlcontroller.Options) error {
+	b := ctrl.NewControllerManagedBy(mgr).
+		WithOptions(opts).
+		For(&bmc.Job{}, builder.WithPredicates(predicate.GenerationChangedPredicate{}))
+	if !r.tasks {
+		return b.Complete(r)
+	}
+
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&bmcv1.Task{},
@@ -361,19 +375,15 @@ func (r *JobReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, 
 		return err
 	}
 
-	return ctrl.NewControllerManagedBy(mgr).
-		WithOptions(opts).
-		For(&bmc.Job{}, builder.WithPredicates(predicate.GenerationChangedPredicate{})).
-		Watches(
-			&bmcv1.Task{},
-			handler.EnqueueRequestForOwner(
-				mgr.GetScheme(),
-				mgr.GetRESTMapper(),
-				&bmc.Job{},
-				handler.OnlyControllerOwner(),
-			),
-		).
-		Complete(r)
+	return b.Watches(
+		&bmcv1.Task{},
+		handler.EnqueueRequestForOwner(
+			mgr.GetScheme(),
+			mgr.GetRESTMapper(),
+			&bmc.Job{},
+			handler.OnlyControllerOwner(),
+		),
+	).Complete(r)
 }
 
 // TaskOwnerIndexFunc is Indexer func which returns the owner name for obj.

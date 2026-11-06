@@ -10,6 +10,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
+	"github.com/tinkerbell/tinkerbell/pkg/kubeapi"
 	"github.com/tinkerbell/tinkerbell/tink/controller/internal/translate"
 	"github.com/tinkerbell/tinkerbell/tink/controller/internal/workflow"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -158,12 +159,25 @@ func newManager(cfg *rest.Config, rr referenceResolver, opts controllerruntime.O
 		return nil, fmt.Errorf("setup workflow reconciler: %w", err)
 	}
 
-	// The v1alpha2 translations of the kinds only v1alpha1 has.
-	if err = translate.NewTemplateReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
-		return nil, fmt.Errorf("setup template translation reconciler: %w", err)
+	// The v1alpha2 translations of the kinds only v1alpha1 has, while their CRDs exist.
+	templates, err := kubeapi.Served(mgr.GetClient(), &tinkerbell.Template{})
+	if err != nil {
+		return nil, fmt.Errorf("checking whether Templates are served: %w", err)
 	}
-	if err = translate.NewRuleSetReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
-		return nil, fmt.Errorf("setup workflowruleset translation reconciler: %w", err)
+	ruleSets, err := kubeapi.Served(mgr.GetClient(), &tinkerbell.WorkflowRuleSet{})
+	if err != nil {
+		return nil, fmt.Errorf("checking whether WorkflowRuleSets are served: %w", err)
+	}
+	if templates {
+		if err = translate.NewTemplateReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
+			return nil, fmt.Errorf("setup template translation reconciler: %w", err)
+		}
+	}
+	// Rule sets are translated with their Template.
+	if templates && ruleSets {
+		if err = translate.NewRuleSetReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
+			return nil, fmt.Errorf("setup workflowruleset translation reconciler: %w", err)
+		}
 	}
 
 	return mgr, nil

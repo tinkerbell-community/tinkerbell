@@ -463,6 +463,9 @@ func (k *KubeClient) ListTemplates(ctx context.Context, namespace string) (*tink
 	}
 
 	if err := k.List(ctx, &tplList, opts...); err != nil {
+		if meta.IsNoMatchError(err) {
+			return &tplList, nil // the deprecated CRD was removed
+		}
 		return nil, fmt.Errorf("failed to list templates: %w", err)
 	}
 	return &tplList, nil
@@ -486,6 +489,9 @@ func (k *KubeClient) ListWorkflowRuleSets(ctx context.Context, namespace string)
 	}
 
 	if err := k.List(ctx, &rsList, opts...); err != nil {
+		if meta.IsNoMatchError(err) {
+			return &rsList, nil // the deprecated CRD was removed
+		}
 		return nil, fmt.Errorf("failed to list workflowrulesets: %w", err)
 	}
 	return &rsList, nil
@@ -509,6 +515,9 @@ func (k *KubeClient) ListBMCMachines(ctx context.Context, namespace string) (*bm
 	}
 
 	if err := k.List(ctx, &machineList, opts...); err != nil {
+		if meta.IsNoMatchError(err) {
+			return &machineList, nil // the deprecated CRD was removed
+		}
 		return nil, fmt.Errorf("failed to list BMC machines: %w", err)
 	}
 	return &machineList, nil
@@ -550,6 +559,9 @@ func (k *KubeClient) ListBMCTasks(ctx context.Context, namespace string) (*bmcv1
 	}
 
 	if err := k.List(ctx, &taskList, opts...); err != nil {
+		if meta.IsNoMatchError(err) {
+			return &taskList, nil // the deprecated CRD was removed
+		}
 		return nil, fmt.Errorf("failed to list BMC tasks: %w", err)
 	}
 	return &taskList, nil

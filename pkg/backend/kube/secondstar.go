@@ -12,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -79,6 +80,9 @@ func (b *Backend) BMCConnection(ctx context.Context, hw *v1alpha2.Hardware) (*bm
 		return nil, fmt.Errorf("hardware %s/%s has no BMC connection: spec.bmc.connection is not set and it does not reference a bmc Machine", hw.Namespace, hw.Name)
 	}
 	machine, err := b.filterMachine(ctx, hw.Namespace, ref.Name)
+	if meta.IsNoMatchError(err) {
+		return nil, fmt.Errorf("hardware %s/%s has no BMC connection: spec.bmc.connection is not set and bmc Machines are no longer served", hw.Namespace, hw.Name)
+	}
 	if err != nil {
 		return nil, err
 	}

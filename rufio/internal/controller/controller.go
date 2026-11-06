@@ -9,6 +9,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	bmcv2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
+	"github.com/tinkerbell/tinkerbell/pkg/kubeapi"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -88,6 +89,8 @@ func NewReconciler(c client.Client) *Reconciler {
 //   - the deprecated bmc Machines, polled for their power state and inventory;
 //   - Hardware with a BMC connection of its own, polled the same way;
 //   - the translation of bmc Machines into the Hardware that refers to them.
+//
+// The controllers of the deprecated kinds only run while their CRDs exist.
 func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bmcClient ClientFunc, powerCheckInterval, inventoryRefreshInterval time.Duration, inventoryCollectionEnabled bool, opts ctrlcontroller.Options) error {
 	indexer := mgr.GetFieldIndexer()
 	if err := indexer.IndexField(ctx, &v1alpha2.Hardware{}, hardwareBMCRefIndexKey, hardwareBMCRefIndexFunc); err != nil {
@@ -97,24 +100,43 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bmc
 		return fmt.Errorf("unable to index Hardware by translated Machine: %w", err)
 	}
 
-	if err := NewMachineReconciler(mgr.GetClient(), mgr.GetEventRecorder("machine-controller"), bmcClient, powerCheckInterval, inventoryRefreshInterval, inventoryCollectionEnabled).SetupWithManager(ctx, mgr, opts); err != nil {
-		return fmt.Errorf("unable to create Machines controller: %w", err)
+	machines, err := kubeapi.Served(mgr.GetClient(), &bmc.Machine{})
+	if err != nil {
+		return fmt.Errorf("checking whether bmc Machines are served: %w", err)
+	}
+	tasks, err := kubeapi.Served(mgr.GetClient(), &bmc.Task{})
+	if err != nil {
+		return fmt.Errorf("checking whether bmc Tasks are served: %w", err)
 	}
 
-	if err := NewHardwareReconciler(mgr.GetClient(), mgr.GetEventRecorder("hardware-controller"), bmcClient, powerCheckInterval, inventoryRefreshInterval, inventoryCollectionEnabled).SetupWithManager(mgr, opts); err != nil {
+	if machines {
+		if err := NewMachineReconciler(mgr.GetClient(), mgr.GetEventRecorder("machine-controller"), bmcClient, powerCheckInterval, inventoryRefreshInterval, inventoryCollectionEnabled).SetupWithManager(ctx, mgr, opts); err != nil {
+			return fmt.Errorf("unable to create Machines controller: %w", err)
+		}
+	}
+
+	hardware := NewHardwareReconciler(mgr.GetClient(), mgr.GetEventRecorder("hardware-controller"), bmcClient, powerCheckInterval, inventoryRefreshInterval, inventoryCollectionEnabled)
+	hardware.machines = machines
+	if err := hardware.SetupWithManager(mgr, opts); err != nil {
 		return fmt.Errorf("unable to create Hardware controller: %w", err)
 	}
 
-	if err := NewMachineTranslationReconciler(mgr.GetClient()).SetupWithManager(mgr, opts); err != nil {
-		return fmt.Errorf("unable to create Machine translation controller: %w", err)
+	if machines {
+		if err := NewMachineTranslationReconciler(mgr.GetClient()).SetupWithManager(mgr, opts); err != nil {
+			return fmt.Errorf("unable to create Machine translation controller: %w", err)
+		}
 	}
 
-	if err := NewJobReconciler(mgr.GetClient(), mgr.GetAPIReader(), bmcClient).SetupWithManager(ctx, mgr, opts); err != nil {
+	jobs := NewJobReconciler(mgr.GetClient(), mgr.GetAPIReader(), bmcClient)
+	jobs.tasks = tasks
+	if err := jobs.SetupWithManager(ctx, mgr, opts); err != nil {
 		return fmt.Errorf("unable to create Jobs controller: %w", err)
 	}
 
-	if err := NewTaskReconciler(mgr.GetClient(), bmcClient).SetupWithManager(mgr, opts); err != nil {
-		return fmt.Errorf("unable to create Tasks controller: %w", err)
+	if tasks {
+		if err := NewTaskReconciler(mgr.GetClient(), bmcClient).SetupWithManager(mgr, opts); err != nil {
+			return fmt.Errorf("unable to create Tasks controller: %w", err)
+		}
 	}
 
 	return nil

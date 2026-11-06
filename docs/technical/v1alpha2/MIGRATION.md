@@ -23,6 +23,8 @@ With `--enable-crd-migrations` (the Helm chart's default), Tinkerbell does the f
 5. It translates the kinds that only exist in `v1alpha1` (see below) and keeps translating
    them while they exist: the Tink controller translates Templates and rule sets, Rufio
    translates bmc Machines.
+6. With `--enable-deprecated-crd-removal`, it removes the CRDs of those kinds once their
+   objects have moved (see [Removing the v1alpha1-only CRDs](#removing-the-v1alpha1-only-crds)).
 
 Running it again does nothing. Without `--enable-crd-migrations` the webhook still runs, for
 CRDs managed elsewhere: point their `spec.conversion` at it. Tinkerbell reads `v1alpha2`, so
@@ -177,6 +179,43 @@ progress in `status.completedOperations`; the conditions are the same as before 
 completed Tasks count as done. Rufio runs without leader election, so do not let an old and a new
 Tinkerbell run side by side during the upgrade: both would act on new Jobs. The chart defaults to
 a rolling update; set `deployment.strategy.type: Recreate` for the upgrade.
+
+## Removing the v1alpha1-only CRDs
+
+With `--enable-deprecated-crd-removal` (chart value `enableDeprecatedCRDRemoval`, off by default)
+and `--enable-crd-migrations`, the startup migration also removes the CRDs of the kinds that only
+exist in `v1alpha1`, once their objects have moved to `v1alpha2`. Deleting a CRD deletes all its
+objects, so a CRD is only removed when nothing is lost or still needs it:
+
+| CRD                               | Kept while                                                                                         |
+| --------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `workflowrulesets.tinkerbell.org` | a rule set has no `Policy` translated from it                                                       |
+| `templates.tinkerbell.org`        | the `WorkflowRuleSet` CRD exists; a Template has no `Task` translation (or not all its Tasks yet); a Workflow that has not started runs a Template in v1alpha1 compatibility mode |
+| `machines.bmc.tinkerbell.org`     | a Machine is not translated into any Hardware; a Hardware refers to a Machine and has no connection yet; a Job that has not finished reads its connection from a Machine |
+| `tasks.bmc.tinkerbell.org`        | a Task has not finished; a Job that has not finished continues from the Tasks an older Rufio created |
+
+A CRD that is kept is logged with the reasons (`keeping deprecated CRD`), and checked again the
+next time Tinkerbell starts: the Tink controller and Rufio keep translating while it runs. Delete
+or fix the objects named there to let it go.
+
+Before deleting a CRD, Tinkerbell detaches what moved from it: it removes owner references to its
+kind from the other Tinkerbell objects, so the garbage collector does not delete the Tasks of a
+Template, the Policy of a rule set, or the Workflows a rule set created; and it removes the
+`bmc.tinkerbell.org/machine` annotation from Hardware, whose translated connection becomes their
+own, polled by Rufio directly. A removed CRD is not installed again. With the CRDs gone, the
+controllers of those kinds do not run, Workflows still created through v1alpha1 fail with
+`template not found`, and Hardware and Jobs need a BMC connection of their own.
+
+Owner references in objects that are not Tinkerbell's are not touched. Move every client that
+still creates or reads these kinds to `v1alpha2` before turning this on, and stop it, as objects it
+creates between the check and the deletion are deleted with the CRD:
+
+- Cluster API Provider Tinkerbell v0.9.1 and earlier can neither provision nor delete machines
+  once the Template CRD is gone: they look for the machine's Template first and only treat "not
+  found" as no Template. Even without that, CAPT needs a Template for a template that does not
+  translate (it runs it in compatibility mode) and for a `templateRef`; before v0.9 it creates a
+  Template for every machine.
+- The BMC discovery controller creates bmc Machines.
 
 ## Behavior that changes
 

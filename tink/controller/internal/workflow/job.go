@@ -10,6 +10,7 @@ import (
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -122,7 +123,8 @@ func (s *state) deleteExisting(ctx context.Context, name jobName) (reconcile.Res
 		client.MatchingLabels{"owner-name": name.String()},
 		client.InNamespace(s.workflow.Namespace),
 	}
-	if err := s.client.DeleteAllOf(ctx, &bmcv1alpha1.Task{}, op...); client.IgnoreNotFound(err) != nil {
+	// No match: the bmc Task CRD was removed, with every Task.
+	if err := s.client.DeleteAllOf(ctx, &bmcv1alpha1.Task{}, op...); client.IgnoreNotFound(err) != nil && !meta.IsNoMatchError(err) {
 		journal.Log(ctx, "error deleting tasks", "name", name, "error", err)
 		return reconcile.Result{}, fmt.Errorf("error deleting tasks.bmc.tinkerbell.org objects: %w", err)
 	}
