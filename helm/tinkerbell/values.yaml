@@ -239,7 +239,16 @@ deployment:
       memory: 128Mi
   selector: {}
   strategy:
+    # RollingUpdate starts the new pod before it stops the old one; Recreate stops
+    # the old one first. Use Recreate where two versions must not run side by
+    # side (Rufio has no leader election) and on a single node, where the
+    # required pod anti-affinity above keeps the new pod from being scheduled.
+    # A release installed by chart v0.28.1 or earlier cannot switch to Recreate
+    # through Helm alone, see docs/technical/v1alpha2/MIGRATION.md.
     type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 25%
   # Kubernetes probes configuration
   # Uses Smee's /healthcheck endpoint on the HTTP script server port (7171)
   probes:
