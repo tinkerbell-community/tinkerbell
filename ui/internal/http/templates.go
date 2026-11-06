@@ -193,9 +193,13 @@ func HandleTemplateDetail(c *gin.Context, log logr.Logger) {
 		CreatedAt:   tpl.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
 		Labels:      tpl.Labels,
 		Annotations: tpl.Annotations,
+		Tasks:       templateTasks(ctx, kubeClient, log, tpl.Namespace, tpl.Name),
 		SpecYAML:    string(specYAML),
 		StatusYAML:  string(statusYAML),
 		YAML:        string(yamlBytes),
+	}
+	if len(tplDetail.Tasks) == 0 {
+		tplDetail.TranslationIssue = tpl.Annotations[annotationTranslation]
 	}
 
 	cfg := webtpl.PageConfig{

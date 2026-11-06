@@ -18,6 +18,8 @@ type NavItem struct {
 	Name string
 	Icon string
 	Href string
+	// Deprecated marks a deprecated, v1alpha1-only kind.
+	Deprecated bool
 }
 
 // Hardware represents a hardware resource in the list view.
@@ -709,9 +711,13 @@ type TemplateDetail struct {
 	CreatedAt   string
 	Labels      map[string]string
 	Annotations map[string]string
-	SpecYAML    string
-	StatusYAML  string
-	YAML        string
+	// Tasks are the v1alpha2 Tasks the Template was translated to.
+	// TranslationIssue says why it could not be translated, when it could not.
+	Tasks            []TaskRef
+	TranslationIssue string
+	SpecYAML         string
+	StatusYAML       string
+	YAML             string
 }
 
 // WorkflowRuleSetDetail is the data for the workflowruleset detail page.
@@ -728,6 +734,8 @@ type WorkflowRuleSetDetail struct {
 	WorkflowDisabled  bool
 	AddAttributes     bool
 	AgentValue        string
+	// Policy is the Policy the rule set was translated to, if it exists.
+	Policy string
 }
 
 // BMCMachineDetail is the data for the BMC machine detail page.
@@ -740,9 +748,12 @@ type BMCMachineDetail struct {
 	CreatedAt   string
 	Labels      map[string]string
 	Annotations map[string]string
-	SpecYAML    string
-	StatusYAML  string
-	YAML        string
+	// Hardware lists the Hardware, as "namespace/name", that refer to the
+	// Machine for their BMC connection.
+	Hardware   []string
+	SpecYAML   string
+	StatusYAML string
+	YAML       string
 }
 
 // BMCJobDetail is the data for the BMC job detail page.
@@ -824,14 +835,18 @@ type SchemaField struct {
 
 // CRDInfo represents a Custom Resource Definition for display on the dashboard.
 type CRDInfo struct {
-	Kind         string        // Resource kind (e.g., "Hardware")
-	Plural       string        // Plural name (e.g., "hardware")
-	Group        string        // API group (e.g., "tinkerbell.org")
-	Version      string        // API version (e.g., "v1alpha1")
-	Description  string        // CRD description
-	Route        string        // Web UI route (empty if no UI exists)
-	SpecFields   []SchemaField // Top-level spec fields
-	StatusFields []SchemaField // Top-level status fields
+	Kind        string // Resource kind (e.g., "Hardware")
+	Plural      string // Plural name (e.g., "hardware")
+	Group       string // API group (e.g., "tinkerbell.org")
+	Version     string // API version (e.g., "v1alpha1")
+	Description string // CRD description
+	Route       string // Web UI route (empty if no UI exists)
+	// Deprecated reports that the version is deprecated; DeprecationWarning
+	// says what replaces it.
+	Deprecated         bool
+	DeprecationWarning string
+	SpecFields         []SchemaField // Top-level spec fields
+	StatusFields       []SchemaField // Top-level status fields
 }
 
 // CRDGroup represents a group of CRDs for display.
@@ -847,3 +862,11 @@ type DashboardData struct {
 	AvailableVersions []string   // All available API versions (e.g., ["v1alpha1", "v1alpha2"])
 	BaseURL           string     // URL prefix for HTMX requests
 }
+
+// Deprecation notices of the kinds that only exist in v1alpha1.
+const (
+	DeprecatedTemplate        = "Template is deprecated; use tinkerbell.org/v1alpha2 Task. A Template whose structure does not depend on templating is translated to one Task per template task, named <template>-<task>. Workflows created through v1alpha1 keep running their Template in v1alpha1 compatibility mode until they run its Tasks."
+	DeprecatedWorkflowRuleSet = "WorkflowRuleSet is deprecated; use tinkerbell.org/v1alpha2 Policy. Each rule set is translated to a Policy of the same name with one workflowAutoCreation rule."
+	DeprecatedBMCMachine      = "bmc.tinkerbell.org Machine is deprecated; set the BMC connection in Hardware.spec.bmc. A Hardware that refers to a Machine gets its connection from it, unless it already has one."
+	DeprecatedBMCTask         = "bmc.tinkerbell.org Task is deprecated; a bmc.tinkerbell.org/v1alpha2 Job runs its spec.operations itself. Tasks of Jobs created through v1alpha1 still run as before."
+)

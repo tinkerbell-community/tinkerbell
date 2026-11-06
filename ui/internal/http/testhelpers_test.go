@@ -148,7 +148,7 @@ func newTestTemplate(name string, data *string) *tinkv1alpha1.Template {
 	}
 }
 
-func newTestBMCMachine(name, namespace, host string, power bmcv1alpha1.PowerState) *bmcv1alpha1.Machine {
+func newTestBMCMachine(name, namespace, host string, power bmcv1alpha1.PowerState) *bmcv1alpha1.Machine { //nolint:unparam // not a problem that namespace always receives "default".
 	return &bmcv1alpha1.Machine{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              name,

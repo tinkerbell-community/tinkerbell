@@ -136,7 +136,7 @@ templ Navigation(baseURL string) {
 			for _, item := range []NavItem{
 				{Name: "Hardware", Icon: hardwareIcon(), Href: baseURL + "/hardware"},
 				{Name: "Tasks", Icon: tasksIcon(), Href: baseURL + "/tasks"},
-				{Name: "Templates", Icon: templatesIcon(), Href: baseURL + "/templates"},
+				{Name: "Templates", Icon: templatesIcon(), Href: baseURL + "/templates", Deprecated: true},
 			} {
 				@NavLink(item)
 			}
@@ -157,6 +157,9 @@ templ NavLink(item NavItem) {
 			@templ.Raw(item.Icon)
 		</span>
 		{ item.Name }
+		if item.Deprecated {
+			@DeprecatedBadge()
+		}
 	</a>
 }
 
@@ -205,6 +208,7 @@ templ WorkflowsDropdown(baseURL string) {
 						@templ.Raw(rulesetsIcon())
 					</span>
 					Rulesets
+					@DeprecatedBadge()
 				</a>
 			</li>
 		</ul>
@@ -232,9 +236,9 @@ templ BMCDropdown(baseURL string) {
 	</button>
 	<ul id="dropdown-example" class="hidden">
 		for _, item := range []NavItem{
-			{Name: "Machines", Icon: bmcIcon(), Href: baseURL + "/bmc/machines"},
+			{Name: "Machines", Icon: bmcIcon(), Href: baseURL + "/bmc/machines", Deprecated: true},
 			{Name: "Jobs", Icon: jobsIcon(), Href: baseURL + "/bmc/jobs"},
-			{Name: "Tasks", Icon: tasksIcon(), Href: baseURL + "/bmc/tasks"},
+			{Name: "Tasks", Icon: tasksIcon(), Href: baseURL + "/bmc/tasks", Deprecated: true},
 		} {
 			<li>
 				<a 
@@ -246,6 +250,9 @@ templ BMCDropdown(baseURL string) {
 						@templ.Raw(item.Icon)
 					</span>
 					{ item.Name }
+					if item.Deprecated {
+						@DeprecatedBadge()
+					}
 				</a>
 			</li>
 		}

@@ -1,8 +1,10 @@
 package webhttp
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/tinkerbell/tinkerbell/crd"
 	"github.com/tinkerbell/tinkerbell/ui/templates"
 	apiv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 )
@@ -30,64 +32,61 @@ func TestGetDashboardData(t *testing.T) {
 	}
 }
 
-func TestGetDashboardData_TinkerbellCRDs(t *testing.T) {
-	data := GetDashboardData()
-
-	var tinkerbellGroup *templates.CRDGroup
+// dashboardGroup returns the CRDs of group in the dashboard data of version.
+func dashboardGroup(t *testing.T, version, group string) *templates.CRDGroup {
+	t.Helper()
+	data := GetDashboardDataForVersion(version)
 	for i := range data.Groups {
-		if data.Groups[i].Name == "tinkerbell.org" {
-			tinkerbellGroup = &data.Groups[i]
-			break
+		if data.Groups[i].Name == group {
+			return &data.Groups[i]
 		}
 	}
+	t.Fatalf("%s group not found in %s", group, version)
+	return nil
+}
 
-	if tinkerbellGroup == nil {
-		t.Fatal("tinkerbell.org group not found")
-		return
-	}
-
-	// Check expected CRD kinds exist
-	expectedKinds := []string{"Hardware", "Template", "Workflow", "WorkflowRuleSet"}
-	kindFound := make(map[string]bool)
-
-	for _, crd := range tinkerbellGroup.CRDs {
-		kindFound[crd.Kind] = true
-	}
-
-	for _, kind := range expectedKinds {
-		if !kindFound[kind] {
-			t.Errorf("expected CRD kind %q not found in tinkerbell.org group", kind)
-		}
+func TestGetDashboardData_Kinds(t *testing.T) {
+	for _, tt := range []struct {
+		version, group string
+		kinds          []string
+	}{
+		{"v1alpha1", "tinkerbell.org", []string{"Hardware", "Template", "Workflow", "WorkflowRuleSet"}},
+		{"v1alpha1", "bmc.tinkerbell.org", []string{"Job", "Machine", "Task"}},
+		{"v1alpha2", "tinkerbell.org", []string{"Hardware", "Policy", "Task", "Workflow"}},
+		{"v1alpha2", "bmc.tinkerbell.org", []string{"Job"}},
+	} {
+		t.Run(tt.version+"/"+tt.group, func(t *testing.T) {
+			var kinds []string
+			for _, crd := range dashboardGroup(t, tt.version, tt.group).CRDs {
+				kinds = append(kinds, crd.Kind)
+			}
+			if strings.Join(kinds, ",") != strings.Join(tt.kinds, ",") {
+				t.Errorf("kinds = %v, want %v", kinds, tt.kinds)
+			}
+		})
 	}
 }
 
-func TestGetDashboardData_BMCCRDs(t *testing.T) {
+func TestGetDashboardData_DefaultsToV1Alpha2(t *testing.T) {
 	data := GetDashboardData()
-
-	var bmcGroup *templates.CRDGroup
-	for i := range data.Groups {
-		if data.Groups[i].Name == "bmc.tinkerbell.org" {
-			bmcGroup = &data.Groups[i]
-			break
-		}
+	if v := data.Groups[0].CRDs[0].Version; v != "v1alpha2" {
+		t.Errorf("default version = %s, want v1alpha2", v)
 	}
-
-	if bmcGroup == nil {
-		t.Fatal("bmc.tinkerbell.org group not found")
-		return
+	if got := GetDashboardDataForVersion("v9"); got.Groups[0].CRDs[0].Version != "v1alpha2" {
+		t.Error("an unknown version should fall back to v1alpha2")
 	}
+}
 
-	// Check expected CRD kinds exist
-	expectedKinds := []string{"Job", "Machine", "Task"}
-	kindFound := make(map[string]bool)
-
-	for _, crd := range bmcGroup.CRDs {
-		kindFound[crd.Kind] = true
-	}
-
-	for _, kind := range expectedKinds {
-		if !kindFound[kind] {
-			t.Errorf("expected CRD kind %q not found in bmc.tinkerbell.org group", kind)
+// Every v1alpha1 version is deprecated, saying what replaces it.
+func TestGetDashboardData_Deprecation(t *testing.T) {
+	for _, version := range crd.AvailableVersions {
+		for _, group := range GetDashboardDataForVersion(version).Groups {
+			for _, c := range group.CRDs {
+				deprecated := version == "v1alpha1"
+				if c.Deprecated != deprecated || (c.DeprecationWarning != "") != deprecated {
+					t.Errorf("%s %s.%s: Deprecated = %v, warning %q", version, c.Kind, c.Group, c.Deprecated, c.DeprecationWarning)
+				}
+			}
 		}
 	}
 }
@@ -97,14 +96,16 @@ func TestKindToRoute(t *testing.T) {
 		kind      string
 		wantRoute string
 	}{
-		{kind: "Hardware", wantRoute: "/hardware"},
-		{kind: "Workflow", wantRoute: "/workflows"},
-		{kind: "Template", wantRoute: "/templates"},
-		{kind: "WorkflowRuleSet", wantRoute: "/workflows/rulesets"},
-		{kind: "Job", wantRoute: "/bmc/jobs"},
-		{kind: "Machine", wantRoute: "/bmc/machines"},
-		{kind: "Task", wantRoute: "/bmc/tasks"},
-		{kind: "Unknown", wantRoute: ""},
+		{kind: "tinkerbell.org/Hardware", wantRoute: "/hardware"},
+		{kind: "tinkerbell.org/Workflow", wantRoute: "/workflows"},
+		{kind: "tinkerbell.org/Task", wantRoute: "/tasks"},
+		{kind: "tinkerbell.org/Policy", wantRoute: "/policies"},
+		{kind: "tinkerbell.org/Template", wantRoute: "/templates"},
+		{kind: "tinkerbell.org/WorkflowRuleSet", wantRoute: "/workflows/rulesets"},
+		{kind: "bmc.tinkerbell.org/Job", wantRoute: "/bmc/jobs"},
+		{kind: "bmc.tinkerbell.org/Machine", wantRoute: "/bmc/machines"},
+		{kind: "bmc.tinkerbell.org/Task", wantRoute: "/bmc/tasks"},
+		{kind: "tinkerbell.org/Unknown", wantRoute: ""},
 	}
 
 	for _, tt := range tests {
@@ -583,24 +584,24 @@ func TestParseCRDs_CachesBehavior(t *testing.T) {
 }
 
 func TestCRDInfo_HasRoutes(t *testing.T) {
-	data := GetDashboardData()
-
-	for _, group := range data.Groups {
-		for _, crd := range group.CRDs {
-			if crd.Route == "" {
-				t.Errorf("CRD %s.%s has empty route", crd.Kind, group.Name)
+	for _, version := range crd.AvailableVersions {
+		for _, group := range GetDashboardDataForVersion(version).Groups {
+			for _, c := range group.CRDs {
+				if c.Route == "" {
+					t.Errorf("%s CRD %s.%s has empty route", version, c.Kind, group.Name)
+				}
 			}
 		}
 	}
 }
 
 func TestCRDInfo_HasVersions(t *testing.T) {
-	data := GetDashboardData()
-
-	for _, group := range data.Groups {
-		for _, crd := range group.CRDs {
-			if crd.Version == "" {
-				t.Errorf("CRD %s.%s has empty version", crd.Kind, group.Name)
+	for _, version := range crd.AvailableVersions {
+		for _, group := range GetDashboardDataForVersion(version).Groups {
+			for _, c := range group.CRDs {
+				if c.Version != version {
+					t.Errorf("CRD %s.%s has version %q, want %q", c.Kind, group.Name, c.Version, version)
+				}
 			}
 		}
 	}

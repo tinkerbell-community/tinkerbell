@@ -220,6 +220,7 @@ func HandleBMCMachineDetail(c *gin.Context, log logr.Logger) {
 		CreatedAt:   machine.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
 		Labels:      machine.Labels,
 		Annotations: machine.Annotations,
+		Hardware:    machineHardware(ctx, kubeClient, log, machine.Namespace, machine.Name),
 		SpecYAML:    string(specYAML),
 		StatusYAML:  string(statusYAML),
 		YAML:        string(yamlBytes),

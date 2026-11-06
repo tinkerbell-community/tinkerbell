@@ -13,7 +13,7 @@ func HandleDashboard(c *gin.Context, log logr.Logger) {
 	client, _ := GetKubeClientFromGinContext(c)
 	namespaces := GetKubeNamespaces(ctx, c, client, log)
 
-	version := c.DefaultQuery("version", "v1alpha1")
+	version := c.DefaultQuery("version", DefaultCRDVersion)
 	baseURL := GetBaseURL(c)
 	dashboardData := GetDashboardDataForVersion(version)
 	dashboardData.SelectedVersion = version
@@ -31,7 +31,7 @@ func HandleDashboard(c *gin.Context, log logr.Logger) {
 
 // HandleDashboardData handles the HTMX partial endpoint for the CRD content area.
 func HandleDashboardData(c *gin.Context, log logr.Logger) {
-	version := c.DefaultQuery("version", "v1alpha1")
+	version := c.DefaultQuery("version", DefaultCRDVersion)
 	dashboardData := GetDashboardDataForVersion(version)
 	dashboardData.SelectedVersion = version
 	dashboardData.AvailableVersions = crd.AvailableVersions

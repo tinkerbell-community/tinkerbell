@@ -83,6 +83,7 @@ templ TemplateContentArea(templateData TemplatePageData) {
 			<h1 class="text-2xl font-light text-gray-900 dark:text-white">Templates</h1>
 			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage Workflow Templates and configurations</p>
 		</div>
+		@Notice("Deprecated", DeprecatedTemplate, true)
 
 		<!-- Templates Table Card -->
 		<div id="templates-content">
@@ -98,6 +99,7 @@ templ BMCMachineContentArea(machineData BMCMachinePageData) {
 			<h1 class="text-2xl font-light text-gray-900 dark:text-white">Machines</h1>
 			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage Baseboard Management Controllers</p>
 		</div>
+		@Notice("Deprecated", DeprecatedBMCMachine, true)
 
 		<!-- Machines Table Card -->
 		<div id="bmc-machines-content">
@@ -128,6 +130,7 @@ templ BMCTaskContentArea(taskData BMCTaskPageData) {
 			<h1 class="text-2xl font-light text-gray-900 dark:text-white">Tasks</h1>
 			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Monitor individual Task executions</p>
 		</div>
+		@Notice("Deprecated", DeprecatedBMCTask, true)
 
 		<!-- Tasks Table Card -->
 		<div id="bmc-tasks-content">
@@ -618,6 +621,7 @@ templ WorkflowRuleSetContentArea(rulesetData WorkflowRuleSetPageData) {
 			<h1 class="text-2xl font-light text-gray-900 dark:text-white">Workflow Rulesets</h1>
 			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage automatic Workflow creation rules</p>
 		</div>
+		@Notice("Deprecated", DeprecatedWorkflowRuleSet, true)
 
 		<!-- WorkflowRuleSets Table Card -->
 		<div id="workflowruleset-content">

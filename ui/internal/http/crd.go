@@ -24,15 +24,22 @@ const (
 	schemaTypeArrayString = "array[string]"
 )
 
-// kindToRoute maps CRD kinds to their web UI routes.
+// DefaultCRDVersion is the API version the CRD browser shows by default: the
+// version Tinkerbell stores and reads.
+const DefaultCRDVersion = "v1alpha2"
+
+// kindToRoute maps CRD kinds, as "group/kind", to their web UI routes. Task
+// names a different kind in each group.
 var kindToRoute = map[string]string{
-	nameSingularHardware: "/hardware",
-	nameSingularWorkflow: "/workflows",
-	nameSingularTemplate: "/templates",
-	"WorkflowRuleSet":    "/workflows/rulesets",
-	"Job":                "/bmc/jobs",
-	"Machine":            "/bmc/machines",
-	"Task":               "/bmc/tasks",
+	groupTinkerbell + "/" + nameSingularHardware: "/hardware",
+	groupTinkerbell + "/" + nameSingularWorkflow: "/workflows",
+	groupTinkerbell + "/" + nameSingularTinkTask: pathTasks,
+	groupTinkerbell + "/" + nameSingularPolicy:   pathPolicies,
+	groupTinkerbell + "/" + nameSingularTemplate: "/templates",
+	groupTinkerbell + "/WorkflowRuleSet":         "/workflows/rulesets",
+	groupBMC + "/Job":                            "/bmc/jobs",
+	groupBMC + "/Machine":                        "/bmc/machines",
+	groupBMC + "/Task":                           "/bmc/tasks",
 }
 
 // kindDescriptions provides meaningful descriptions for each CRD kind, keyed by "version/kind".
@@ -56,7 +63,7 @@ var kindDescriptions = map[string]string{
 }
 
 // GetDashboardDataForVersion returns the parsed CRD data for a specific API version.
-// Data is cached after first parse. Falls back to v1alpha1 for unknown versions.
+// Data is cached after first parse. Falls back to DefaultCRDVersion for unknown versions.
 func GetDashboardDataForVersion(version string) templates.DashboardData {
 	crdParseOnce.Do(func() {
 		cachedDashboardData = make(map[string]*templates.DashboardData, len(crd.CRDsByVersion))
@@ -66,14 +73,14 @@ func GetDashboardDataForVersion(version string) templates.DashboardData {
 	})
 	data, ok := cachedDashboardData[version]
 	if !ok {
-		data = cachedDashboardData["v1alpha1"]
+		data = cachedDashboardData[DefaultCRDVersion]
 	}
 	return *data
 }
 
-// GetDashboardData returns the parsed v1alpha1 CRD data for the dashboard.
+// GetDashboardData returns the parsed CRD data of DefaultCRDVersion for the dashboard.
 func GetDashboardData() templates.DashboardData {
-	return GetDashboardDataForVersion("v1alpha1")
+	return GetDashboardDataForVersion(DefaultCRDVersion)
 }
 
 // parseCRDsFromSource parses all CRD YAMLs from a source map and returns dashboard data.
@@ -128,7 +135,7 @@ func parseSingleCRD(rawYAML []byte) *templates.CRDInfo {
 		return nil
 	}
 
-	// Get the first version (v1alpha1)
+	// The CRD is a single-version view (crd.CRDsByVersion).
 	if len(crdDef.Spec.Versions) == 0 {
 		return nil
 	}
@@ -160,17 +167,19 @@ func parseSingleCRD(rawYAML []byte) *templates.CRDInfo {
 		statusFields = extractFields(statusProp, getRequiredSet(statusProp.Required), kind)
 	}
 
-	route := kindToRoute[kind]
+	route := kindToRoute[crdDef.Spec.Group+"/"+kind]
 
 	return &templates.CRDInfo{
-		Kind:         kind,
-		Plural:       crdDef.Spec.Names.Plural,
-		Group:        crdDef.Spec.Group,
-		Version:      version.Name,
-		Description:  description,
-		Route:        route,
-		SpecFields:   specFields,
-		StatusFields: statusFields,
+		Kind:               kind,
+		Plural:             crdDef.Spec.Names.Plural,
+		Group:              crdDef.Spec.Group,
+		Version:            version.Name,
+		Description:        description,
+		Route:              route,
+		Deprecated:         version.Deprecated,
+		DeprecationWarning: deref(version.DeprecationWarning),
+		SpecFields:         specFields,
+		StatusFields:       statusFields,
 	}
 }
 

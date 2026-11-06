@@ -563,6 +563,9 @@ templ CRDCard(crdInfo CRDInfo) {
 					<span class="ml-2 px-2 py-0.5 text-xs font-medium rounded bg-gray-100 dark:bg-darkBorderSoft text-gray-600 dark:text-gray-400">
 						{ crdInfo.Version }
 					</span>
+					if crdInfo.Deprecated {
+						@DeprecatedBadge()
+					}
 				</div>
 				<svg class="w-5 h-5 text-gray-400 transition-transform duration-200 group-open/card:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -570,6 +573,9 @@ templ CRDCard(crdInfo CRDInfo) {
 			</div>
 			if crdInfo.Description != "" {
 				<p class="mt-2 text-sm text-gray-600 dark:text-gray-400">{ crdInfo.Description }</p>
+			}
+			if crdInfo.DeprecationWarning != "" {
+				<p class="mt-2 text-xs text-yellow-700 dark:text-yellow-300">{ crdInfo.DeprecationWarning }</p>
 			}
 		</summary>
 		<!-- Expandable content -->

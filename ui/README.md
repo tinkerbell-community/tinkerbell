@@ -24,13 +24,18 @@ ui/
 │   └── assets.go        # Go embed for static files
 ├── internal/http/       # HTTP handlers
 │   ├── auth.go          # Authentication middleware
-│   ├── bmc.go           # BMC resource handlers
+│   ├── bmc.go           # BMC resource handlers (Jobs; deprecated Machines and Tasks)
+│   ├── deprecated.go    # v1alpha2 replacements of the deprecated v1alpha1 kinds
 │   ├── hardware.go      # Hardware resource handlers
 │   ├── kube.go          # Kubernetes client helpers
+│   ├── list.go          # List page and pagination helpers
 │   ├── pagination.go    # Pagination utilities
+│   ├── policies.go      # Policy resource handlers
 │   ├── search.go        # Global search handler
-│   ├── templates.go     # Template resource handlers
-│   └── workflows.go     # Workflow resource handlers
+│   ├── tasks.go         # Task resource handlers
+│   ├── templates.go     # Template resource handlers (deprecated)
+│   ├── workflows.go     # Workflow resource handlers
+│   └── *_view.go        # v1alpha2 objects to page data
 ├── templates/           # Templ template files
 │   ├── components.templ # Reusable UI components
 │   ├── details.templ    # Resource detail pages

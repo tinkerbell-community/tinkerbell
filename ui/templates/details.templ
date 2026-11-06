@@ -1225,12 +1225,22 @@ templ WorkflowDisabledControl(wf WorkflowDetail) {
 
 templ TemplateDetailContent(tpl TemplateDetail, baseURL string) {
 	@MainInfoHeader(tpl.Name, tpl.State)
+	@Notice("Deprecated", DeprecatedTemplate, true)
 	
 	<!-- Main Info Section -->
 	@SectionBox("Info") {
 		@MetadataTable(tpl.Name, tpl.Namespace, tpl.CreatedAt, tpl.Labels, tpl.Annotations)
 	}
 	
+	<!-- Translation to v1alpha2 -->
+	if len(tpl.Tasks) > 0 {
+		@SectionBox("Translated Tasks") {
+			@TaskRefsTable(tpl.Tasks, baseURL)
+		}
+	} else if tpl.TranslationIssue != "" {
+		@Notice("Not translated to Tasks", tpl.TranslationIssue, true)
+	}
+
 	<!-- Template Data Section -->
 	if tpl.Data != "" {
 		@SectionBoxCollapsible("Template Data", true) {
@@ -1251,6 +1261,7 @@ templ TemplateDetailContent(tpl TemplateDetail, baseURL string) {
 
 templ BMCMachineDetailContent(machine BMCMachineDetail, baseURL string) {
 	@MainInfoHeader(machine.Name, machine.PowerState)
+	@Notice("Deprecated", DeprecatedBMCMachine, true)
 	
 	<!-- Main Info Section -->
 	@SectionBox("Info") {
@@ -1264,6 +1275,17 @@ templ BMCMachineDetailContent(machine BMCMachineDetail, baseURL string) {
 			{Name: "Contactable", Value: machine.Contactable},
 			{Name: "Endpoint", Value: machine.Endpoint},
 		})
+	}
+
+	<!-- Hardware referring to the Machine -->
+	if len(machine.Hardware) > 0 {
+		@SectionBox("Used By Hardware") {
+			<ul class="space-y-1">
+				for _, hw := range machine.Hardware {
+					<li class="text-sm"><a href={ templ.SafeURL(baseURL + "/hardware/" + hw) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ hw }</a></li>
+				}
+			</ul>
+		}
 	}
 	
 	<!-- Status Section -->
@@ -1375,6 +1397,7 @@ templ BMCJobDetailContent(job BMCJobDetail, baseURL string) {
 
 templ BMCTaskDetailContent(task BMCTaskDetail, baseURL string) {
 	@MainInfoHeader(task.Name, task.Status)
+	@Notice("Deprecated", DeprecatedBMCTask, true)
 	
 	<!-- Main Info Section -->
 	@SectionBox("Info") {
@@ -1409,6 +1432,7 @@ templ BMCTaskDetailContent(task BMCTaskDetail, baseURL string) {
 
 templ WorkflowRuleSetDetailContent(rs WorkflowRuleSetDetail, baseURL string) {
 	@MainInfoHeader(rs.Name, "")
+	@Notice("Deprecated", DeprecatedWorkflowRuleSet, true)
 	
 	<!-- Main Info Section -->
 	@SectionBox("Info") {
@@ -1424,6 +1448,12 @@ templ WorkflowRuleSetDetailContent(rs WorkflowRuleSetDetail, baseURL string) {
 					<tr class="border-b border-gray-100 dark:border-darkBorder">
 						<td class="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4 align-top">Template</td>
 						<td class="py-3 text-sm"><a href={ templ.SafeURL(baseURL + "/templates/" + rs.WorkflowNamespace + "/" + rs.TemplateRef) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ rs.TemplateRef }</a></td>
+					</tr>
+				}
+				if rs.Policy != "" {
+					<tr class="border-b border-gray-100 dark:border-darkBorder">
+						<td class="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4 align-top">Policy</td>
+						<td class="py-3 text-sm"><a href={ templ.SafeURL(baseURL + "/policies/" + rs.Namespace + "/" + rs.Policy) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ rs.Policy }</a></td>
 					</tr>
 				}
 				if rs.WorkflowNamespace != "" {

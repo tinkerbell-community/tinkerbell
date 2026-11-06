@@ -211,6 +211,7 @@ func HandleWorkflowRuleSetDetail(c *gin.Context, log logr.Logger) {
 		WorkflowDisabled:  workflowDisabled,
 		AddAttributes:     rs.Spec.Workflow.AddAttributes,
 		AgentValue:        rs.Spec.Workflow.Template.AgentValue,
+		Policy:            ruleSetPolicy(ctx, client, log, rs.Namespace, rs.Name),
 	}
 
 	cfg := templates.PageConfig{
