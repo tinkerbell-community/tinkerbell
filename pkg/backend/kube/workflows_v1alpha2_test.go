@@ -11,7 +11,18 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/cluster"
 )
+
+// readers is a cluster whose cached client and API reader see different objects.
+type readers struct {
+	cluster.Cluster
+	cached client.Client
+	live   client.Reader
+}
+
+func (r readers) GetClient() client.Client    { return r.cached }
+func (r readers) GetAPIReader() client.Reader { return r.live }
 
 // TestReadWorkflowV1Alpha2 verifies reads come from the API server, not a cache
 // that hasn't caught up, and stay within the backend namespace.
@@ -21,6 +32,7 @@ func TestReadWorkflowV1Alpha2(t *testing.T) {
 		t.Fatal(err)
 	}
 	meta := metav1.ObjectMeta{Name: "wf", Namespace: "tink"}
+	// The cache has the Workflow before the Tink Controller rendered its Tasks.
 	stale := &v1alpha2.Workflow{ObjectMeta: meta}
 	current := &v1alpha2.Workflow{
 		ObjectMeta: meta,
@@ -36,11 +48,20 @@ func TestReadWorkflowV1Alpha2(t *testing.T) {
 			cached: fake.NewClientBuilder().WithScheme(rs).WithObjects(stale).Build(),
 			live:   fake.NewClientBuilder().WithScheme(rs).WithObjects(current).Build(),
 		},
+		"missing from cache": {
+			cached: fake.NewClientBuilder().WithScheme(rs).Build(),
+			live:   fake.NewClientBuilder().WithScheme(rs).WithObjects(current).Build(),
+		},
 		"outside the backend namespace": {
 			backendNamespaces: []string{"other"},
 			cached:            fake.NewClientBuilder().WithScheme(rs).Build(),
 			live:              fake.NewClientBuilder().WithScheme(rs).WithObjects(current).Build(),
 			wantNotFound:      true,
+		},
+		"inside the backend namespace": {
+			backendNamespaces: []string{"tink"},
+			cached:            fake.NewClientBuilder().WithScheme(rs).Build(),
+			live:              fake.NewClientBuilder().WithScheme(rs).WithObjects(current).Build(),
 		},
 		"inside one of several backend namespaces": {
 			backendNamespaces: []string{"other", "tink"},

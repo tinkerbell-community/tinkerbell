@@ -12,7 +12,7 @@ import (
 // dynamicRead reads any Kubernetes resource identified by GVR, name, and namespace and returns
 // the complete unstructured object as a map[string]interface{} using the Kubernetes dynamic client.
 //
-// It is unexported so that references can only be read through ResolveReferences, which applies the policy.
+// It is unexported so that references can only be read through ResolveReferencesFor, which applies the policy.
 func (b *Backend) dynamicRead(ctx context.Context, gvr schema.GroupVersionResource, name, namespace string) (map[string]interface{}, error) {
 	// Here's the spec (https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#resources):
 	// Resource collections should be all lowercase and plural, [...], Group names must be lower case and be valid DNS subdomains.

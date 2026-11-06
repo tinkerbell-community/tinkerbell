@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -33,16 +32,6 @@ type source struct {
 	Name string `json:"name,omitempty"`
 	// Namespace is the namespace of the source object.
 	Namespace string `json:"namespace,omitempty"`
-}
-
-// ResolveReferences returns the objects hw's spec.references point to, keyed by
-// reference name. It is ResolveReferencesFor with hw as the source.
-func (b *Backend) ResolveReferences(ctx context.Context, hw *v1alpha1.Hardware) (map[string]any, error) {
-	refs := make(map[string]v1alpha2.Reference, len(hw.Spec.References))
-	for name, rf := range hw.Spec.References {
-		refs[name] = v1alpha2.Reference(rf)
-	}
-	return b.ResolveReferencesFor(ctx, types.NamespacedName{Namespace: hw.Namespace, Name: hw.Name}, refs)
 }
 
 // ResolveReferencesFor returns the objects refs point to, keyed by reference

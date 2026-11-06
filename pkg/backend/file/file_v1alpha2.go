@@ -16,7 +16,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// FilterHardwareV1Alpha2 is FilterHardware for v1alpha2 Hardware.
+// FilterHardwareV1Alpha2 returns the one Hardware in the file matching opts.
+// Zero matches return a not-found error and several a multiple-found error.
 //
 // The file may hold Hardware of either version. An entry whose apiVersion is
 // tinkerbell.org/v1alpha2 is read as is; any other entry is read as v1alpha1 and
@@ -95,8 +96,9 @@ func hardwareV1Alpha2(d []byte) ([]v1alpha2.Hardware, error) {
 	return out, nil
 }
 
-// matchHardwareV1Alpha2 is matchHardware for v1alpha2 Hardware. ByInstanceID
-// matches spec.instance.lookupID, its v1alpha2 form.
+// matchHardwareV1Alpha2 reports whether hw matches every selector opts sets
+// (AND logic). ByInstanceID matches spec.instance.lookupID, the v1alpha2 form of
+// the v1alpha1 metadata instance ID.
 func matchHardwareV1Alpha2(hw *v1alpha2.Hardware, opts data.HardwareFilter) bool {
 	if opts.InNamespace != "" && hw.Namespace != opts.InNamespace {
 		return false

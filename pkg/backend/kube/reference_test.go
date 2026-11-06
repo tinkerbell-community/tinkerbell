@@ -6,7 +6,6 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -14,12 +13,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// resolveHardware resolves the references of hw with hw as the source, as the
+// render store does.
+func resolveHardware(b *Backend, hw *v1alpha2.Hardware) (map[string]any, error) {
+	return b.ResolveReferencesFor(context.Background(), client.ObjectKeyFromObject(hw), hw.Spec.References)
+}
+
 func TestResolveReferences(t *testing.T) {
-	hw := &tinkerbell.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
-		Spec: tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{
+		Spec: v1alpha2.HardwareSpec{References: map[string]v1alpha2.Reference{
 			"cm":     {Name: "cm1", Namespace: "tink-system", Version: "v1", Resource: "configmaps"},
 			"secret": {Name: "s1", Namespace: "tink-system", Version: "v1", Resource: "secrets"},
 		}},
@@ -66,7 +72,7 @@ func TestResolveReferences(t *testing.T) {
 				HardwareReferenceAllowListRules: tt.allow,
 				HardwareReferenceDenyListRules:  tt.deny,
 			}
-			got, err := b.ResolveReferences(context.Background(), hw)
+			got, err := resolveHardware(b, hw)
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -95,14 +101,14 @@ func TestResolveReferencesRejectsOutOfScopeNamespace(t *testing.T) {
 				dynamicClient:                   dynamicClient,
 				HardwareReferenceAllowListRules: []string{`{"source":{"namespace":["tink-system"]}}`},
 			}
-			hw := &tinkerbell.Hardware{
+			hw := &v1alpha2.Hardware{
 				ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
-				Spec: tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{
+				Spec: v1alpha2.HardwareSpec{References: map[string]v1alpha2.Reference{
 					"cm": {Name: "cm1", Namespace: referenceNamespace, Version: "v1", Resource: "configmaps"},
 				}},
 			}
 
-			got, err := b.ResolveReferences(context.Background(), hw)
+			got, err := resolveHardware(b, hw)
 			if err == nil {
 				t.Fatal("expected out-of-scope reference error")
 			}
@@ -117,7 +123,7 @@ func TestResolveReferencesRejectsOutOfScopeNamespace(t *testing.T) {
 }
 
 func TestResolveReferencesRejectsIncompleteReferences(t *testing.T) {
-	tests := map[string]tinkerbell.Reference{
+	tests := map[string]v1alpha2.Reference{
 		"name":     {Namespace: "tink-system", Version: "v1", Resource: "configmaps"},
 		"version":  {Namespace: "tink-system", Name: "cm1", Resource: "configmaps"},
 		"resource": {Namespace: "tink-system", Name: "cm1", Version: "v1"},
@@ -128,12 +134,12 @@ func TestResolveReferencesRejectsIncompleteReferences(t *testing.T) {
 				dynamicClient:                   &fakeDynamicClient{},
 				HardwareReferenceAllowListRules: []string{`{"source":{"namespace":["tink-system"]}}`},
 			}
-			hw := &tinkerbell.Hardware{
+			hw := &v1alpha2.Hardware{
 				ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
-				Spec:       tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{"cm": reference}},
+				Spec:       v1alpha2.HardwareSpec{References: map[string]v1alpha2.Reference{"cm": reference}},
 			}
 
-			got, err := b.ResolveReferences(context.Background(), hw)
+			got, err := resolveHardware(b, hw)
 			if err == nil {
 				t.Fatal("expected incomplete reference error")
 			}
@@ -154,14 +160,14 @@ func TestResolveReferencesClusterScoped(t *testing.T) {
 		dynamicClient:                   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), node),
 		HardwareReferenceAllowListRules: []string{`{"reference":{"resource":["nodes"]}}`},
 	}
-	hw := &tinkerbell.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
-		Spec: tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{
+		Spec: v1alpha2.HardwareSpec{References: map[string]v1alpha2.Reference{
 			"node": {Name: "node1", Version: "v1", Resource: "nodes"},
 		}},
 	}
 
-	got, err := b.ResolveReferences(context.Background(), hw)
+	got, err := resolveHardware(b, hw)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -177,14 +183,14 @@ func TestResolveReferencesAppliesPolicyToNormalizedResource(t *testing.T) {
 			`{"reference":{"group":["example.org"],"resource":["secrets"]}}`,
 		},
 	}
-	hw := &tinkerbell.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
-		Spec: tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{
+		Spec: v1alpha2.HardwareSpec{References: map[string]v1alpha2.Reference{
 			"secret": {Name: "s1", Group: "EXAMPLE.ORG", Namespace: "tink-system", Version: "v1", Resource: "SECRETS"},
 		}},
 	}
 
-	got, err := b.ResolveReferences(context.Background(), hw)
+	got, err := resolveHardware(b, hw)
 	if err == nil {
 		t.Fatal("expected normalized reference to match deny rule")
 	}
@@ -257,28 +263,6 @@ func TestResolveReferencesFor(t *testing.T) {
 				t.Fatalf("resolved %v, want the ConfigMap resolved: %v", got, wantResolved)
 			}
 		})
-	}
-}
-
-// TestResolveReferencesSource checks that the v1alpha1 wrapper evaluates rules
-// against the Hardware as the source.
-func TestResolveReferencesSource(t *testing.T) {
-	b := &Backend{
-		dynamicClient:                   &fakeDynamicClient{gvr: schema.GroupVersionResource{Version: "v1"}},
-		HardwareReferenceAllowListRules: []string{`{"source":{"name":["machine1"],"namespace":["tink-system"]}}`},
-	}
-	hw := &tinkerbell.Hardware{
-		ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
-		Spec: tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{
-			"cm": {Name: "cm1", Namespace: "tink-system", Version: "v1", Resource: "configmaps"},
-		}},
-	}
-	if got, err := b.ResolveReferences(context.Background(), hw); err != nil || got["cm"] == nil {
-		t.Fatalf("resolved %v, %v; want the reference allowed for its Hardware", got, err)
-	}
-	hw.Name = "machine2"
-	if _, err := b.ResolveReferences(context.Background(), hw); err == nil {
-		t.Fatal("want another Hardware's reference denied")
 	}
 }
 

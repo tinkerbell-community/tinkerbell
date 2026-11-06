@@ -57,15 +57,6 @@ func (b *Backend) RenderedReader() *RenderedReader {
 	return &RenderedReader{backend: b}
 }
 
-// FilterHardware is Backend.FilterHardware, returning the rendered Hardware.
-func (r *RenderedReader) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha1.Hardware, error) {
-	hw, err := r.backend.FilterHardware(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	return r.backend.RenderedHardware(ctx, hw)
-}
-
 // FilterHardwareV1Alpha2 is Backend.FilterHardwareV1Alpha2, returning the
 // rendered Hardware.
 func (r *RenderedReader) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {

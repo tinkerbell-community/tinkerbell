@@ -56,33 +56,46 @@ func hardwareWithBMCRef(machine string, sshKeys ...string) *v1alpha1.Hardware {
 	return hw
 }
 
-// TestFilterBMCMachineV1Alpha2Parity reads Hardware created through v1alpha1 the
-// way SecondStar did, as v1alpha1, and the way it does now, as v1alpha2: the BMC
-// comes from the bmc Machine the v1alpha1 bmcRef names in both.
-func TestFilterBMCMachineV1Alpha2Parity(t *testing.T) {
+// TestFilterBMCMachineV1Alpha2Machine reads the BMC of Hardware created
+// through v1alpha1 as SecondStar read it from v1alpha1: from the bmc Machine its
+// v1alpha1 bmcRef names, in the Hardware's namespace, with the IPMI port and
+// cipher suite of the Machine's IPMI provider options.
+func TestFilterBMCMachineV1Alpha2Machine(t *testing.T) {
+	key1, key2 := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAa1 a@example.org", "ssh-rsa AAAAB3 b@example.org"
+	machineBMC := func(port int, cipherSuite string, sshKeys ...string) *data.BMCMachine {
+		return &data.BMCMachine{
+			Host: "10.0.0.10", Port: port, CipherSuite: cipherSuite, User: "machine-creds-user", Pass: "machine-creds-pass",
+			SSHPublicKeys: sshKeys,
+		}
+	}
 	tests := map[string]struct {
 		hw      *v1alpha1.Hardware
 		objs    []client.Object
+		want    *data.BMCMachine
 		wantErr bool
 	}{
 		"IPMI options": {
-			hw:   hardwareWithBMCRef("bmc1", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAa1 a@example.org"),
+			hw:   hardwareWithBMCRef("bmc1", key1),
 			objs: []client.Object{bmcMachineV1Alpha1("bmc1", &bmc.ProviderOptions{IPMI: &bmc.IPMITOOLOptions{Port: 6230, CipherSuite: "3"}})},
+			want: machineBMC(6230, "3", key1),
 		},
 		"IPMI defaults": {
-			hw:   hardwareWithBMCRef("bmc1", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAa1 a@example.org", "ssh-rsa AAAAB3 b@example.org"),
+			hw:   hardwareWithBMCRef("bmc1", key1, key2),
 			objs: []client.Object{bmcMachineV1Alpha1("bmc1", &bmc.ProviderOptions{IPMI: &bmc.IPMITOOLOptions{}})},
+			want: machineBMC(623, "17", key1, key2),
 		},
 		"no provider options": {
 			hw:   hardwareWithBMCRef("bmc1"),
 			objs: []client.Object{bmcMachineV1Alpha1("bmc1", nil)},
+			want: machineBMC(0, ""),
 		},
 		"other providers' options": {
-			hw: hardwareWithBMCRef("bmc1", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAa1 a@example.org"),
+			hw: hardwareWithBMCRef("bmc1", key1),
 			objs: []client.Object{bmcMachineV1Alpha1("bmc1", &bmc.ProviderOptions{
 				Redfish:        &bmc.RedfishOptions{Port: 8443},
 				PreferredOrder: []bmc.ProviderName{"gofish"},
 			})},
+			want: machineBMC(0, "", key1),
 		},
 		"no bmcRef": {
 			hw:      hardwareWithBMCRef(""),
@@ -105,25 +118,20 @@ func TestFilterBMCMachineV1Alpha2Parity(t *testing.T) {
 				bmcMachineV1Alpha1("bmc1", nil),
 				machineIn("other", bmcMachineV1Alpha1("bmc1", &bmc.ProviderOptions{IPMI: &bmc.IPMITOOLOptions{Port: 1}})),
 			},
+			want: machineBMC(0, ""),
 		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			ctx := context.Background()
-			objs := append([]client.Object{tt.hw, createdAsV1Alpha1(t, tt.hw), bmcCredentials("machine-creds")}, tt.objs...)
+			objs := append([]client.Object{createdAsV1Alpha1(t, tt.hw), bmcCredentials("machine-creds")}, tt.objs...)
 			b := newFakeBackend(t, Backend{}, objs...)
-			filter := data.HardwareFilter{ByName: tt.hw.Name}
 
-			want, wantErr := b.FilterBMCMachine(ctx, filter)
-			got, err := b.FilterBMCMachineV1Alpha2(ctx, filter)
-			if (wantErr != nil) != tt.wantErr {
-				t.Fatalf("v1alpha1 err = %v, wantErr %v", wantErr, tt.wantErr)
-			}
+			got, err := b.FilterBMCMachineV1Alpha2(context.Background(), data.HardwareFilter{ByName: tt.hw.Name})
 			if (err != nil) != tt.wantErr {
-				t.Fatalf("v1alpha2 err = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
-			if diff := cmp.Diff(want, got); diff != "" {
-				t.Fatalf("v1alpha2 differs from v1alpha1 (-v1alpha1 +v1alpha2):\n%s", diff)
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("(-want +got):\n%s", diff)
 			}
 		})
 	}

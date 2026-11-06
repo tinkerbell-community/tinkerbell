@@ -12,6 +12,7 @@ import (
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
+	"sigs.k8s.io/yaml"
 )
 
 const mixedVersions = `
@@ -105,9 +106,13 @@ func TestFilterHardwareV1Alpha2Converts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	old, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByMACAddress: "08:00:27:29:4e:67"})
-	if err != nil {
+	var entries []v1alpha1.Hardware
+	if err := yaml.Unmarshal(w.data, &entries); err != nil {
 		t.Fatal(err)
+	}
+	old := &entries[0]
+	if old.Spec.Interfaces[0].DHCP.MAC != "08:00:27:29:4e:67" {
+		t.Fatalf("first entry has MAC %s, want 08:00:27:29:4e:67", old.Spec.Interfaces[0].DHCP.MAC)
 	}
 	got, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByMACAddress: "08:00:27:29:4e:67"})
 	if err != nil {

@@ -12,15 +12,14 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-// FilterBMCMachineV1Alpha2 is FilterBMCMachine for v1alpha2 Hardware: it returns
-// the BMC connection of the Hardware matching opts, see BMCConnectionV1Alpha2,
-// with the credentials read from their Secret, and the SSH keys of the Hardware
-// (spec.instance.sshKeys).
+// FilterBMCMachineV1Alpha2 returns the BMC connection of the Hardware matching
+// opts, see BMCConnectionV1Alpha2, with the credentials read from their Secret,
+// and the SSH keys of the Hardware (spec.instance.sshKeys).
 //
 // The IPMI port and cipher suite come from the connection's IPMI provider
-// options, as for the bmc Machine. The connection's port is not used: Machines
-// translated into spec.bmc.connection carry their port there whatever provider
-// it was meant for, often Redfish's 443.
+// options, as they did from the bmc Machine. The connection's port is not
+// used: Machines translated into spec.bmc.connection carry their port there
+// whatever provider it was meant for, often Redfish's 443.
 func (b *Backend) FilterBMCMachineV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error) {
 	tracer := otel.Tracer(tracerName)
 	ctx, span := tracer.Start(ctx, "backend.kube.FilterBMCMachineV1Alpha2")

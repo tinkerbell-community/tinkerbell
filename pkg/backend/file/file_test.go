@@ -250,7 +250,7 @@ func (tt *testData) helper(t *testing.T, l logr.Logger) (*Watcher, string) {
 	return w, name
 }
 
-func TestReadHardwareByMac(t *testing.T) {
+func TestFilterHardwareByMac(t *testing.T) {
 	tests := map[string]struct {
 		mac          string
 		badData      bool
@@ -277,23 +277,23 @@ func TestReadHardwareByMac(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hw, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByMACAddress: tt.mac})
+			hw, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByMACAddress: tt.mac})
 			if tt.wantNotFound {
 				var nf hardwareNotFoundError
 				if !errors.As(err, &nf) {
-					t.Fatalf("FilterHardware() error = %v, want NotFound error", err)
+					t.Fatalf("FilterHardwareV1Alpha2() error = %v, want NotFound error", err)
 				}
 			} else if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("FilterHardware() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("FilterHardwareV1Alpha2() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr == nil && !tt.wantNotFound && hw == nil {
-				t.Fatal("expected hardware, got nil")
+			if tt.wantErr == nil && !tt.wantNotFound && (hw == nil || hw.Name != "pxe-virtualbox") {
+				t.Fatalf("got %v, want pxe-virtualbox", hw)
 			}
 		})
 	}
 }
 
-func TestReadHardwareByIP(t *testing.T) {
+func TestFilterHardwareByIP(t *testing.T) {
 	tests := map[string]struct {
 		ip           string
 		badData      bool
@@ -320,30 +320,29 @@ func TestReadHardwareByIP(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hw, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByIPAddress: tt.ip})
+			hw, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByIPAddress: tt.ip})
 			if tt.wantNotFound {
 				var nf hardwareNotFoundError
 				if !errors.As(err, &nf) {
-					t.Fatalf("FilterHardware() error = %v, want NotFound error", err)
+					t.Fatalf("FilterHardwareV1Alpha2() error = %v, want NotFound error", err)
 				}
 			} else if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("FilterHardware() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("FilterHardwareV1Alpha2() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			if tt.wantErr == nil && !tt.wantNotFound && hw == nil {
-				t.Fatal("expected hardware, got nil")
+			if tt.wantErr == nil && !tt.wantNotFound && (hw == nil || hw.Name != "pxe-virtualbox") {
+				t.Fatalf("got %v, want pxe-virtualbox", hw)
 			}
 		})
 	}
 }
 
-func TestReadHardwareByName(t *testing.T) {
+func TestFilterHardwareByName(t *testing.T) {
 	tests := map[string]struct {
 		name     string
-		wantErr  bool
 		notFound bool
 	}{
-		"no record found": {name: "nonexistent", wantErr: true, notFound: true},
-		"record found":    {name: "pxe-virtualbox", wantErr: false},
+		"no record found": {name: "nonexistent", notFound: true},
+		"record found":    {name: "pxe-virtualbox"},
 	}
 
 	for name, tt := range tests {
@@ -352,25 +351,20 @@ func TestReadHardwareByName(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hw, err := w.ReadHardware(context.Background(), tt.name, "")
-			if tt.wantErr {
-				if err == nil {
-					t.Fatal("expected error, got nil")
-				}
-				if tt.notFound {
-					type nf interface{ NotFound() bool }
-					var nfe nf
-					if !errors.As(err, &nfe) || !nfe.NotFound() {
-						t.Fatalf("expected NotFound error, got %v", err)
-					}
+			hw, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByName: tt.name})
+			if tt.notFound {
+				type nf interface{ NotFound() bool }
+				var nfe nf
+				if !errors.As(err, &nfe) || !nfe.NotFound() {
+					t.Fatalf("expected NotFound error, got %v", err)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("ReadHardware() unexpected error = %v", err)
+				t.Fatalf("FilterHardwareV1Alpha2() unexpected error = %v", err)
 			}
-			if hw == nil {
-				t.Fatal("expected hardware, got nil")
+			if hw == nil || hw.Name != tt.name {
+				t.Fatalf("got %v, want %s", hw, tt.name)
 			}
 		})
 	}

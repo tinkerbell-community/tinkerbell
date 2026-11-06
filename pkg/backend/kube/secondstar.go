@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 	v1 "k8s.io/api/core/v1"
@@ -18,47 +17,8 @@ const (
 	defaultIPMICipherSuite = "17"
 )
 
-// FilterBMCMachine looks up a machine.bmc.tinkerbell.org object based on the bmcRef in the hardware object matching the given filter.
-func (b *Backend) FilterBMCMachine(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error) {
-	tracer := otel.Tracer(tracerName)
-	ctx, span := tracer.Start(ctx, "backend.kube.FilterBMCMachine")
-	defer span.End()
-
-	hw, err := b.RenderedReader().FilterHardware(ctx, opts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter hardware: %w", err)
-	}
-	response := &data.BMCMachine{}
-	if hw.Spec.Metadata != nil && hw.Spec.Metadata.Instance != nil {
-		response.SSHPublicKeys = hw.Spec.Metadata.Instance.SSHKeys
-	}
-
-	if hw.Spec.BMCRef == nil || hw.Spec.BMCRef.Name == "" {
-		return nil, fmt.Errorf("hardware does not have a valid BMC reference")
-	}
-	// BMCRef is a local reference: the Machine is in the Hardware's namespace.
-	bmcMachine, err := b.filterMachine(ctx, hw.Namespace, hw.Spec.BMCRef.Name)
-	if err != nil {
-		return nil, err
-	}
-
-	response.Host = bmcMachine.Spec.Connection.Host
-	if bmcMachine.Spec.Connection.ProviderOptions != nil && bmcMachine.Spec.Connection.ProviderOptions.IPMI != nil {
-		response.Port = ternary(bmcMachine.Spec.Connection.ProviderOptions.IPMI.Port == 0, defaultIPMIPort, bmcMachine.Spec.Connection.ProviderOptions.IPMI.Port)
-		response.CipherSuite = ternary(bmcMachine.Spec.Connection.ProviderOptions.IPMI.CipherSuite == "", defaultIPMICipherSuite, bmcMachine.Spec.Connection.ProviderOptions.IPMI.CipherSuite)
-	}
-
-	username, password, err := b.ReadAuthSecret(ctx, bmcMachine.Spec.Connection.AuthSecretRef.Name, bmcMachine.Spec.Connection.AuthSecretRef.Namespace)
-	if err != nil {
-		return nil, err
-	}
-	response.User = username
-	response.Pass = password
-
-	return response, nil
-}
-
-// filterMachine looks up a single bmc.Machine object by namespace and name.
+// filterMachine looks up a single deprecated bmc.Machine object by namespace and
+// name, for Hardware created through v1alpha1 that names one in its bmcRef.
 // Exactly one result is expected; zero returns a not-found error and multiple returns a multiple-found error.
 func (b *Backend) filterMachine(ctx context.Context, namespace, name string) (*bmc.Machine, error) {
 	tracer := otel.Tracer(tracerName)

@@ -13,7 +13,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// CreateHardwareV1Alpha2 is CreateHardware for v1alpha2 Hardware.
+// CreateHardwareV1Alpha2 creates hw.
 func (b *Backend) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error {
 	if err := b.cluster.GetClient().Create(ctx, hw); err != nil {
 		return fmt.Errorf("failed to create hardware %s/%s: %w", hw.Namespace, hw.Name, err)
@@ -22,7 +22,7 @@ func (b *Backend) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardw
 	return nil
 }
 
-// ReadHardwareV1Alpha2 is ReadHardware for v1alpha2 Hardware. Hardware outside
+// ReadHardwareV1Alpha2 returns the Hardware name in namespace. Hardware outside
 // b.Namespaces is reported as not found.
 func (b *Backend) ReadHardwareV1Alpha2(ctx context.Context, name, namespace string) (*v1alpha2.Hardware, error) {
 	tracer := otel.Tracer(tracerName)
@@ -42,7 +42,8 @@ func (b *Backend) ReadHardwareV1Alpha2(ctx context.Context, name, namespace stri
 	return hw, nil
 }
 
-// FilterHardwareV1Alpha2 is FilterHardware for v1alpha2 Hardware.
+// FilterHardwareV1Alpha2 returns the one Hardware matching opts. Zero matches
+// return a not-found error and several a multiple-found error.
 func (b *Backend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	tracer := otel.Tracer(tracerName)
 	ctx, span := tracer.Start(ctx, "backend.kube.FilterHardwareV1Alpha2")
@@ -70,7 +71,32 @@ func (b *Backend) FilterHardwareV1Alpha2(ctx context.Context, opts data.Hardware
 	return &hwList.Items[0], nil
 }
 
-// ListHardwareV1Alpha2 is ListHardware for v1alpha2 Hardware.
+// filterQueryDesc builds a human-readable description of a hardware filter for error messages.
+func filterQueryDesc(opts data.HardwareFilter) string {
+	nsDesc := opts.InNamespace
+	if nsDesc == "" {
+		nsDesc = "all namespaces"
+	}
+	desc := fmt.Sprintf("in %s", nsDesc)
+	if opts.ByName != "" {
+		desc = fmt.Sprintf("%s with name %q", desc, opts.ByName)
+	}
+	if opts.ByAgentID != "" {
+		desc = fmt.Sprintf("%s with agentID %q", desc, opts.ByAgentID)
+	}
+	if opts.ByMACAddress != "" {
+		desc = fmt.Sprintf("%s with MAC %q", desc, opts.ByMACAddress)
+	}
+	if opts.ByIPAddress != "" {
+		desc = fmt.Sprintf("%s with IP %q", desc, opts.ByIPAddress)
+	}
+	if opts.ByInstanceID != "" {
+		desc = fmt.Sprintf("%s with instanceID %q", desc, opts.ByInstanceID)
+	}
+	return desc
+}
+
+// ListHardwareV1Alpha2 returns the Hardware matching opts.
 func (b *Backend) ListHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) ([]v1alpha2.Hardware, error) {
 	list := &v1alpha2.HardwareList{}
 	if err := b.cluster.GetClient().List(ctx, list, hardwareListOptionsV1Alpha2(opts)...); err != nil {
@@ -80,9 +106,10 @@ func (b *Backend) ListHardwareV1Alpha2(ctx context.Context, opts data.HardwareFi
 	return list.Items, nil
 }
 
-// hardwareListOptionsV1Alpha2 is hardwareListOptions for the v1alpha2 indexes.
-// ByInstanceID matches spec.instance.lookupID, its v1alpha2 form. MAC and IP
-// addresses are normalized the way the indexes store them.
+// hardwareListOptionsV1Alpha2 returns the list options that select the Hardware
+// opts matches with the indexes. ByInstanceID matches spec.instance.lookupID,
+// the v1alpha2 form of the v1alpha1 metadata instance ID. MAC and IP addresses
+// are normalized the way the indexes store them.
 //
 // The fields are matched with a single MatchingFields: each one replaces the
 // field selector of the one before, so with several only the last would apply.
@@ -114,7 +141,7 @@ func hardwareListOptionsV1Alpha2(opts data.HardwareFilter) []client.ListOption {
 	return los
 }
 
-// UpdateHardwareV1Alpha2 is UpdateHardware for v1alpha2 Hardware.
+// UpdateHardwareV1Alpha2 writes hw as opts asks, see Backend.update.
 func (b *Backend) UpdateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error {
 	return b.update(ctx, hw, "hardware", hw.Namespace+"/"+hw.Name, opts)
 }

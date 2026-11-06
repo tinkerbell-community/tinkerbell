@@ -47,7 +47,7 @@ type Backend struct {
 	Indexes       map[IndexType]Index
 	dynamicClient dynamic.Interface
 	// HardwareReferenceAllowListRules and HardwareReferenceDenyListRules are the Quamina rules
-	// ResolveReferences and ResolveReferencesFor apply. An empty deny list denies every reference.
+	// ResolveReferencesFor applies. An empty deny list denies every reference.
 	HardwareReferenceAllowListRules []string
 	HardwareReferenceDenyListRules  []string
 	// Rendering serves Hardware with the templates in its spec rendered.
