@@ -1,7 +1,9 @@
 package tinkerbell
 
 import (
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -217,7 +219,13 @@ const (
 	BootModeCustomboot BootMode = "customboot"
 )
 
+// State is the execution state of a Workflow, Task or Action. It is stored by
+// name ("Pending", "Running", ...), so it reads well in kubectl and the API.
+// Workflows written by Tinkerbell v0.27 stored the number; those still decode.
+// +kubebuilder:validation:Type=string
+// +kubebuilder:validation:Enum=Preparing;Pending;Running;Post;Success;Failed;Timeout
 type State int
+
 type (
 	ConditionType string
 	BootMode      string
@@ -271,4 +279,37 @@ func (s State) String() string {
 		return "Timeout"
 	}
 	return fmt.Sprintf("State(%d)", s)
+}
+
+// MarshalJSON encodes a known State by name and any other value as its number.
+func (s State) MarshalJSON() ([]byte, error) {
+	if s >= StatePreparing && s <= StateTimeout {
+		return json.Marshal(s.String())
+	}
+	return json.Marshal(int(s))
+}
+
+// UnmarshalJSON decodes a State from its name, in any case (so the v1alpha1
+// names such as "PENDING" work too), or from the number Tinkerbell v0.27 stored.
+func (s *State) UnmarshalJSON(b []byte) error {
+	var n int
+	if err := json.Unmarshal(b, &n); err == nil {
+		*s = State(n)
+		return nil
+	}
+	var name string
+	if err := json.Unmarshal(b, &name); err != nil {
+		return fmt.Errorf("state must be a name or a number: %w", err)
+	}
+	if name == "" {
+		*s = 0
+		return nil
+	}
+	for st := StatePreparing; st <= StateTimeout; st++ {
+		if strings.EqualFold(name, st.String()) {
+			*s = st
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown state %q", name)
 }

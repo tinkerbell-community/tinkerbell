@@ -192,9 +192,9 @@ Hardware created through `v1alpha1` is served as before, except:
   configured default kernel and initrd names no longer apply to Hardware that names its OSIE
   base URL. Set `instance.osie.kernelURL`/`initrdURL` explicitly if you relied on either.
 
-Kept on purpose, for Hardware created through `v1alpha1` only: a missing or zero `lease_time` is
-still served as DHCPv4 option 51 = 0 and as a 7 day DHCPv6 lifetime, as `v1alpha1` did, rather than
-the `v1alpha2` default of 86400 seconds.
+- An interface with no `lease_time` (or zero) was served DHCPv4 lease time 0; it now gets the
+  `v1alpha2` default, 86400 seconds (DHCPv6 keeps Smee's default lifetime). An interface that sets a
+  `lease_time` is still served it over both DHCPv4 and DHCPv6.
 
 ## Workflow engine notes
 
@@ -208,8 +208,10 @@ the `v1alpha2` default of 86400 seconds.
   environment variables layer Task, Workflow `globals`, then the task's `extra`; a task whose
   actions are all skipped (`if`) counts as done; a zero timeout means none. A Workflow's
   `.hardware` is the first task's Hardware.
-- Workflow state is an integer in v1alpha2, so `kubectl get workflows` shows `2` where v1alpha1
-  showed `PENDING`.
+- Workflow, task and action states are stored by name in v1alpha2 (`Preparing`, `Pending`,
+  `Running`, `Post`, `Success`, `Failed`, `Timeout`), as `kubectl get workflows` shows them;
+  v1alpha1 clients still read `PENDING`, `RUNNING`, .... Tinkerbell v0.27 stored the state as a
+  number; such Workflows still read correctly and get the name on their next status update.
 
 Tootles also serves the cloud-init NoCloud datasource now (`/nocloud/...`), from the Hardware's
 `instance` `metadata`, `userdata`, `vendordata` and `networkConfig`; see
