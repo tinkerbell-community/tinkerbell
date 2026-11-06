@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
@@ -21,7 +21,7 @@ const (
 // The attrs will be used to populate the Hardware object.
 // If the Hardware object already exists, it will not be modified.
 // If the Hardware object is created, it will be created in the namespace defined in the AutoDiscovery configuration.
-func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.AgentAttributes) (*v1alpha1.Hardware, error) {
+func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.AgentAttributes) (*v1alpha2.Hardware, error) {
 	ns := h.AutoCapabilities.Discovery.Namespace
 	hwName, err := makeValidName(agentID, discoveryPrefix)
 	if err != nil {
@@ -32,7 +32,7 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 
 	// Check if Hardware object already exists
 	// name and namespace are empty because we want to check for existing Hardware objects with the agent ID across all namespaces.
-	existing, err := h.AutoCapabilities.Discovery.FilterHardware(ctx, data.HardwareFilter{ByAgentID: agentID})
+	existing, err := h.AutoCapabilities.Discovery.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByAgentID: agentID})
 	if err == nil {
 		// Hardware object already exists, do not modify
 		journal.Log(ctx, "Hardware object already exists, skipping creation")
@@ -54,7 +54,7 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 	journal.Log(ctx, "Hardware object does not exist, creating new one")
 
 	// Create new Hardware object with basic metadata
-	hw := &v1alpha1.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      hwName,
 			Namespace: ns,
@@ -62,9 +62,9 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 				"tinkerbell.org/auto-discovered": "true",
 			},
 		},
-		Spec: v1alpha1.HardwareSpec{
+		Spec: v1alpha2.HardwareSpec{
 			AgentID: agentID,
-			Auto: v1alpha1.AutoCapabilities{
+			Auto: v1alpha2.AutoCapabilities{
 				EnrollmentEnabled: h.AutoCapabilities.Discovery.EnrollmentEnabled,
 			},
 		},
@@ -90,7 +90,7 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 	journal.Log(ctx, "Populated hardware object with discovered attributes", "hardware", hw)
 
 	// Create the Hardware object in the cluster
-	if err := h.AutoCapabilities.Discovery.CreateHardware(ctx, hw); err != nil {
+	if err := h.AutoCapabilities.Discovery.CreateHardwareV1Alpha2(ctx, hw); err != nil {
 		journal.Log(ctx, "Error creating hardware object", "error", err)
 		return nil, fmt.Errorf("failed to create hardware object %s/%s: %w", ns, hwName, err)
 	}
@@ -108,7 +108,10 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 	return hw, nil
 }
 
-func updateHardware(ctx context.Context, hw *v1alpha1.Hardware, attrs *data.AgentAttributes) {
+// updateHardware fills in the storage devices and network interfaces of discovered Hardware from the Agent's
+// attributes. Interfaces have DHCP and no netboot, as the v1alpha1 interfaces discovery created (with only
+// a MAC address) had: no address is served until one is configured.
+func updateHardware(ctx context.Context, hw *v1alpha2.Hardware, attrs *data.AgentAttributes) {
 	if hw == nil || attrs == nil {
 		return
 	}
@@ -117,8 +120,8 @@ func updateHardware(ctx context.Context, hw *v1alpha1.Hardware, attrs *data.Agen
 	for _, disk := range attrs.BlockDevices {
 		if disk != nil {
 			if disk.SizeBytes != nil && *disk.SizeBytes > 0 {
-				hw.Spec.Disks = append(hw.Spec.Disks, v1alpha1.Disk{
-					Device: fmt.Sprintf("/dev/%s", *disk.Name),
+				hw.Spec.StorageDevices = append(hw.Spec.StorageDevices, v1alpha2.StorageDevice{
+					Name: fmt.Sprintf("/dev/%s", *disk.Name),
 				})
 			}
 		}
@@ -129,15 +132,23 @@ func updateHardware(ctx context.Context, hw *v1alpha1.Hardware, attrs *data.Agen
 		if iface != nil {
 			if iface.Mac != nil && *iface.Mac != "" {
 				// validate MAC address format
-				if _, err := net.ParseMAC(*iface.Mac); err != nil {
+				mac, err := net.ParseMAC(*iface.Mac)
+				if err != nil {
 					journal.Log(ctx, "Invalid MAC address format", "mac", *iface.Mac)
 					continue
 				}
-				hw.Spec.Interfaces = append(hw.Spec.Interfaces, v1alpha1.Interface{
-					DHCP: &v1alpha1.DHCP{
-						MAC: *iface.Mac,
-					},
-				})
+				// v1alpha2 keys interfaces by 48-bit MAC address, in lower case.
+				if len(mac) != 6 {
+					journal.Log(ctx, "Not a 48-bit MAC address", "mac", *iface.Mac)
+					continue
+				}
+				if hw.Spec.NetworkInterfaces == nil {
+					hw.Spec.NetworkInterfaces = v1alpha2.NetworkInterfaces{}
+				}
+				hw.Spec.NetworkInterfaces[v1alpha2.MAC(mac.String())] = v1alpha2.NetworkInterface{
+					DHCP:    &v1alpha2.DHCP{IPv4: &v1alpha2.DHCPv4{}},
+					Netboot: &v1alpha2.Netboot{Disabled: true},
+				}
 			}
 		}
 	}

@@ -3,7 +3,7 @@ package grpc
 import (
 	"strconv"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 )
 
@@ -15,12 +15,12 @@ import (
 // status, network port link state) and are simply left unset. CollectionMethod
 // and LastUpdated aren't Agent-collected fields, so they're not set here; the
 // caller fills them in at write time.
-func inBandAttributesFromAgent(attrs *data.AgentAttributes) *tinkerbell.Attributes {
+func inBandAttributesFromAgent(attrs *data.AgentAttributes) *inventory.Attributes {
 	if attrs == nil {
 		return nil
 	}
 
-	out := &tinkerbell.Attributes{
+	out := &inventory.Attributes{
 		Chassis:   chassisFromAgent(attrs.Chassis),
 		BIOS:      biosFromAgent(attrs.BIOS),
 		Baseboard: baseboardFromAgent(attrs.Baseboard),
@@ -61,11 +61,11 @@ func inBandAttributesFromAgent(attrs *data.AgentAttributes) *tinkerbell.Attribut
 	return out
 }
 
-func cpuFromAgent(cpu *data.CPU) *tinkerbell.CPU {
+func cpuFromAgent(cpu *data.CPU) *inventory.CPU {
 	if cpu == nil {
 		return nil
 	}
-	out := &tinkerbell.CPU{}
+	out := &inventory.CPU{}
 	if cpu.TotalCores != nil {
 		out.TotalCores = *cpu.TotalCores
 	}
@@ -85,8 +85,8 @@ func cpuFromAgent(cpu *data.CPU) *tinkerbell.CPU {
 // Agent's numeric processor ID as a string - the same field out-of-band uses
 // for a physical socket label (e.g. "CPU1") - since the Agent has no concept
 // of a physical socket label of its own.
-func cpuSocketFromAgent(p *data.Processor) tinkerbell.CPUSocket {
-	socket := tinkerbell.CPUSocket{Capabilities: p.Capabilities}
+func cpuSocketFromAgent(p *data.Processor) inventory.CPUSocket {
+	socket := inventory.CPUSocket{Capabilities: p.Capabilities}
 	if p.ID != nil {
 		socket.Slot = strconv.FormatUint(uint64(*p.ID), 10)
 	}
@@ -105,11 +105,11 @@ func cpuSocketFromAgent(p *data.Processor) tinkerbell.CPUSocket {
 	return socket
 }
 
-func memoryFromAgent(mem *data.Memory) *tinkerbell.Memory {
+func memoryFromAgent(mem *data.Memory) *inventory.Memory {
 	if mem == nil {
 		return nil
 	}
-	out := &tinkerbell.Memory{}
+	out := &inventory.Memory{}
 	if mem.TotalBytes != nil {
 		out.TotalBytes = *mem.TotalBytes
 	}
@@ -119,8 +119,8 @@ func memoryFromAgent(mem *data.Memory) *tinkerbell.Memory {
 	return out
 }
 
-func blockDeviceFromAgent(b *data.Block) tinkerbell.BlockDevice {
-	dev := tinkerbell.BlockDevice{}
+func blockDeviceFromAgent(b *data.Block) inventory.BlockDevice {
+	dev := inventory.BlockDevice{}
 	if b.Name != nil {
 		dev.Name = *b.Name
 	}
@@ -154,8 +154,8 @@ func blockDeviceFromAgent(b *data.Block) tinkerbell.BlockDevice {
 	return dev
 }
 
-func pciDeviceFromAgent(p *data.PCI) tinkerbell.PCIDevice {
-	dev := tinkerbell.PCIDevice{}
+func pciDeviceFromAgent(p *data.PCI) inventory.PCIDevice {
+	dev := inventory.PCIDevice{}
 	if p.Vendor != nil {
 		dev.Vendor = *p.Vendor
 	}
@@ -171,8 +171,8 @@ func pciDeviceFromAgent(p *data.PCI) tinkerbell.PCIDevice {
 	return dev
 }
 
-func gpuDeviceFromAgent(g *data.GPU) tinkerbell.GPUDevice {
-	dev := tinkerbell.GPUDevice{}
+func gpuDeviceFromAgent(g *data.GPU) inventory.GPUDevice {
+	dev := inventory.GPUDevice{}
 	if g.Vendor != nil {
 		dev.Vendor = *g.Vendor
 	}
@@ -192,12 +192,12 @@ func gpuDeviceFromAgent(g *data.GPU) tinkerbell.GPUDevice {
 // synthesized port verbatim; the caller's PruneEmpty drops the port when it
 // ends up empty (e.g. a name-only interface, so len(Ports)==0 still marks
 // name-only), while a reported null "00:00:..." MAC is non-empty and preserved.
-func networkInterfaceFromAgent(n *data.Network) tinkerbell.NetworkInterface {
-	iface := tinkerbell.NetworkInterface{}
+func networkInterfaceFromAgent(n *data.Network) inventory.NetworkInterface {
+	iface := inventory.NetworkInterface{}
 	if n.Name != nil {
 		iface.Name = *n.Name
 	}
-	port := tinkerbell.NetworkPort{EnabledCapabilities: n.EnabledCapabilities}
+	port := inventory.NetworkPort{EnabledCapabilities: n.EnabledCapabilities}
 	if n.Mac != nil {
 		port.MAC = *n.Mac
 	}
@@ -210,12 +210,12 @@ func networkInterfaceFromAgent(n *data.Network) tinkerbell.NetworkInterface {
 		}
 		port.LLDPNeighbors = append(port.LLDPNeighbors, lldpNeighborFromAgent(nb))
 	}
-	iface.Ports = []tinkerbell.NetworkPort{port}
+	iface.Ports = []inventory.NetworkPort{port}
 	return iface
 }
 
-func lldpNeighborFromAgent(n *data.LLDPNeighbor) tinkerbell.LLDPNeighbor {
-	var out tinkerbell.LLDPNeighbor
+func lldpNeighborFromAgent(n *data.LLDPNeighbor) inventory.LLDPNeighbor {
+	var out inventory.LLDPNeighbor
 	if n.ChassisID != nil {
 		out.ChassisID = *n.ChassisID
 	}
@@ -231,11 +231,11 @@ func lldpNeighborFromAgent(n *data.LLDPNeighbor) tinkerbell.LLDPNeighbor {
 	return out
 }
 
-func chassisFromAgent(c *data.Chassis) *tinkerbell.Chassis {
+func chassisFromAgent(c *data.Chassis) *inventory.Chassis {
 	if c == nil {
 		return nil
 	}
-	out := &tinkerbell.Chassis{}
+	out := &inventory.Chassis{}
 	if c.Vendor != nil {
 		out.Vendor = *c.Vendor
 	}
@@ -245,11 +245,11 @@ func chassisFromAgent(c *data.Chassis) *tinkerbell.Chassis {
 	return out
 }
 
-func biosFromAgent(b *data.BIOS) *tinkerbell.BIOS {
+func biosFromAgent(b *data.BIOS) *inventory.BIOS {
 	if b == nil {
 		return nil
 	}
-	out := &tinkerbell.BIOS{}
+	out := &inventory.BIOS{}
 	if b.Vendor != nil {
 		out.Vendor = *b.Vendor
 	}
@@ -262,11 +262,11 @@ func biosFromAgent(b *data.BIOS) *tinkerbell.BIOS {
 	return out
 }
 
-func baseboardFromAgent(b *data.Baseboard) *tinkerbell.Baseboard {
+func baseboardFromAgent(b *data.Baseboard) *inventory.Baseboard {
 	if b == nil {
 		return nil
 	}
-	out := &tinkerbell.Baseboard{}
+	out := &inventory.Baseboard{}
 	if b.Vendor != nil {
 		out.Vendor = *b.Vendor
 	}
@@ -282,11 +282,11 @@ func baseboardFromAgent(b *data.Baseboard) *tinkerbell.Baseboard {
 	return out
 }
 
-func productFromAgent(p *data.Product) *tinkerbell.Product {
+func productFromAgent(p *data.Product) *inventory.Product {
 	if p == nil {
 		return nil
 	}
-	out := &tinkerbell.Product{}
+	out := &inventory.Product{}
 	if p.Name != nil {
 		out.Name = *p.Name
 	}

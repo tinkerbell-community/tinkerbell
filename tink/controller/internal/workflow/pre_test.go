@@ -9,11 +9,13 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -263,7 +265,7 @@ func TestTemplateActions(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := templateActions(tc.actions, tc.hardware)
+			got, err := templateActions(operationsOf(t, tc.actions), tc.hardware)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("templateActions() error = %v, wantErr %v", err, tc.wantErr)
 				return
@@ -271,13 +273,15 @@ func TestTemplateActions(t *testing.T) {
 			if tc.wantErr {
 				return
 			}
-			if diff := cmp.Diff(tc.wantActions, got); diff != "" {
+			if diff := cmp.Diff(operationsOf(t, tc.wantActions), got, cmpopts.EquateEmpty()); diff != "" {
 				t.Errorf("templateActions() mismatch (-want +got):\n%s", diff)
 			}
 		})
 	}
 }
 
+// Interfaces have a MAC address: v1alpha2 keys interfaces by MAC, so an interface without one has no
+// netboot setting to toggle (v1alpha1 kept it, though DHCP and netboot never served it).
 func TestPrepareWorkflow(t *testing.T) {
 	tests := map[string]struct {
 		wantResult   reconcile.Result
@@ -309,6 +313,7 @@ func TestPrepareWorkflow(t *testing.T) {
 				Spec: v1alpha1.HardwareSpec{
 					Interfaces: []v1alpha1.Interface{
 						{
+							DHCP: &v1alpha1.DHCP{MAC: "3c:ec:ef:4c:4f:54"},
 							Netboot: &v1alpha1.Netboot{
 								AllowPXE: valueToPointer(false),
 							},
@@ -324,6 +329,7 @@ func TestPrepareWorkflow(t *testing.T) {
 				Spec: v1alpha1.HardwareSpec{
 					Interfaces: []v1alpha1.Interface{
 						{
+							DHCP: &v1alpha1.DHCP{MAC: "3c:ec:ef:4c:4f:54"},
 							Netboot: &v1alpha1.Netboot{
 								AllowPXE: valueToPointer(true),
 							},
@@ -650,23 +656,11 @@ func TestPrepareWorkflow(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			bmc.AddToScheme(scheme)
-			v1alpha1.AddToScheme(scheme)
-			ro := []runtime.Object{}
-			if tc.hardware != nil {
-				ro = append(ro, tc.hardware)
-			}
-			if tc.workflow != nil {
-				ro = append(ro, tc.workflow)
-			}
-			clientBuilder := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.Hardware{}, &v1alpha1.Template{}, &v1alpha1.Workflow{}, &v1alpha1.WorkflowRuleSet{}, &bmc.Job{}, &bmc.Machine{}, &bmc.Task{}).WithRuntimeObjects(ro...)
-			if tc.job != nil {
-				clientBuilder.WithRuntimeObjects(tc.job)
-			}
+			wf, c := bootStepFixture(t, tc.workflow, tc.hardware, tc.job)
 			s := &state{
-				workflow: tc.workflow,
-				client:   clientBuilder.Build(),
+				workflow: wf,
+				client:   c,
+				render:   func(context.Context, int) (*v1alpha2.Workflow, error) { return wf, nil },
 			}
 			ctx := context.Background()
 			ctx = journal.New(ctx)
@@ -680,18 +674,17 @@ func TestPrepareWorkflow(t *testing.T) {
 			}
 
 			// get the Hardware object in cluster
-			gotHardware := &v1alpha1.Hardware{}
-			if err := s.client.Get(ctx, types.NamespacedName{Name: tc.hardware.Name, Namespace: tc.hardware.Namespace}, gotHardware); err != nil {
-				t.Fatalf("error getting hardware: %v", err)
-			}
-			if diff := cmp.Diff(gotHardware.Spec, tc.wantHardware.Spec); diff != "" {
-				t.Errorf("unexpected hardware (-want +got):\n%s", diff)
-				for _, entry := range journal.Journal(ctx) {
-					t.Logf("journal: %+v", entry)
+			if tc.hardware.Name != "" {
+				gotHardware := readV1Hardware(t, s.client, types.NamespacedName{Name: tc.hardware.Name, Namespace: tc.hardware.Namespace})
+				if diff := cmp.Diff(gotHardware.Spec, tc.wantHardware.Spec); diff != "" {
+					t.Errorf("unexpected hardware (-want +got):\n%s", diff)
+					for _, entry := range journal.Journal(ctx) {
+						t.Logf("journal: %+v", entry)
+					}
 				}
 			}
 
-			if diff := cmp.Diff(tc.workflow.Status, tc.wantWorkflow.Status, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time")); diff != "" {
+			if diff := cmp.Diff(v1Workflow(t, s.workflow).Status, tc.wantWorkflow.Status, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time")); diff != "" {
 				t.Errorf("unexpected workflow status (-want +got):\n%s", diff)
 				for _, entry := range journal.Journal(ctx) {
 					t.Logf("journal: %+v", entry)
@@ -699,6 +692,29 @@ func TestPrepareWorkflow(t *testing.T) {
 			}
 		})
 	}
+}
+
+// bootStepFixture stores v1alpha1 boot step fixtures as the API server stores them and returns the
+// Workflow as the engine reads it. A Workflow without a Template is given one, so that it is one created
+// through v1alpha1, which runs in v1alpha1 compatibility mode.
+func bootStepFixture(t *testing.T, workflow *v1alpha1.Workflow, hardware *v1alpha1.Hardware, job *bmc.Job) (*v1alpha2.Workflow, client.Client) {
+	t.Helper()
+	workflow = workflow.DeepCopy()
+	if workflow.Spec.TemplateRef == "" {
+		workflow.Spec.TemplateRef = "test-template"
+	}
+	wf := v2Workflow(t, workflow)
+	builder := fake.NewClientBuilder().WithScheme(runtimescheme).WithStatusSubresource(&v1alpha2.Hardware{}, &v1alpha2.Workflow{}, &bmcv1alpha2.Job{})
+	if hardware != nil && hardware.Name != "" {
+		builder = builder.WithObjects(v2(t, hardware))
+	}
+	if workflow.Name != "" {
+		builder = builder.WithObjects(wf.DeepCopy())
+	}
+	if job != nil {
+		builder = builder.WithObjects(v2(t, job))
+	}
+	return wf, builder.Build()
 }
 
 func TestTemplateStringYamlFuncs(t *testing.T) {

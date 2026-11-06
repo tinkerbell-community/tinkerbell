@@ -61,20 +61,20 @@ func TestReconcileMetadataURL(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "talos", Namespace: "default"},
 						Spec:       v1alpha1.TemplateSpec{Data: &metadataURLTemplate},
 					},
-					&v1alpha1.Hardware{
+					v2(t, &v1alpha1.Hardware{
 						ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "default"},
 						Spec: v1alpha1.HardwareSpec{
 							Interfaces: []v1alpha1.Interface{{
 								DHCP: &v1alpha1.DHCP{MAC: mac, IP: &v1alpha1.IP{Address: "172.16.10.100"}},
 							}},
 						},
-					},
+					}),
 				)
 			wf := &v1alpha1.Workflow{
 				ObjectMeta: metav1.ObjectMeta{Name: "talos", Namespace: "default"},
 				Spec:       v1alpha1.WorkflowSpec{TemplateRef: "talos", HardwareMap: hardwareMap},
 			}
-			kc = kc.WithObjects(wf).WithStatusSubresource(wf)
+			kc = kc.WithObjects(v2(t, wf))
 
 			r := NewReconciler(kc.Build(), fakeReferences{}, tt.opts...)
 			r.nowFunc = TestTime.Now
@@ -82,8 +82,8 @@ func TestReconcileMetadataURL(t *testing.T) {
 			key := types.NamespacedName{Name: "talos", Namespace: "default"}
 			_, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: key})
 
-			got := &v1alpha1.Workflow{}
-			if gerr := r.client.Get(context.Background(), key, got); gerr != nil {
+			got, gerr := readV1Workflow(t, r.client, key)
+			if gerr != nil {
 				t.Fatalf("getting workflow: %v", gerr)
 			}
 

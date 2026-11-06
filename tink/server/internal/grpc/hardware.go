@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/go-logr/logr"
-	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
 	"google.golang.org/grpc/codes"
@@ -15,11 +15,11 @@ import (
 )
 
 // hardware returns the Hardware object for the given agentID, or nil and no error if there is none.
-func (h *Handler) hardware(ctx context.Context, agentID string) (*v1alpha1.Hardware, error) {
+func (h *Handler) hardware(ctx context.Context, agentID string) (*v1alpha2.Hardware, error) {
 	// Check if Hardware object already exists.
 	// Pass an empty name so backends use ByAgentID as the sole selector,
 	// avoiding accidental matches by object name.
-	existing, err := h.Backend.FilterHardware(ctx, data.HardwareFilter{ByAgentID: agentID})
+	existing, err := h.Backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByAgentID: agentID})
 	if err == nil {
 		journal.Log(ctx, "Hardware object exists")
 		return existing, nil

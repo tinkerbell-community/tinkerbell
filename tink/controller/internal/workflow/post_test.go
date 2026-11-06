@@ -10,15 +10,16 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+// Interfaces have a MAC address: v1alpha2 keys interfaces by MAC, so an interface without one has no
+// netboot setting to toggle (v1alpha1 kept it, though DHCP and netboot never served it).
 func TestPostActions(t *testing.T) {
 	tests := map[string]struct {
 		wantResult   reconcile.Result
@@ -46,6 +47,7 @@ func TestPostActions(t *testing.T) {
 				Spec: v1alpha1.HardwareSpec{
 					Interfaces: []v1alpha1.Interface{
 						{
+							DHCP: &v1alpha1.DHCP{MAC: "3c:ec:ef:4c:4f:54"},
 							Netboot: &v1alpha1.Netboot{
 								AllowPXE: valueToPointer(true),
 							},
@@ -61,6 +63,7 @@ func TestPostActions(t *testing.T) {
 				Spec: v1alpha1.HardwareSpec{
 					Interfaces: []v1alpha1.Interface{
 						{
+							DHCP: &v1alpha1.DHCP{MAC: "3c:ec:ef:4c:4f:54"},
 							Netboot: &v1alpha1.Netboot{
 								AllowPXE: valueToPointer(false),
 							},
@@ -81,7 +84,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						AllowNetboot: v1alpha1.AllowNetbootStatus{
@@ -94,7 +98,8 @@ func TestPostActions(t *testing.T) {
 				Status: v1alpha1.WorkflowStatus{
 					State: v1alpha1.WorkflowStateSuccess,
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						AllowNetboot: v1alpha1.AllowNetbootStatus{
@@ -154,7 +159,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{},
@@ -164,7 +170,8 @@ func TestPostActions(t *testing.T) {
 			wantWorkflow: &v1alpha1.Workflow{
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{},
@@ -238,7 +245,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{
@@ -255,7 +263,8 @@ func TestPostActions(t *testing.T) {
 				Status: v1alpha1.WorkflowStatus{
 					State: v1alpha1.WorkflowStateSuccess,
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{
@@ -317,7 +326,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{
@@ -341,7 +351,8 @@ func TestPostActions(t *testing.T) {
 			wantWorkflow: &v1alpha1.Workflow{
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{
@@ -382,7 +393,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{
@@ -399,7 +411,8 @@ func TestPostActions(t *testing.T) {
 				Status: v1alpha1.WorkflowStatus{
 					State: v1alpha1.WorkflowStateSuccess,
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{
@@ -455,7 +468,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{},
@@ -465,7 +479,8 @@ func TestPostActions(t *testing.T) {
 			wantWorkflow: &v1alpha1.Workflow{
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 					BootOptions: v1alpha1.BootOptionsStatus{
 						Jobs: map[string]v1alpha1.JobStatus{},
@@ -489,7 +504,8 @@ func TestPostActions(t *testing.T) {
 				},
 				Status: v1alpha1.WorkflowStatus{
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 				},
 			},
@@ -497,7 +513,8 @@ func TestPostActions(t *testing.T) {
 				Status: v1alpha1.WorkflowStatus{
 					State: v1alpha1.WorkflowStateSuccess,
 					CurrentState: &v1alpha1.CurrentState{
-						State: v1alpha1.WorkflowStateSuccess,
+						ActionID: "action1",
+						State:    v1alpha1.WorkflowStateSuccess,
 					},
 				},
 			},
@@ -506,24 +523,12 @@ func TestPostActions(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			bmc.AddToScheme(scheme)
-			v1alpha1.AddToScheme(scheme)
-			ro := []runtime.Object{}
-			if tc.hardware != nil {
-				ro = append(ro, tc.hardware)
-			}
-			if tc.workflow != nil {
-				ro = append(ro, tc.workflow)
-			}
-			clientBuilder := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.Hardware{}, &v1alpha1.Template{}, &v1alpha1.Workflow{}, &v1alpha1.WorkflowRuleSet{}, &bmc.Job{}, &bmc.Machine{}, &bmc.Task{}).WithRuntimeObjects(ro...)
-			if tc.job != nil {
-				clientBuilder.WithRuntimeObjects(tc.job)
-			}
+			wf, c := bootStepFixture(t, tc.workflow, tc.hardware, tc.job)
 			s := &state{
-				workflow: tc.workflow,
-				client:   clientBuilder.Build(),
+				workflow: wf,
+				client:   c,
 				backoff:  backoff.NewExponentialBackOff(),
+				render:   func(context.Context, int) (*v1alpha2.Workflow, error) { return wf, nil },
 			}
 			ctx := context.Background()
 			ctx = journal.New(ctx)
@@ -538,10 +543,7 @@ func TestPostActions(t *testing.T) {
 
 			// get the Hardware object in cluster if it exists
 			if tc.hardware != nil && tc.hardware.Name != "" {
-				gotHardware := &v1alpha1.Hardware{}
-				if err := s.client.Get(ctx, types.NamespacedName{Name: tc.hardware.Name, Namespace: tc.hardware.Namespace}, gotHardware); err != nil {
-					t.Fatalf("error getting hardware: %v", err)
-				}
+				gotHardware := readV1Hardware(t, s.client, types.NamespacedName{Name: tc.hardware.Name, Namespace: tc.hardware.Namespace})
 				if diff := cmp.Diff(gotHardware.Spec, tc.wantHardware.Spec); diff != "" {
 					t.Errorf("unexpected hardware (-want +got):\n%s", diff)
 					for _, entry := range journal.Journal(ctx) {
@@ -551,7 +553,7 @@ func TestPostActions(t *testing.T) {
 			}
 
 			// Compare workflow status, ignoring time fields
-			if diff := cmp.Diff(tc.workflow.Status, tc.wantWorkflow.Status, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time")); diff != "" {
+			if diff := cmp.Diff(v1Workflow(t, s.workflow).Status, tc.wantWorkflow.Status, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time")); diff != "" {
 				t.Errorf("unexpected workflow status (-want +got):\n%s", diff)
 				for _, entry := range journal.Journal(ctx) {
 					t.Logf("journal: %+v", entry)

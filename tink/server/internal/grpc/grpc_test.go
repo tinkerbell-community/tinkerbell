@@ -14,6 +14,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/proto"
@@ -516,50 +518,86 @@ type mockBackendReadWriter struct {
 	workflowReads      int
 	workflowLists      int
 	workflowUpdates    int
+	// updatedWorkflow is the last Workflow written, as v1alpha1 clients read it.
+	updatedWorkflow *tinkerbell.Workflow
+	// taskAgentWorkflows are the Workflows listed by task Agent.
+	taskAgentWorkflows []v1alpha2.Workflow
+	taskAgentLists     int
+	// workflowV2, when set, is served instead of workflow, and updates replace it.
+	workflowV2 *v1alpha2.Workflow
 
-	updatedHardware *tinkerbell.Hardware // captures the hardware passed to UpdateHardware
-	updateOpts      data.UpdateOptions   // captures the options passed to UpdateHardware
+	updatedHardware *v1alpha2.Hardware // captures the hardware passed to UpdateHardware
+	updateOpts      data.UpdateOptions // captures the options passed to UpdateHardware
 
-	appliedInBand *tinkerbell.Attributes // captures the attrs passed to ApplyHardwareInBandAttributes
+	appliedInBand *inventory.Attributes // captures the attrs passed to ApplyHardwareInBandAttributes
 
 	readHardwareCalls int // counts calls to ReadHardware, to catch redundant re-reads
 	hardwareFilter    data.HardwareFilter
 }
 
-func (m *mockBackendReadWriter) ReadWorkflow(_ context.Context, _ string, _ string) (*tinkerbell.Workflow, error) {
+func (m *mockBackendReadWriter) ReadWorkflowV1Alpha2(_ context.Context, _ string, _ string) (*v1alpha2.Workflow, error) {
 	m.workflowReads++
+	if m.workflowV2 != nil {
+		return m.workflowV2.DeepCopy(), nil
+	}
 	if m.readWorkflowFunc != nil {
-		return m.readWorkflowFunc()
+		wf, err := m.readWorkflowFunc()
+		return toV2Workflow(wf), err
 	}
 	if m.workflow == nil {
 		return nil, errors.New("workflow not found")
 	}
-	return m.workflow, nil
+	return toV2Workflow(m.workflow), nil
 }
 
-func (m *mockBackendReadWriter) ListWorkflows(_ context.Context, _ data.WorkflowFilter) ([]tinkerbell.Workflow, error) {
+func (m *mockBackendReadWriter) ListWorkflowsV1Alpha2(_ context.Context, f data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
+	if f.ByTaskAgentID != "" {
+		m.taskAgentLists++
+		return m.taskAgentWorkflows, nil
+	}
 	m.workflowLists++
-	if m.listWorkflowsFunc != nil {
-		return m.listWorkflowsFunc()
+	if m.workflowV2 != nil {
+		return []v1alpha2.Workflow{*m.workflowV2.DeepCopy()}, nil
 	}
-	if m.workflow != nil {
-		return []tinkerbell.Workflow{*m.workflow}, nil
+	var wfs []tinkerbell.Workflow
+	switch {
+	case m.listWorkflowsFunc != nil:
+		var err error
+		if wfs, err = m.listWorkflowsFunc(); err != nil {
+			return nil, err
+		}
+	case m.workflow != nil:
+		wfs = []tinkerbell.Workflow{*m.workflow}
 	}
-	return []tinkerbell.Workflow{}, nil
+	out := []v1alpha2.Workflow{}
+	for i := range wfs {
+		out = append(out, *toV2Workflow(&wfs[i]))
+	}
+	return out, nil
 }
 
-func (m *mockBackendReadWriter) UpdateWorkflow(_ context.Context, wf *tinkerbell.Workflow, _ data.UpdateOptions) error {
+func (m *mockBackendReadWriter) UpdateWorkflowV1Alpha2(_ context.Context, wf *v1alpha2.Workflow, _ data.UpdateOptions) error {
 	m.workflowUpdates++
+	if m.workflowV2 != nil {
+		if m.writeErr == nil {
+			m.workflowV2 = wf.DeepCopy()
+		}
+		return m.writeErr
+	}
+	v1 := toV1Workflow(wf)
 	if m.updateWorkflowFunc != nil {
-		return m.updateWorkflowFunc(wf)
+		return m.updateWorkflowFunc(v1)
+	}
+	if m.writeErr == nil {
+		m.updatedWorkflow = v1
 	}
 	return m.writeErr
 }
 
-func (m *mockBackendReadWriter) ReadHardware(_ context.Context, _ string, _ string) (*tinkerbell.Hardware, error) {
+func (m *mockBackendReadWriter) ReadHardwareV1Alpha2(_ context.Context, _ string, _ string) (*v1alpha2.Hardware, error) {
 	m.readHardwareCalls++
 	if m.hardware != nil {
-		return m.hardware, nil
+		return toV2Hardware(m.hardware), nil
 	}
 	if m.hardwareErr != nil {
 		return nil, m.hardwareErr
@@ -567,10 +605,10 @@ func (m *mockBackendReadWriter) ReadHardware(_ context.Context, _ string, _ stri
 	return nil, errors.New("hardware not found")
 }
 
-func (m *mockBackendReadWriter) FilterHardware(_ context.Context, f data.HardwareFilter) (*tinkerbell.Hardware, error) {
+func (m *mockBackendReadWriter) FilterHardwareV1Alpha2(_ context.Context, f data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	m.hardwareFilter = f
 	if m.hardware != nil {
-		return m.hardware, nil
+		return toV2Hardware(m.hardware), nil
 	}
 	if m.hardwareErr != nil {
 		return nil, m.hardwareErr
@@ -578,13 +616,13 @@ func (m *mockBackendReadWriter) FilterHardware(_ context.Context, f data.Hardwar
 	return nil, errors.New("hardware not found")
 }
 
-func (m *mockBackendReadWriter) UpdateHardware(_ context.Context, hw *tinkerbell.Hardware, opts data.UpdateOptions) error {
+func (m *mockBackendReadWriter) UpdateHardwareV1Alpha2(_ context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error {
 	m.updatedHardware = hw
 	m.updateOpts = opts
 	return nil
 }
 
-func (m *mockBackendReadWriter) ApplyHardwareInBandAttributes(_ context.Context, _, _ string, attrs *tinkerbell.Attributes) error {
+func (m *mockBackendReadWriter) ApplyHardwareInBandAttributesV1Alpha2(_ context.Context, _, _ string, attrs *inventory.Attributes) error {
 	m.appliedInBand = attrs
 	return nil
 }
@@ -1494,7 +1532,7 @@ type countingLister struct {
 	lists atomic.Int32
 }
 
-func (c *countingLister) ListWorkflows(context.Context, data.WorkflowFilter) ([]tinkerbell.Workflow, error) {
+func (c *countingLister) ListWorkflowsV1Alpha2(context.Context, data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
 	c.lists.Add(1)
 	return nil, nil
 }

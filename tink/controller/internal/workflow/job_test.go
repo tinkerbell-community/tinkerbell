@@ -2,15 +2,18 @@ package workflow
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -211,27 +214,121 @@ func TestHandleJob(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			bmc.AddToScheme(scheme)
-			v1alpha1.AddToScheme(scheme)
-			clientBuilder := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&v1alpha1.Hardware{}, &v1alpha1.Template{}, &v1alpha1.Workflow{}, &v1alpha1.WorkflowRuleSet{}, &bmc.Job{}, &bmc.Machine{}, &bmc.Task{}).WithRuntimeObjects(tc.hardware, tc.workflow)
+			wf := v2Workflow(t, tc.workflow)
+			builder := fake.NewClientBuilder().WithScheme(runtimescheme)
+			if tc.hardware.Name != "" {
+				builder = builder.WithObjects(v2(t, tc.hardware))
+			}
 			if tc.job != nil {
-				clientBuilder.WithRuntimeObjects(tc.job)
+				builder = builder.WithObjects(v2(t, tc.job))
 			}
 			s := &state{
-				workflow: tc.workflow,
-				client:   clientBuilder.Build(),
+				workflow: wf,
+				client:   builder.Build(),
 			}
 			ctx := context.Background()
-			r, err := s.handleJob(ctx, tc.actions, tc.name)
+			r, err := s.handleJob(ctx, v1alpha2.SimpleReference{Name: tc.workflow.Spec.HardwareRef}, operationsOf(t, tc.actions), tc.name)
 			if (err != nil) != tc.wantError {
 				t.Errorf("expected error: %v, got: %v", tc.wantError, err)
 			}
 			if diff := cmp.Diff(tc.wantResult, r); diff != "" {
 				t.Errorf("unexpected result (-want +got):\n%s", diff)
 			}
-			if diff := cmp.Diff(*tc.wantWorkflow, s.workflow.Status, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time")); diff != "" {
+			if diff := cmp.Diff(*tc.wantWorkflow, v1Workflow(t, s.workflow).Status, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time")); diff != "" {
 				t.Errorf("unexpected workflow status (-want +got):\n%s", diff)
+			}
+		})
+	}
+}
+
+// operationsOf returns v1alpha1 BMC actions as the v1alpha2 operations they convert to.
+func operationsOf(t *testing.T, actions []bmc.Action) []bmcv1alpha2.Operations {
+	t.Helper()
+	job := &bmcv1alpha2.Job{}
+	if err := conversion.JobToV1Alpha2(&bmc.Job{Spec: bmc.JobSpec{Tasks: actions}}, job); err != nil {
+		t.Fatal(err)
+	}
+	return job.Spec.Operations
+}
+
+// TestCreateJobBMC verifies a Job runs against the BMC v1alpha1 used for Hardware created through v1alpha1,
+// its bmc Machine, and against spec.bmc for other Hardware.
+func TestCreateJobBMC(t *testing.T) {
+	ops := operationsOf(t, []bmc.Action{
+		{PowerAction: toPtr(bmc.PowerHardOff)},
+		{OneTimeBootDeviceAction: &bmc.OneTimeBootDeviceAction{Devices: []bmc.BootDevice{bmc.PXE}, EFIBoot: true}},
+		{PowerAction: toPtr(bmc.PowerOn)},
+	})
+	machineHardware := v2(t, &v1alpha1.Hardware{
+		ObjectMeta: metav1.ObjectMeta{Name: "machine-hw", Namespace: "default"},
+		Spec:       v1alpha1.HardwareSpec{BMCRef: &v1.TypedLocalObjectReference{Name: "test-bmc", Kind: "machine.bmc.tinkerbell.org"}},
+	})
+	nativeHardware := &v1alpha2.Hardware{
+		ObjectMeta: metav1.ObjectMeta{Name: "native-hw", Namespace: "default"},
+		Spec:       v1alpha2.HardwareSpec{BMC: &v1alpha2.BMC{Connection: &bmcv1alpha2.Connection{Host: "10.0.0.1"}}},
+	}
+	noBMC := &v1alpha2.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "no-bmc", Namespace: "default"}}
+
+	tests := map[string]struct {
+		hardware string
+		wantErr  bool
+		// want is the Job as a v1alpha1 client reads it.
+		wantV1 bmc.JobSpec
+		// wantHardwareRef is the v1alpha2 Job's hardwareRef.
+		wantHardwareRef *bmcv1alpha2.SimpleReference
+	}{
+		"v1alpha1 Hardware uses its Machine": {
+			hardware: "machine-hw",
+			wantV1: bmc.JobSpec{
+				MachineRef: bmc.MachineRef{Name: "test-bmc", Namespace: "default"},
+				Tasks: []bmc.Action{
+					{PowerAction: toPtr(bmc.PowerHardOff)},
+					{BootDevice: &bmc.BootDeviceConfig{Device: bmc.PXE, EFIBoot: true}},
+					{PowerAction: toPtr(bmc.PowerOn)},
+				},
+			},
+		},
+		"v1alpha2 Hardware uses spec.bmc": {
+			hardware:        "native-hw",
+			wantHardwareRef: &bmcv1alpha2.SimpleReference{Name: "native-hw", Namespace: "default"},
+		},
+		"Hardware without a BMC": {
+			hardware: "no-bmc",
+			wantErr:  true,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			wf := &v1alpha2.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "default", UID: "wf-uid"}, Status: v1alpha2.WorkflowStatus{BootOptions: v1alpha2.BootOptionsStatus{Jobs: map[string]v1alpha2.JobStatus{}}}}
+			s := &state{workflow: wf, client: GetFakeClientBuilder().WithObjects(machineHardware, nativeHardware, noBMC).Build()}
+			_, err := s.createJob(context.Background(), v1alpha2.SimpleReference{Name: tt.hardware}, ops, "netboot-wf")
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "does not have a BMC") {
+					t.Fatalf("err = %v, want no BMC", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			job := &bmcv1alpha2.Job{}
+			if err := s.client.Get(context.Background(), types.NamespacedName{Name: "netboot-wf", Namespace: "default"}, job); err != nil {
+				t.Fatal(err)
+			}
+			if ref := metav1.GetControllerOf(job); ref == nil || ref.UID != wf.UID || ref.Kind != "Workflow" || ref.APIVersion != v1alpha2.GroupVersion.String() {
+				t.Errorf("Job controller = %+v, want the Workflow", ref)
+			}
+			if diff := cmp.Diff(tt.wantHardwareRef, job.Spec.HardwareRef); diff != "" {
+				t.Errorf("hardwareRef (-want +got):\n%s", diff)
+			}
+			if tt.wantV1.MachineRef.Name != "" {
+				v1Job := &bmc.Job{}
+				if err := conversion.JobToV1Alpha1(job, v1Job); err != nil {
+					t.Fatal(err)
+				}
+				if diff := cmp.Diff(tt.wantV1, v1Job.Spec); diff != "" {
+					t.Errorf("Job as v1alpha1 (-want +got):\n%s", diff)
+				}
 			}
 		})
 	}

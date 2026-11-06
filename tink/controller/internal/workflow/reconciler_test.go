@@ -12,71 +12,19 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var runtimescheme = runtime.NewScheme()
-
 // TestTime is a static time that can be used for testing.
 var TestTime = NewFrozenTimeUnix(1637361793)
-
-func init() {
-	_ = clientgoscheme.AddToScheme(runtimescheme)
-	_ = v1alpha1.AddToScheme(runtimescheme)
-}
-
-func GetFakeClientBuilder() *fake.ClientBuilder {
-	ensureTypeMeta := func(obj client.Object) {
-		if obj != nil {
-			gvks, _, _ := runtimescheme.ObjectKinds(obj)
-			if len(gvks) > 0 {
-				obj.GetObjectKind().SetGroupVersionKind(gvks[0])
-			}
-		}
-	}
-
-	return fake.NewClientBuilder().WithScheme(
-		runtimescheme,
-	).WithRuntimeObjects(
-		&v1alpha1.Hardware{}, &v1alpha1.Template{}, &v1alpha1.Workflow{},
-	).WithStatusSubresource(&v1alpha1.Hardware{}, &v1alpha1.Template{}, &v1alpha1.Workflow{}, &v1alpha1.WorkflowRuleSet{}).
-		WithInterceptorFuncs(interceptor.Funcs{
-			Get: func(ctx context.Context, client client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-				err := client.Get(ctx, key, obj, opts...)
-				ensureTypeMeta(obj)
-				return err
-			},
-			SubResourceGet: func(ctx context.Context, client client.Client, subResource string, obj client.Object, subResourceObj client.Object, opts ...client.SubResourceGetOption) error {
-				err := client.SubResource(subResource).Get(ctx, obj, subResourceObj, opts...)
-				ensureTypeMeta(obj)
-				ensureTypeMeta(subResourceObj)
-				return err
-			},
-		})
-}
-
-type fakeReferences struct {
-	refs      map[string]any
-	err       error
-	gotHW     *string
-	rendered  *v1alpha1.Hardware
-	renderErr error
-}
-
-func (f fakeReferences) RenderedHardware(_ context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error) {
-	if f.rendered != nil || f.renderErr != nil {
-		return f.rendered, f.renderErr
-	}
-	return hw, nil
-}
 
 func TestProcessWorkflowRenderedHardware(t *testing.T) {
 	stored := &v1alpha1.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "default"}, Spec: v1alpha1.HardwareSpec{UserData: toPtr("{{ .references.x }}")}}
@@ -92,9 +40,11 @@ func TestProcessWorkflowRenderedHardware(t *testing.T) {
 		"not rendered": {references: fakeReferences{renderErr: errors.New("not rendered")}, wantErr: true},
 	} {
 		t.Run(name, func(t *testing.T) {
-			r := &Reconciler{client: GetFakeClientBuilder().WithObjects(stored, tpl).Build(), references: tt.references}
+			r := &Reconciler{client: GetFakeClientBuilder().WithObjects(v2(t, stored), tpl).Build(), references: tt.references}
 			wf := &v1alpha1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "workflow", Namespace: "default"}, Spec: v1alpha1.WorkflowSpec{HardwareRef: "machine1", TemplateRef: "debian", HardwareMap: map[string]string{"device_1": "agent"}}}
-			err := r.processWorkflow(context.Background(), logr.Discard(), wf)
+			w2 := v2Workflow(t, wf)
+			err := r.processWorkflow(context.Background(), logr.Discard(), w2)
+			wf = v1Workflow(t, w2)
 			if tt.wantErr {
 				if err == nil || wf.Status.TemplateRendering != v1alpha1.TemplateRenderingFailed || len(wf.Status.Tasks) != 0 {
 					t.Fatalf("err = %v, status = %+v; want a retried rendering failure", err, wf.Status)
@@ -110,13 +60,6 @@ func TestProcessWorkflowRenderedHardware(t *testing.T) {
 			}
 		})
 	}
-}
-
-func (f fakeReferences) ResolveReferences(_ context.Context, hw *v1alpha1.Hardware) (map[string]any, error) {
-	if f.gotHW != nil {
-		*f.gotHW = hw.Name
-	}
-	return f.refs, f.err
 }
 
 func TestProcessWorkflowReferences(t *testing.T) {
@@ -144,7 +87,7 @@ tasks:
 			var gotHW string
 			r := &Reconciler{
 				client: GetFakeClientBuilder().WithObjects(
-					&v1alpha1.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "default"}},
+					v2(t, &v1alpha1.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "default"}}),
 					&v1alpha1.Template{ObjectMeta: metav1.ObjectMeta{Name: "debian", Namespace: "default"}, Spec: v1alpha1.TemplateSpec{Data: &tpl}},
 				).Build(),
 				references: fakeReferences{refs: tt.refs, err: tt.err, gotHW: &gotHW},
@@ -154,7 +97,9 @@ tasks:
 				Spec:       v1alpha1.WorkflowSpec{TemplateRef: "debian", HardwareRef: "machine1", HardwareMap: map[string]string{"device_1": "aa"}},
 			}
 
-			err := r.processWorkflow(context.Background(), logr.Discard(), wf)
+			w2 := v2Workflow(t, wf)
+			err := r.processWorkflow(context.Background(), logr.Discard(), w2)
+			wf = v1Workflow(t, w2)
 			if gotHW != "machine1" {
 				t.Errorf("resolver got Hardware %q, want machine1", gotHW)
 			}
@@ -195,14 +140,15 @@ func TestProcessWorkflowHardwareIntegers(t *testing.T) {
 	}
 	text := strings.Replace(minimalTemplate, "IMG_URL:", "BYTES: '{{ .hardware.status.attributes.inBand.memory.totalBytes }}'\n          EIGHT: '{{ eq .hardware.status.attributes.inBand.cpu.totalCores 8 }}'\n          IMG_URL:", 1)
 	r := &Reconciler{
-		client:     GetFakeClientBuilder().WithObjects(hw, &v1alpha1.Template{ObjectMeta: metav1.ObjectMeta{Name: "debian", Namespace: "default"}, Spec: v1alpha1.TemplateSpec{Data: &text}}).Build(),
+		client:     GetFakeClientBuilder().WithObjects(v2(t, hw), &v1alpha1.Template{ObjectMeta: metav1.ObjectMeta{Name: "debian", Namespace: "default"}, Spec: v1alpha1.TemplateSpec{Data: &text}}).Build(),
 		references: fakeReferences{},
 	}
 	wf := &v1alpha1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "workflow", Namespace: "default"}, Spec: v1alpha1.WorkflowSpec{HardwareRef: "machine1", TemplateRef: "debian", HardwareMap: map[string]string{"device_1": "agent"}}}
-	if err := r.processWorkflow(context.Background(), logr.Discard(), wf); err != nil {
+	w2 := v2Workflow(t, wf)
+	if err := r.processWorkflow(context.Background(), logr.Discard(), w2); err != nil {
 		t.Fatal(err)
 	}
-	env := wf.Status.Tasks[0].Actions[0].Environment
+	env := v1Workflow(t, w2).Status.Tasks[0].Actions[0].Environment
 	if env["BYTES"] != "9007199254740993" || env["EIGHT"] != valueTrue {
 		t.Fatalf("BYTES = %q, EIGHT = %q; want 9007199254740993, true", env["BYTES"], env["EIGHT"])
 	}
@@ -211,13 +157,13 @@ func TestProcessWorkflowHardwareIntegers(t *testing.T) {
 func TestProcessWorkflowHardwareConversionFailure(t *testing.T) {
 	hw := &v1alpha1.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "default"}}
 	tpl := &v1alpha1.Template{ObjectMeta: metav1.ObjectMeta{Name: "debian", Namespace: "default"}, Spec: v1alpha1.TemplateSpec{Data: &minimalTemplate}}
-	c := fake.NewClientBuilder().WithScheme(runtimescheme).WithObjects(hw, tpl).WithInterceptorFuncs(interceptor.Funcs{
+	c := fake.NewClientBuilder().WithScheme(runtimescheme).WithObjects(v2(t, hw), tpl).WithInterceptorFuncs(interceptor.Funcs{
 		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 			if err := c.Get(ctx, key, obj, opts...); err != nil {
 				return err
 			}
 			// Set after Get because the fake client cannot store FieldsV1 that is not valid JSON.
-			if h, ok := obj.(*v1alpha1.Hardware); ok {
+			if h, ok := obj.(*v1alpha2.Hardware); ok {
 				h.ManagedFields = []metav1.ManagedFieldsEntry{{FieldsV1: &metav1.FieldsV1{Raw: []byte("invalid")}}}
 			}
 			return nil
@@ -225,9 +171,11 @@ func TestProcessWorkflowHardwareConversionFailure(t *testing.T) {
 	}).Build()
 	r := &Reconciler{client: c, references: fakeReferences{}}
 	wf := &v1alpha1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "workflow", Namespace: "default"}, Spec: v1alpha1.WorkflowSpec{HardwareRef: "machine1", TemplateRef: "debian"}}
-	if err := r.processWorkflow(context.Background(), logr.Discard(), wf); err == nil || !strings.Contains(err.Error(), "convert hardware template data") {
+	w2 := v2Workflow(t, wf)
+	if err := r.processWorkflow(context.Background(), logr.Discard(), w2); err == nil || !strings.Contains(err.Error(), "convert hardware template data") {
 		t.Fatalf("err = %v, want conversion failure", err)
 	}
+	wf = v1Workflow(t, w2)
 	if wf.Status.TemplateRendering != v1alpha1.TemplateRenderingFailed || len(wf.Status.Tasks) != 0 || len(wf.Status.Conditions) != 1 || !strings.Contains(wf.Status.Conditions[0].Message, "error converting hardware template data") {
 		t.Fatalf("conversion failure must not continue with empty data or publish tasks: %+v", wf.Status)
 	}
@@ -279,136 +227,6 @@ tasks:
           USER_DATA: {{ .Hardware.UserData }}
           VENDOR_DATA: {{ .Hardware.VendorData }}
           METADATA: {{ .Hardware.Metadata.State }}`
-
-func TestHandleHardwareAllowPXE(t *testing.T) {
-	tests := map[string]struct {
-		OriginalHardware *v1alpha1.Hardware
-		WantHardware     *v1alpha1.Hardware
-		WantError        error
-		AllowPXE         bool
-	}{
-		"before workflow": {
-			OriginalHardware: &v1alpha1.Hardware{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "machine1",
-					Namespace:       "default",
-					ResourceVersion: "1000",
-				},
-				Spec: v1alpha1.HardwareSpec{
-					Interfaces: []v1alpha1.Interface{
-						{
-							DHCP: &v1alpha1.DHCP{
-								MAC: "3c:ec:ef:4c:4f:54",
-							},
-							Netboot: &v1alpha1.Netboot{
-								AllowPXE: valueToPointer(false),
-							},
-						},
-					},
-				},
-			},
-			WantHardware: &v1alpha1.Hardware{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "machine1",
-					Namespace:       "default",
-					ResourceVersion: "1001",
-				},
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Hardware",
-					APIVersion: "tinkerbell.org/v1alpha1",
-				},
-				Spec: v1alpha1.HardwareSpec{
-					Interfaces: []v1alpha1.Interface{
-						{
-							DHCP: &v1alpha1.DHCP{
-								MAC: "3c:ec:ef:4c:4f:54",
-							},
-							Netboot: &v1alpha1.Netboot{
-								AllowPXE: valueToPointer(true),
-							},
-						},
-					},
-				},
-			},
-			AllowPXE: true,
-		},
-		"after workflow": {
-			OriginalHardware: &v1alpha1.Hardware{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "machine1",
-					Namespace:       "default",
-					ResourceVersion: "1000",
-				},
-				Spec: v1alpha1.HardwareSpec{
-					Interfaces: []v1alpha1.Interface{
-						{
-							DHCP: &v1alpha1.DHCP{
-								MAC: "3c:ec:ef:4c:4f:54",
-							},
-							Netboot: &v1alpha1.Netboot{
-								AllowPXE: valueToPointer(true),
-							},
-						},
-					},
-				},
-			},
-			WantHardware: &v1alpha1.Hardware{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:            "machine1",
-					Namespace:       "default",
-					ResourceVersion: "1001",
-				},
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Hardware",
-					APIVersion: "tinkerbell.org/v1alpha1",
-				},
-				Spec: v1alpha1.HardwareSpec{
-					Interfaces: []v1alpha1.Interface{
-						{
-							DHCP: &v1alpha1.DHCP{
-								MAC: "3c:ec:ef:4c:4f:54",
-							},
-							Netboot: &v1alpha1.Netboot{
-								AllowPXE: valueToPointer(false),
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			fakeClient := GetFakeClientBuilder().WithRuntimeObjects(tt.OriginalHardware).Build()
-			wf := &v1alpha1.Workflow{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "workflow1",
-					Namespace: "default",
-				},
-				Spec: v1alpha1.WorkflowSpec{
-					HardwareRef: "machine1",
-				},
-			}
-			err := setAllowPXE(context.Background(), fakeClient, wf, nil, tt.AllowPXE, withDuration(func() time.Duration { return 0 }))
-
-			got := &v1alpha1.Hardware{}
-			if err := fakeClient.Get(context.Background(), client.ObjectKeyFromObject(tt.OriginalHardware), got); err != nil {
-				t.Fatalf("failed to get hardware after update: %v", err)
-			}
-			if diff := cmp.Diff(tt.WantError, err, cmp.Comparer(func(a, b error) bool {
-				return a.Error() == b.Error()
-			})); diff != "" {
-				t.Errorf("error type: %T", err)
-				t.Fatalf("unexpected error diff: %s", diff)
-			}
-
-			if diff := cmp.Diff(tt.WantHardware, got); diff != "" {
-				t.Fatalf("unexpected hardware diff: %s", diff)
-			}
-		})
-	}
-}
 
 func TestReconcile(t *testing.T) {
 	cases := []struct {
@@ -1177,14 +995,13 @@ tasks:
 	for _, tc := range cases {
 		kc := GetFakeClientBuilder()
 		if tc.seedHardware != nil {
-			kc = kc.WithObjects(tc.seedHardware)
+			kc = kc.WithObjects(v2(t, tc.seedHardware))
 		}
 		if tc.seedTemplate != nil {
 			kc = kc.WithObjects(tc.seedTemplate)
 		}
 		if tc.seedWorkflow != nil {
-			kc = kc.WithObjects(tc.seedWorkflow)
-			kc = kc.WithStatusSubresource(tc.seedWorkflow)
+			kc = kc.WithObjects(v2(t, tc.seedWorkflow))
 		}
 		controller := &Reconciler{
 			client:     kc.Build(),
@@ -1210,11 +1027,7 @@ tasks:
 				t.Errorf("Got unexpected result. Wanted %v, got %v", tc.want, got)
 				// Don't return, also check the modified object
 			}
-			wflow := &v1alpha1.Workflow{}
-			err := controller.client.Get(
-				context.Background(),
-				client.ObjectKey{Name: tc.wantWflow.Name, Namespace: tc.wantWflow.Namespace},
-				wflow)
+			wflow, err := readV1Workflow(t, controller.client, client.ObjectKey{Name: tc.wantWflow.Name, Namespace: tc.wantWflow.Namespace})
 			if err != nil {
 				t.Errorf("Error finding desired workflow: %v", err)
 				return
@@ -1615,7 +1428,9 @@ func TestUpdateAgentIDIfNeeded(t *testing.T) {
 			// Store original AgentID for comparison
 			originalAgentID := tt.workflow.Status.AgentID
 
-			got := updateAgentIDIfNeeded(tt.workflow)
+			w2 := v2Workflow(t, tt.workflow)
+			got := updateAgentIDIfNeeded(w2)
+			tt.workflow = v1Workflow(t, w2)
 
 			// Check if update flag matches expectation
 			if got != tt.wantUpdate {
@@ -2170,8 +1985,7 @@ func TestReconcileWithMultipleTasksAndAgents(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			kc := GetFakeClientBuilder()
 			if tc.seedWorkflow != nil {
-				kc = kc.WithObjects(tc.seedWorkflow)
-				kc = kc.WithStatusSubresource(tc.seedWorkflow)
+				kc = kc.WithObjects(v2(t, tc.seedWorkflow))
 			}
 			controller := &Reconciler{
 				client:     kc.Build(),
@@ -2200,22 +2014,27 @@ func TestReconcileWithMultipleTasksAndAgents(t *testing.T) {
 				t.Errorf("Got unexpected result. Wanted %v, got %v\nDescription: %s", tc.want, got, tc.description)
 			}
 
-			wflow := &v1alpha1.Workflow{}
-			err := controller.client.Get(
-				context.Background(),
-				client.ObjectKey{Name: tc.wantWflow.Name, Namespace: tc.wantWflow.Namespace},
-				wflow)
+			wflow, err := readV1Workflow(t, controller.client, client.ObjectKey{Name: tc.wantWflow.Name, Namespace: tc.wantWflow.Namespace})
 			if err != nil {
 				t.Errorf("Error finding desired workflow: %v\nDescription: %s", err, tc.description)
 				return
 			}
+			// These fixtures say the template rendered without the condition that records it, which
+			// is how templateRendering is stored now, so it does not survive being stored.
+			want := tc.wantWflow.DeepCopy()
+			if len(want.Status.Conditions) == 0 {
+				want.Status.TemplateRendering = ""
+			}
+			tc.wantWflow = want
 
 			// Check specific AgentID expectations
 			if wflow.Status.AgentID != tc.wantWflow.Status.AgentID {
 				t.Errorf("AgentID mismatch: got %q, want %q\nDescription: %s", wflow.Status.AgentID, tc.wantWflow.Status.AgentID, tc.description)
 			}
 
-			if diff := cmp.Diff(wflow, tc.wantWflow, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time"), cmpopts.IgnoreFields(v1alpha1.Task{}, "ID"), cmpopts.IgnoreFields(v1alpha1.Action{}, "ID"), cmpopts.IgnoreFields(v1alpha1.WorkflowStatus{}, "GlobalExecutionStop")); diff != "" {
+			// v1alpha2 has one current Agent, which v1alpha1 clients read as both the Workflow's agentID
+			// and its currentState's; the agentID is checked above.
+			if diff := cmp.Diff(wflow, tc.wantWflow, cmpopts.IgnoreFields(v1alpha1.WorkflowCondition{}, "Time"), cmpopts.IgnoreFields(v1alpha1.Task{}, "ID"), cmpopts.IgnoreFields(v1alpha1.Action{}, "ID"), cmpopts.IgnoreFields(v1alpha1.WorkflowStatus{}, "GlobalExecutionStop"), cmpopts.IgnoreFields(v1alpha1.CurrentState{}, "AgentID")); diff != "" {
 				t.Logf("got: %+v", wflow)
 				t.Logf("want: %+v", tc.wantWflow)
 				t.Errorf("unexpected difference:\n%v\nDescription: %s", diff, tc.description)
@@ -2266,23 +2085,22 @@ func TestReconcileFailedWorkflowWinsStalePatch(t *testing.T) {
 		},
 	}
 
-	base := GetFakeClientBuilder().WithObjects(workflow).WithStatusSubresource(workflow).Build()
+	base := GetFakeClientBuilder().WithObjects(v2(t, workflow)).Build()
 	patchCalls := 0
 	var committed *v1alpha1.Workflow
 	cc := interceptor.NewClient(base, interceptor.Funcs{
 		SubResourcePatch: func(ctx context.Context, c client.Client, subResource string, obj client.Object, patch client.Patch, opts ...client.SubResourcePatchOption) error {
 			patchCalls++
 			if patchCalls == 1 {
-				cancelled := &v1alpha1.Workflow{}
+				cancelled := &v1alpha2.Workflow{}
 				if err := c.Get(ctx, client.ObjectKeyFromObject(workflow), cancelled); err != nil {
 					return err
 				}
-				cancelled.Status.State = v1alpha1.WorkflowStateFailed
+				cancelled.Status.Metadata.Workflow.State = v1alpha2.StateFailed
 				if err := c.Status().Update(ctx, cancelled); err != nil {
 					return err
 				}
-				committed = cancelled.DeepCopy()
-				committed.TypeMeta = workflow.TypeMeta
+				committed = v1Workflow(t, cancelled)
 			}
 
 			return c.SubResource(subResource).Patch(ctx, obj, patch, opts...)
@@ -2312,8 +2130,8 @@ func TestReconcileFailedWorkflowWinsStalePatch(t *testing.T) {
 		t.Fatalf("expected FAILED reconcile to be a no-op, got %d patch attempts", patchCalls)
 	}
 
-	got := &v1alpha1.Workflow{}
-	if err := cc.Get(context.Background(), client.ObjectKeyFromObject(workflow), got); err != nil {
+	got, err := readV1Workflow(t, cc, client.ObjectKeyFromObject(workflow))
+	if err != nil {
 		t.Fatalf("get committed workflow: %v", err)
 	}
 	if diff := cmp.Diff(committed, got); diff != "" {

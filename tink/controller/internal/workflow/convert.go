@@ -2,18 +2,24 @@ package workflow
 
 import (
 	"github.com/oklog/ulid/v2"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/proto"
+	"k8s.io/apimachinery/pkg/types"
 )
 
-func YAMLToStatus(wf *Workflow) *v1alpha1.WorkflowStatus {
+// YAMLToStatus returns the status of a Workflow that runs the parsed v1alpha1
+// Template wf: its tasks and actions, as the v1alpha1 engine rendered them,
+// in their v1alpha2 form.
+func YAMLToStatus(wf *Workflow) *v1alpha2.WorkflowStatus {
 	if wf == nil {
 		return nil
 	}
-	tasks := []v1alpha1.Task{}
+	tasks := []v1alpha2.TaskWithMetadata{}
 	agentID := ""
 	for _, task := range wf.Tasks {
-		actions := []v1alpha1.Action{}
+		actions := []v1alpha2.ActionWithMetadata{}
 		for _, action := range task.Actions {
 			a := v1alpha1.Action{
 				ID:          ulid.Make().String(),
@@ -32,24 +38,33 @@ func YAMLToStatus(wf *Workflow) *v1alpha1.WorkflowStatus {
 					PID:     action.Namespaces.PID,
 				}
 			}
-			actions = append(actions, a)
+			actions = append(actions, conversion.ActionToV1Alpha2(a))
 		}
-		tasks = append(tasks, v1alpha1.Task{
-			Name:        task.Name,
-			AgentID:     task.WorkerAddr,
-			ID:          ulid.Make().String(),
-			Volumes:     task.Volumes,
-			Environment: task.Environment,
-			Actions:     actions,
+		var volumes []v1alpha2.Volume
+		for _, v := range task.Volumes {
+			volumes = append(volumes, v1alpha2.Volume(v))
+		}
+		tasks = append(tasks, v1alpha2.TaskWithMetadata{
+			Name:    task.Name,
+			Env:     task.Environment,
+			Volumes: volumes,
+			Actions: actions,
+			Metadata: v1alpha2.Metadata{
+				ID:      types.UID(ulid.Make().String()),
+				Name:    task.Name,
+				AgentID: task.WorkerAddr,
+				State:   v1alpha2.StatePending,
+			},
 		})
 		// only use the first Task's agentID. At the moment only support single Task Workflows.
 		if agentID == "" {
 			agentID = task.WorkerAddr
 		}
 	}
-	return &v1alpha1.WorkflowStatus{
+	status := &v1alpha2.WorkflowStatus{
 		GlobalTimeout: int64(wf.GlobalTimeout),
-		Tasks:         tasks,
-		AgentID:       agentID,
+		RenderedTasks: tasks,
 	}
+	status.Metadata.Task.AgentID = agentID
+	return status
 }

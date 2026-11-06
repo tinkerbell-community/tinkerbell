@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/proto"
 	"google.golang.org/grpc/codes"
@@ -173,7 +174,7 @@ func TestEnroll(t *testing.T) {
 				Backend: &mockBackendReadWriter{},
 			}
 
-			err := handler.enroll(context.Background(), tt.workerID, convert(tt.attributes), tt.hardware)
+			err := handler.enroll(context.Background(), tt.workerID, convert(tt.attributes), toV2Hardware(tt.hardware))
 			if created != tt.wantCreated {
 				t.Fatalf("CreateWorkflow called = %v, want %v", created, tt.wantCreated)
 			}
@@ -202,8 +203,9 @@ func (m *mockAutoCapabilities) ListWorkflowRuleSets(ctx context.Context, opts da
 	return m.ListWorkflowRuleSetsFunc(ctx, opts)
 }
 
-func (m *mockAutoCapabilities) CreateWorkflow(ctx context.Context, wf *tinkerbell.Workflow) error {
-	return m.CreateWorkflowFunc(ctx, wf)
+// CreateWorkflowV1Alpha2 hands CreateWorkflowFunc the Workflow as v1alpha1 clients read it.
+func (m *mockAutoCapabilities) CreateWorkflowV1Alpha2(ctx context.Context, wf *v1alpha2.Workflow) error {
+	return m.CreateWorkflowFunc(ctx, toV1Workflow(wf))
 }
 
 func TestEnrollWorkflowNamespace(t *testing.T) {
@@ -266,7 +268,7 @@ func TestEnrollWorkflowNamespace(t *testing.T) {
 				Backend:          &mockBackendReadWriter{},
 			}
 			attr := convert(&proto.AgentAttributes{Chassis: &proto.Chassis{Serial: toPtr("12345")}})
-			_ = handler.enroll(context.Background(), "worker-123", attr, tt.hardware)
+			_ = handler.enroll(context.Background(), "worker-123", attr, toV2Hardware(tt.hardware))
 			if got != tt.want {
 				t.Fatalf("Workflow created in %q, want %q", got, tt.want)
 			}
@@ -284,9 +286,9 @@ type multipleFoundError struct{}
 func (multipleFoundError) Error() string       { return "multiple found" }
 func (multipleFoundError) MultipleFound() bool { return true }
 
-type createHardwareFunc func(context.Context, *tinkerbell.Hardware) error
+type createHardwareFunc func(context.Context, *v1alpha2.Hardware) error
 
-func (f createHardwareFunc) CreateHardware(ctx context.Context, hw *tinkerbell.Hardware) error {
+func (f createHardwareFunc) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error {
 	return f(ctx, hw)
 }
 
@@ -335,7 +337,7 @@ func TestGetActionEnrollmentHardwareLookupError(t *testing.T) {
 					Enrollment: AutoEnrollment{Enabled: true, WorkflowRuleSetLister: caps, WorkflowCreator: caps},
 					Discovery: AutoDiscovery{
 						Enabled: tt.discovery, Namespace: "discovery", HardwareFilterer: backend,
-						HardwareCreator: createHardwareFunc(func(context.Context, *tinkerbell.Hardware) error { return tt.createErr }),
+						HardwareCreator: createHardwareFunc(func(context.Context, *v1alpha2.Hardware) error { return tt.createErr }),
 					},
 				},
 				Backend: backend,

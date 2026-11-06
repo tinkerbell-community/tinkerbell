@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
+	bmcv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,8 +29,17 @@ func (j jobName) String() string {
 	return string(j)
 }
 
+// jobNameFor returns the name of the Job of kind j that the boot options of spec.tasks[index] of the
+// Workflow named workflow create. The first task's Jobs have the names v1alpha1 used.
+func jobNameFor(j jobName, workflow string, index int) jobName {
+	if index == 0 {
+		return jobName(fmt.Sprintf("%s-%s", j, workflow))
+	}
+	return jobName(fmt.Sprintf("%s-%s-%d", j, workflow, index))
+}
+
 // this function will update the Workflow status.
-func (s *state) handleJob(ctx context.Context, actions []bmc.Action, name jobName) (reconcile.Result, error) {
+func (s *state) handleJob(ctx context.Context, hwRef v1alpha2.SimpleReference, ops []bmc.Operations, name jobName) (reconcile.Result, error) {
 	// there are 3 phases. 1. Clean up existing 2. Create new 3. Track status
 	// 1. clean up existing job if it wasn't already deleted
 	if j, found := s.workflow.Status.BootOptions.Jobs[name.String()]; found && !j.ExistingJobDeleted {
@@ -43,15 +54,15 @@ func (s *state) handleJob(ctx context.Context, actions []bmc.Action, name jobNam
 
 	// 2. create a new job
 	if uid := s.workflow.Status.BootOptions.Jobs[name.String()].UID; uid == "" {
-		if len(actions) == 0 {
+		if len(ops) == 0 {
 			journal.Log(ctx, "no actions provided", "name", name)
 			return reconcile.Result{}, nil
 		}
 		journal.Log(ctx, "no uid found for job", "name", name)
-		result, err := s.createJob(ctx, actions, name)
+		result, err := s.createJob(ctx, hwRef, ops, name)
 		if err != nil {
-			s.workflow.Status.SetCondition(v1alpha1.WorkflowCondition{
-				Type:    v1alpha1.BootJobSetupFailed,
+			s.workflow.Status.SetCondition(v1alpha2.WorkflowCondition{
+				Type:    v1alpha2.BootJobSetupFailed,
 				Status:  metav1.ConditionTrue,
 				Reason:  reasonError,
 				Message: fmt.Sprintf("error creating job: %v", err),
@@ -59,8 +70,8 @@ func (s *state) handleJob(ctx context.Context, actions []bmc.Action, name jobNam
 			})
 			return result, err
 		}
-		s.workflow.Status.SetCondition(v1alpha1.WorkflowCondition{
-			Type:    v1alpha1.BootJobSetupComplete,
+		s.workflow.Status.SetCondition(v1alpha2.WorkflowCondition{
+			Type:    v1alpha2.BootJobSetupComplete,
 			Status:  metav1.ConditionTrue,
 			Reason:  "Created",
 			Message: "job created",
@@ -75,8 +86,8 @@ func (s *state) handleJob(ctx context.Context, actions []bmc.Action, name jobNam
 		// track status
 		r, tState, err := s.trackRunningJob(ctx, name)
 		if err != nil {
-			s.workflow.Status.SetCondition(v1alpha1.WorkflowCondition{
-				Type:    v1alpha1.BootJobFailed,
+			s.workflow.Status.SetCondition(v1alpha2.WorkflowCondition{
+				Type:    v1alpha2.BootJobFailed,
 				Status:  metav1.ConditionTrue,
 				Reason:  reasonError,
 				Message: err.Error(),
@@ -85,8 +96,8 @@ func (s *state) handleJob(ctx context.Context, actions []bmc.Action, name jobNam
 			return r, err
 		}
 		if tState == trackedStateComplete {
-			s.workflow.Status.SetCondition(v1alpha1.WorkflowCondition{
-				Type:    v1alpha1.BootJobComplete,
+			s.workflow.Status.SetCondition(v1alpha2.WorkflowCondition{
+				Type:    v1alpha2.BootJobComplete,
 				Status:  metav1.ConditionTrue,
 				Reason:  "Complete",
 				Message: "job completed",
@@ -111,7 +122,7 @@ func (s *state) deleteExisting(ctx context.Context, name jobName) (reconcile.Res
 		client.MatchingLabels{"owner-name": name.String()},
 		client.InNamespace(s.workflow.Namespace),
 	}
-	if err := s.client.DeleteAllOf(ctx, &bmc.Task{}, op...); client.IgnoreNotFound(err) != nil {
+	if err := s.client.DeleteAllOf(ctx, &bmcv1alpha1.Task{}, op...); client.IgnoreNotFound(err) != nil {
 		journal.Log(ctx, "error deleting tasks", "name", name, "error", err)
 		return reconcile.Result{}, fmt.Errorf("error deleting tasks.bmc.tinkerbell.org objects: %w", err)
 	}
@@ -139,7 +150,7 @@ func (s *state) deleteExisting(ctx context.Context, name jobName) (reconcile.Res
 }
 
 // This function will update the Workflow status.
-func (s *state) createJob(ctx context.Context, actions []bmc.Action, name jobName) (reconcile.Result, error) {
+func (s *state) createJob(ctx context.Context, hwRef v1alpha2.SimpleReference, ops []bmc.Operations, name jobName) (reconcile.Result, error) {
 	// create a new job
 	// The assumption is that the UID is not set. UID checking is not handled here.
 	// 1. look up if there's an existing job with the same name, if so update the status with the UID and return
@@ -162,25 +173,25 @@ func (s *state) createJob(ctx context.Context, actions []bmc.Action, name jobNam
 	}
 
 	// create a new job
-	hw, err := hardwareFrom(ctx, s.client, s.workflow)
+	hw, err := hardwareFrom(ctx, s.client, s.workflow, hwRef)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("error getting hardware: %w", err)
 	}
-	if hw.Spec.BMCRef == nil {
+	if !hasBMC(hw) {
 		return reconcile.Result{}, fmt.Errorf("hardware %q does not have a BMC", hw.Name)
 	}
 
 	ownerRef := []metav1.OwnerReference{
 		{
-			APIVersion: s.workflow.APIVersion,
-			Kind:       s.workflow.Kind,
+			APIVersion: v1alpha2.GroupVersion.String(),
+			Kind:       "Workflow",
 			Name:       s.workflow.Name,
 			UID:        s.workflow.UID,
 			Controller: valueToPointer(true),
 		},
 	}
 
-	if err := create(ctx, s.client, name.String(), hw, s.workflow.Namespace, actions, ownerRef); err != nil {
+	if err := create(ctx, s.client, name.String(), hw, s.workflow.Namespace, ops, ownerRef); err != nil {
 		return reconcile.Result{}, fmt.Errorf("error creating job: %w", err)
 	}
 	journal.Log(ctx, "job created", "name", name)
@@ -205,12 +216,12 @@ func (s *state) trackRunningJob(ctx context.Context, name jobName) (reconcile.Re
 	if err := s.client.Get(ctx, client.ObjectKey{Name: name.String(), Namespace: s.workflow.Namespace}, rj); err != nil {
 		return reconcile.Result{}, trackedStateError, fmt.Errorf("error getting job: %w", err)
 	}
-	if rj.HasCondition(bmc.JobFailed, bmc.ConditionTrue) {
+	if bmc.HasConditionStatus(rj.Status.Conditions, bmc.ConditionTypeFailed, bmc.ConditionStatusTrue) {
 		journal.Log(ctx, "job failed", "name", name)
 		// job failed
 		return reconcile.Result{}, trackedStateFailed, fmt.Errorf("job failed")
 	}
-	if rj.HasCondition(bmc.JobCompleted, bmc.ConditionTrue) {
+	if bmc.HasConditionStatus(rj.Status.Conditions, bmc.ConditionTypeCompleted, bmc.ConditionStatusTrue) {
 		journal.Log(ctx, "job completed", "name", name)
 		// job completed
 		jStatus := s.workflow.Status.BootOptions.Jobs[name.String()]
@@ -225,9 +236,12 @@ func (s *state) trackRunningJob(ctx context.Context, name jobName) (reconcile.Re
 	return reconcile.Result{Requeue: true}, trackedStateRunning, nil //nolint:staticcheck // SA1019: Requeue keeps rate-limited backoff; RequeueAfter would change behavior.
 }
 
-func create(ctx context.Context, cc client.Client, name string, hw *v1alpha1.Hardware, ns string, tasks []bmc.Action, ownerRef []metav1.OwnerReference) error {
-	journal.Log(ctx, "creating job", "name", name)
-	if err := cc.Create(ctx, &bmc.Job{
+// create creates the bmc Job name, running ops against the BMC of hw. Hardware created through v1alpha1
+// names its BMC by a bmc Machine (bmcRef): such Jobs name the Machine, as v1alpha1 Jobs did, in the
+// bmc.tinkerbell.org/machine annotation, so that Rufio, whichever version it reads, uses the same BMC as
+// before. Other Hardware holds its BMC connection in spec.bmc, which the Job uses through hardwareRef.
+func create(ctx context.Context, cc client.Client, name string, hw *v1alpha2.Hardware, ns string, ops []bmc.Operations, ownerRef []metav1.OwnerReference) error {
+	job := &bmc.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: ns,
@@ -240,15 +254,33 @@ func create(ctx context.Context, cc client.Client, name string, hw *v1alpha1.Har
 			OwnerReferences: ownerRef,
 		},
 		Spec: bmc.JobSpec{
-			MachineRef: bmc.MachineRef{
-				Name:      hw.Spec.BMCRef.Name,
-				Namespace: ns,
-			},
-			Tasks: tasks,
+			Operations: ops,
 		},
-	}); err != nil {
+	}
+	if machine := bmcMachine(hw); machine != "" {
+		job.Annotations[conversion.AnnotationMachine] = ns + "/" + machine
+	} else {
+		job.Spec.HardwareRef = &bmc.SimpleReference{Name: hw.Name, Namespace: hw.Namespace}
+	}
+
+	journal.Log(ctx, "creating job", "name", name)
+	if err := cc.Create(ctx, job); err != nil {
 		return fmt.Errorf("error creating job.bmc.tinkerbell.org object for netbooting machine: %w", err)
 	}
 
 	return nil
+}
+
+// bmcMachine returns the bmc Machine that holds the BMC connection of Hardware created through v1alpha1
+// (its bmcRef), or "".
+func bmcMachine(hw *v1alpha2.Hardware) string {
+	if ref := conversion.HardwareBMCRef(hw); ref != nil {
+		return ref.Name
+	}
+	return ""
+}
+
+// hasBMC reports whether Jobs can run against the BMC of hw.
+func hasBMC(hw *v1alpha2.Hardware) bool {
+	return bmcMachine(hw) != "" || (hw.Spec.BMC != nil && hw.Spec.BMC.Connection != nil)
 }

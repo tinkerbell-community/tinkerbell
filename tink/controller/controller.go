@@ -13,6 +13,7 @@ import (
 	"github.com/tinkerbell/tinkerbell/tink/controller/internal/translate"
 	"github.com/tinkerbell/tinkerbell/tink/controller/internal/workflow"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	controllerruntime "sigs.k8s.io/controller-runtime"
@@ -40,9 +41,14 @@ type Config struct {
 	MetadataURL             string
 }
 
+// referenceResolver renders Hardware and resolves the references of the objects the Workflow engine
+// renders, as the kube backend does.
 type referenceResolver interface {
+	// RenderedHardware is for Workflows run in v1alpha1 compatibility mode, which render
+	// Templates with the v1alpha1 Hardware.
 	RenderedHardware(ctx context.Context, hw *tinkerbell.Hardware) (*tinkerbell.Hardware, error)
-	ResolveReferences(ctx context.Context, hw *tinkerbell.Hardware) (map[string]any, error)
+	RenderedHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error)
+	ResolveReferencesFor(ctx context.Context, src types.NamespacedName, refs map[string]v1alpha2.Reference) (map[string]any, error)
 }
 
 type Option func(*Config)
@@ -146,12 +152,13 @@ func newManager(cfg *rest.Config, rr referenceResolver, opts controllerruntime.O
 		return nil, fmt.Errorf("controller manager: %w", err)
 	}
 
+	recorder := mgr.GetEventRecorder("tink-controller")
+	wfOpts = append(wfOpts, workflow.WithEventRecorder(recorder))
 	if err = workflow.NewReconciler(mgr.GetClient(), rr, wfOpts...).SetupWithManager(mgr, ctrlcontroller.Options{MaxConcurrentReconciles: maxConcurrentReconciles}); err != nil {
 		return nil, fmt.Errorf("setup workflow reconciler: %w", err)
 	}
 
 	// The v1alpha2 translations of the kinds only v1alpha1 has.
-	recorder := mgr.GetEventRecorder("tink-controller")
 	if err = translate.NewTemplateReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
 		return nil, fmt.Errorf("setup template translation reconciler: %w", err)
 	}

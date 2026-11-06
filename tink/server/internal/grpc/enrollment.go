@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/pkg/journal"
@@ -31,7 +33,7 @@ type match struct {
 // Even on success it returns a NotFound status, because the new Workflow has no Action
 // until the Tink Controller reconciles it.
 // auto enrollment does not support Templates with multiple Agents defined.
-func (h *Handler) enroll(ctx context.Context, agentID string, attr *data.AgentAttributes, hardware *tinkerbell.Hardware) error {
+func (h *Handler) enroll(ctx context.Context, agentID string, attr *data.AgentAttributes, hardware *v1alpha2.Hardware) error {
 	log := h.Logger.WithValues("agentID", agentID)
 	// If auto enrollment is not enabled, then we do not create a Workflow for the AgentID.
 	if hardware != nil && !hardware.Spec.Auto.EnrollmentEnabled {
@@ -94,8 +96,8 @@ func (h *Handler) enroll(ctx context.Context, agentID string, attr *data.AgentAt
 				},
 				OwnerReferences: []metav1.OwnerReference{
 					{
-						APIVersion: final.wrs.APIVersion,
-						Kind:       final.wrs.Kind,
+						APIVersion: tinkerbell.GroupVersion.String(),
+						Kind:       "WorkflowRuleSet",
 						Name:       final.wrs.Name,
 						UID:        final.wrs.UID,
 					},
@@ -130,7 +132,15 @@ func (h *Handler) enroll(ctx context.Context, agentID string, attr *data.AgentAt
 		maps.Copy(awf.Spec.HardwareMap, final.wrs.Spec.Workflow.Template.KVs)
 		// TODO: if the awf.Spec.HardwareRef is an empty string, then query for a Hardware object with some corresponding value from the attributes.
 		// If a Hardware object is found add it to the awf.Spec.HardwareRef.
-		if err := h.AutoCapabilities.Enrollment.CreateWorkflow(ctx, awf); err != nil {
+
+		// The Workflow is stored exactly as the v1alpha1 Workflow rule sets created before
+		// would have been: it runs the Template in v1alpha1 compatibility mode.
+		wf := &v1alpha2.Workflow{}
+		if err := conversion.WorkflowToV1Alpha2(awf, wf); err != nil {
+			journal.Log(ctx, "error converting enrollment workflow", "error", err)
+			return status.Errorf(codes.Internal, "error converting enrollment workflow: %v", err)
+		}
+		if err := h.AutoCapabilities.Enrollment.CreateWorkflowV1Alpha2(ctx, wf); err != nil {
 			if apierrors.IsAlreadyExists(err) {
 				journal.Log(ctx, "workflow already exists", "workflow", name, "namespace", final.wrs.Namespace)
 				// The Workflow exists but isn't cached yet. That resolves itself, so it isn't an error.

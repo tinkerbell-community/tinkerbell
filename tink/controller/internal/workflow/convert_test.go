@@ -6,6 +6,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 )
 
 func TestYAMLToStatus(t *testing.T) {
@@ -70,7 +71,8 @@ func TestYAMLToStatus(t *testing.T) {
 									"/lib/firmware:/lib/firmware:ro",
 									"/tmp/debug:/tmp/debug",
 								},
-								Pid: "host",
+								// v1alpha2 has the deprecated pid as namespaces.pid.
+								Namespaces: &v1alpha1.ActionNamespaces{PID: "host"},
 								Environment: map[string]string{
 									"COMPRESSED": valueTrue,
 									"DEST_DISK":  "/dev/nvme0n1",
@@ -168,9 +170,10 @@ func TestYAMLToStatus(t *testing.T) {
 								Name:    "run-action",
 								Image:   "example/action:latest",
 								Timeout: 120,
-								Pid:     "host",
+								// v1alpha2 has the deprecated pid as namespaces.pid.
 								Namespaces: &v1alpha1.ActionNamespaces{
 									Network: "host",
+									PID:     "host",
 								},
 								State: v1alpha1.WorkflowStatePending,
 							},
@@ -183,7 +186,12 @@ func TestYAMLToStatus(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := YAMLToStatus(tc.inputWf)
+			status := YAMLToStatus(tc.inputWf)
+			var got *v1alpha1.WorkflowStatus
+			if status != nil {
+				// As a v1alpha1 client reads it.
+				got = &v1Workflow(t, &v1alpha2.Workflow{Status: *status}).Status
+			}
 			if diff := cmp.Diff(got, tc.want, cmpopts.IgnoreFields(v1alpha1.Task{}, "ID"), cmpopts.IgnoreFields(v1alpha1.Action{}, "ID")); diff != "" {
 				t.Errorf("unexpected difference:\n%v", diff)
 			}

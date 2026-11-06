@@ -8,6 +8,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/constant"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -24,7 +25,7 @@ func TestHandlerDiscover(t *testing.T) {
 		id           string
 		attrs        *data.AgentAttributes
 		existingHw   *tinkerbell.Hardware
-		wantHardware *tinkerbell.Hardware
+		wantHardware *v1alpha2.Hardware
 		clientErrors map[string]error
 		wantErr      bool
 		wantCreated  bool
@@ -62,7 +63,7 @@ func TestHandlerDiscover(t *testing.T) {
 			},
 			wantErr:     false,
 			wantCreated: true,
-			wantHardware: &tinkerbell.Hardware{
+			wantHardware: &v1alpha2.Hardware{
 				TypeMeta: metav1.TypeMeta{},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "discovery-test-id",
@@ -73,12 +74,14 @@ func TestHandlerDiscover(t *testing.T) {
 					},
 					ResourceVersion: "1",
 				},
-				Spec: tinkerbell.HardwareSpec{
+				Spec: v1alpha2.HardwareSpec{
 					AgentID: "test-id",
-					Auto: tinkerbell.AutoCapabilities{
+					Auto: v1alpha2.AutoCapabilities{
 						EnrollmentEnabled: true,
 					},
-					Interfaces: []tinkerbell.Interface{{DHCP: &tinkerbell.DHCP{MAC: "00:11:22:33:44:55"}}},
+					NetworkInterfaces: v1alpha2.NetworkInterfaces{
+						"00:11:22:33:44:55": {DHCP: &v1alpha2.DHCP{IPv4: &v1alpha2.DHCPv4{}}, Netboot: &v1alpha2.Netboot{Disabled: true}},
+					},
 				},
 			},
 		},
@@ -173,7 +176,7 @@ func TestHandlerDiscover(t *testing.T) {
 			},
 			wantErr:     false,
 			wantCreated: true,
-			wantHardware: &tinkerbell.Hardware{
+			wantHardware: &v1alpha2.Hardware{
 				TypeMeta: metav1.TypeMeta{},
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "discovery-test-id",
@@ -184,12 +187,14 @@ func TestHandlerDiscover(t *testing.T) {
 					},
 					ResourceVersion: "1",
 				},
-				Spec: tinkerbell.HardwareSpec{
+				Spec: v1alpha2.HardwareSpec{
 					AgentID: "test-id",
-					Auto: tinkerbell.AutoCapabilities{
+					Auto: v1alpha2.AutoCapabilities{
 						EnrollmentEnabled: true,
 					},
-					Interfaces: []tinkerbell.Interface{{DHCP: &tinkerbell.DHCP{MAC: "00:11:22:33:44:55"}}},
+					NetworkInterfaces: v1alpha2.NetworkInterfaces{
+						"00:11:22:33:44:55": {DHCP: &v1alpha2.DHCP{IPv4: &v1alpha2.DHCPv4{}}, Netboot: &v1alpha2.Netboot{Disabled: true}},
+					},
 				},
 			},
 		},
@@ -199,14 +204,16 @@ func TestHandlerDiscover(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			// Create a scheme with the necessary types
 			scheme := runtime.NewScheme()
-			_ = tinkerbell.AddToScheme(scheme)
+			_ = v1alpha2.AddToScheme(scheme)
 
 			// Create fake client builder
 			clientBuilder := fake.NewClientBuilder().WithScheme(scheme)
 
 			// Add existing hardware if provided
+			var existing *v1alpha2.Hardware
 			if tc.existingHw != nil {
-				clientBuilder = clientBuilder.WithObjects(tc.existingHw)
+				existing = toV2Hardware(tc.existingHw)
+				clientBuilder = clientBuilder.WithObjects(existing)
 			}
 
 			// Create the fake client
@@ -251,7 +258,7 @@ func TestHandlerDiscover(t *testing.T) {
 
 			// If an existing hardware was provided, verify it wasn't modified
 			if tc.existingHw != nil {
-				hw := &tinkerbell.Hardware{}
+				hw := &v1alpha2.Hardware{}
 				err = fakeClient.Get(context.Background(), types.NamespacedName{
 					Name:      tc.id,
 					Namespace: "test-namespace",
@@ -261,7 +268,7 @@ func TestHandlerDiscover(t *testing.T) {
 				}
 
 				// Verify it's the same as the original
-				if hw.ResourceVersion != tc.existingHw.ResourceVersion {
+				if hw.ResourceVersion != existing.ResourceVersion {
 					t.Errorf("hardware was modified when it shouldn't have been")
 				}
 				return
@@ -315,7 +322,7 @@ func (m *mockClient) Create(ctx context.Context, obj client.Object, opts ...clie
 	}
 
 	// Store the object that was created for later verification
-	hw, ok := obj.(*tinkerbell.Hardware)
+	hw, ok := obj.(*v1alpha2.Hardware)
 	if ok {
 		m.createdObjs[hw.Name] = obj
 	}
@@ -328,8 +335,8 @@ type mockAutoDiscoveryClient struct {
 	client client.Client
 }
 
-func (m *mockAutoDiscoveryClient) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*tinkerbell.Hardware, error) {
-	hwList := &tinkerbell.HardwareList{}
+func (m *mockAutoDiscoveryClient) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	hwList := &v1alpha2.HardwareList{}
 	if err := m.client.List(ctx, hwList); err != nil {
 		return nil, err
 	}
@@ -341,6 +348,6 @@ func (m *mockAutoDiscoveryClient) FilterHardware(ctx context.Context, opts data.
 	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "tinkerbell.org", Resource: "hardware"}, opts.ByAgentID)
 }
 
-func (m *mockAutoDiscoveryClient) CreateHardware(ctx context.Context, hw *tinkerbell.Hardware) error {
+func (m *mockAutoDiscoveryClient) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error {
 	return m.client.Create(ctx, hw)
 }
