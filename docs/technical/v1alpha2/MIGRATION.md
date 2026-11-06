@@ -156,11 +156,13 @@ whose Template converts, it rewrites the Workflow to run the Template's Tasks be
 one `tasks` entry per template task, on the Agent its `worker` names (the `hardwareMap` value),
 bound to the Workflow's Hardware, with `global_timeout` as `timeoutSeconds`. The rendered tasks
 keep the template task names. A v1alpha1 client still reads the Workflow it created, with the same
-spec and the same state. Not rewritten, and run in compatibility mode with an event saying why:
-Workflows that already started; Workflows with boot options whose Template has several tasks
-(v1alpha2 applies boot options per task, so netboot would be turned off, and post operations
-run, after the first task instead of after the last); Workflows whose `hardwareMap` lacks a
-task's worker key or sets `metadata_url` (inside a Task it is always Tinkerbell's); and
+spec and the same state. Workflows that already started are not rewritten and run in
+compatibility mode; that includes every Workflow an earlier Tinkerbell made `PENDING`, which was
+offered to its Agent then and is not changed under it. These are also not rewritten and run in
+compatibility mode, with an event saying why: Workflows with boot options whose Template has
+several tasks (v1alpha2 applies boot options per task, so netboot would be turned off, and post
+operations run, after the first task instead of after the last); Workflows whose `hardwareMap`
+lacks a task's worker key or sets `metadata_url` (inside a Task it is always Tinkerbell's); and
 Workflows whose Tasks would not render for their Hardware.
 
 **WorkflowRuleSet to Policy.** A rule set whose Template converts, and whose tasks all run on
