@@ -160,6 +160,13 @@ All metadata routes identify the requesting machine by its source IP address
 | `/tootles/` | GET | ✅ | ✅ | Instance-endpoint mirror of EC2 metadata (enabled via `--tootles-instance-endpoint`). Supports paths like `/tootles/instanceID/<id>/2009-04-04/...` |
 | `/metadata` | GET | ✅ | ✅ | Legacy JSON endpoint returning Hardware storage/filesystem configuration. Used by the rootio action. |
 
+EC2 data is shaped after v1alpha1 Hardware. Hardware created through v1alpha1 serves it exactly
+as before. Hardware created as v1alpha2 serves `instance-id` (`spec.instance.lookupID`),
+`public-keys` (`spec.instance.sshKeys`), `user-data` (`spec.instance.userdata`), and the
+hostname, `local-ipv4` and `public-ipv6` of the network interface with the requesting address;
+v1alpha2 has no equivalent of `public-ipv4`, `plan`, `facility`, `tags`, `iqn` or
+`operating-system`.
+
 #### Metadata URL in Templates
 
 The Tink Controller exposes the base URL of these routes to Templates as `{{ .metadata_url }}`,

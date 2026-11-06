@@ -1,5 +1,11 @@
 // Package backend provides tootles-specific backend logic for converting Hardware resources
 // into EC2 and Hack instance metadata formats.
+//
+// Hardware is read as v1alpha2. The EC2 and Hack formats are shaped after v1alpha1 Hardware
+// (metadata.instance, facility, plan, operating system, ...), so they are built from the v1alpha1
+// view of the Hardware (conversion.HardwareToV1Alpha1). For Hardware created through v1alpha1
+// that view is exact: the conversion annotation keeps the v1alpha1 fields v1alpha2 has no
+// place for. For Hardware created as v1alpha2 it is a best effort, see addInterfaceMetadata.
 package backend
 
 import (
@@ -7,8 +13,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"net/netip"
+	"slices"
 
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/tootles/internal/frontend/ec2"
 	"go.opentelemetry.io/otel"
@@ -19,7 +30,9 @@ const tracerName = "github.com/tinkerbell/tinkerbell"
 
 // HardwareFilterer is the interface required to filter Hardware objects.
 type HardwareFilterer interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha1.Hardware, error)
+	// FilterHardwareV1Alpha2 returns the one Hardware opts matches. ByIPAddress matches the
+	// addresses of its network interfaces and ByInstanceID its spec.instance.lookupID.
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Backend provides tootles instance metadata by filtering Hardware via a HardwareFilterer.
@@ -38,7 +51,12 @@ func (b *Backend) GetHackInstance(ctx context.Context, ip string) (data.HackInst
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetHackInstance")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip})
+	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip})
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return data.HackInstance{}, err
+	}
+	old, err := toV1Alpha1(hw)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return data.HackInstance{}, err
@@ -46,7 +64,7 @@ func (b *Backend) GetHackInstance(ctx context.Context, ip string) (data.HackInst
 
 	span.SetStatus(codes.Ok, "")
 
-	return toHackInstance(*hw)
+	return toHackInstance(*old)
 }
 
 // GetEC2Instance returns an Ec2Instance for the hardware associated with the given IP.
@@ -55,37 +73,67 @@ func (b *Backend) GetEC2Instance(ctx context.Context, ip string) (data.Ec2Instan
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetEC2Instance")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip})
+	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return data.Ec2Instance{}, toInstanceNotFoundErr(err)
+		return data.Ec2Instance{}, toInstanceNotFoundErr(err, ec2.ErrInstanceNotFound)
+	}
+	i, err := ec2Instance(hw, ip)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return data.Ec2Instance{}, err
 	}
 
 	span.SetStatus(codes.Ok, "")
 
-	return toEC2Instance(*hw), nil
+	return i, nil
 }
 
-// GetEC2InstanceByInstanceID returns an Ec2Instance for the hardware with the given instance ID.
+// GetEC2InstanceByInstanceID returns an Ec2Instance for the hardware with the given instance ID,
+// its spec.instance.lookupID (the v1alpha1 metadata.instance.id).
 func (b *Backend) GetEC2InstanceByInstanceID(ctx context.Context, instanceID string) (data.Ec2Instance, error) {
 	tracer := otel.Tracer(tracerName)
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetEC2InstanceByInstanceID")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByInstanceID: instanceID})
+	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByInstanceID: instanceID})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return data.Ec2Instance{}, toInstanceNotFoundErr(err)
+		return data.Ec2Instance{}, toInstanceNotFoundErr(err, ec2.ErrInstanceNotFound)
+	}
+	i, err := ec2Instance(hw, "")
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return data.Ec2Instance{}, err
 	}
 
 	span.SetStatus(codes.Ok, "")
 
-	return toEC2Instance(*hw), nil
+	return i, nil
+}
+
+// toV1Alpha1 returns the v1alpha1 view of hw.
+func toV1Alpha1(hw *v1alpha2.Hardware) (*v1alpha1.Hardware, error) {
+	old := &v1alpha1.Hardware{}
+	if err := conversion.HardwareToV1Alpha1(hw, old); err != nil {
+		return nil, fmt.Errorf("convert hardware %s/%s to v1alpha1: %w", hw.Namespace, hw.Name, err)
+	}
+	return old, nil
+}
+
+// createdThroughV1Alpha1 reports whether hw was created through v1alpha1, so that its v1alpha1
+// view holds all of its v1alpha1 data.
+func createdThroughV1Alpha1(hw *v1alpha2.Hardware) bool {
+	_, ok := hw.Annotations[conversion.AnnotationV1Alpha1]
+	return ok
 }
 
 // toHackInstance converts a Tinkerbell Hardware resource to a HackInstance by marshalling and
 // unmarshalling. This works because the Hardware resource has historical roots that align with
 // the HackInstance struct that is derived from the rootio action.
+//
+// The data it serves, metadata.instance.storage, only exists in v1alpha1: Hardware created as
+// v1alpha2 gets an empty HackInstance.
 func toHackInstance(hw v1alpha1.Hardware) (data.HackInstance, error) {
 	marshalled, err := json.Marshal(hw.Spec)
 	if err != nil {
@@ -97,6 +145,20 @@ func toHackInstance(hw v1alpha1.Hardware) (data.HackInstance, error) {
 		return data.HackInstance{}, err
 	}
 
+	return i, nil
+}
+
+// ec2Instance returns the EC2 data of hw, built from its v1alpha1 view. ip is the address the
+// request came from, empty when hw was looked up by instance ID.
+func ec2Instance(hw *v1alpha2.Hardware, ip string) (data.Ec2Instance, error) {
+	old, err := toV1Alpha1(hw)
+	if err != nil {
+		return data.Ec2Instance{}, err
+	}
+	i := toEC2Instance(*old)
+	if !createdThroughV1Alpha1(hw) {
+		addInterfaceMetadata(&i, hw, ip)
+	}
 	return i, nil
 }
 
@@ -149,16 +211,77 @@ func toEC2Instance(hw v1alpha1.Hardware) data.Ec2Instance {
 	return i
 }
 
+// addInterfaceMetadata adds to i the EC2 data that Hardware created as v1alpha2 holds per network
+// interface rather than in an instance: the hostname and addresses of the interface with the
+// address ip or, when no interface has it (a lookup by instance ID), of the only interface with
+// IPAM. Its IPv4 address is local-ipv4 and its IPv6 address public-ipv6, as v1alpha1 serves
+// them. The rest of i comes from the v1alpha1 view: instance-id is spec.instance.lookupID,
+// public-keys spec.instance.sshKeys and user-data spec.instance.userdata.
+//
+// v1alpha2 has no equivalent of the other v1alpha1 instance metadata, so Hardware created as
+// v1alpha2 serves these empty: public-ipv4 (v1alpha2 addresses are neither public nor private),
+// plan and facility, tags, iqn, and operating-system.
+func addInterfaceMetadata(i *data.Ec2Instance, hw *v1alpha2.Hardware, ip string) {
+	ipam, matched := interfaceWithAddress(hw, ip)
+	if ipam == nil {
+		return
+	}
+	hostname := ""
+	for _, addr := range []*v1alpha2.IP{matched, ipam.IPv4, ipam.IPv6} {
+		if addr != nil && addr.Hostname != nil && *addr.Hostname != "" {
+			hostname = *addr.Hostname
+			break
+		}
+	}
+	i.Metadata.Hostname, i.Metadata.LocalHostname = hostname, hostname
+	if ipam.IPv4 != nil {
+		i.Metadata.LocalIPv4 = ipam.IPv4.Address
+	}
+	if ipam.IPv6 != nil {
+		i.Metadata.PublicIPv6 = ipam.IPv6.Address
+	}
+}
+
+// interfaceWithAddress returns the IPAM of the network interface of hw with the address ip, and
+// that address. When no interface has it, it returns the IPAM of the only interface with IPAM,
+// if there is exactly one, and no matched address.
+func interfaceWithAddress(hw *v1alpha2.Hardware, ip string) (*v1alpha2.IPAM, *v1alpha2.IP) {
+	want, _ := netip.ParseAddr(ip)
+	var withIPAM []*v1alpha2.IPAM
+	for _, mac := range slices.Sorted(maps.Keys(hw.Spec.NetworkInterfaces)) {
+		ipam := hw.Spec.NetworkInterfaces[mac].IPAM
+		if ipam == nil {
+			continue
+		}
+		withIPAM = append(withIPAM, ipam)
+		if !want.IsValid() {
+			continue
+		}
+		for _, addr := range []*v1alpha2.IP{ipam.IPv4, ipam.IPv6} {
+			if addr == nil {
+				continue
+			}
+			if got, err := netip.ParseAddr(addr.Address); err == nil && got.Unmap() == want.Unmap() {
+				return ipam, addr
+			}
+		}
+	}
+	if len(withIPAM) == 1 {
+		return withIPAM[0], nil
+	}
+	return nil, nil
+}
+
 // notFounder is implemented by errors that indicate a resource was not found.
 type notFounder interface {
 	NotFound() bool
 }
 
 // toInstanceNotFoundErr checks if err indicates a not-found condition and, if so,
-// wraps it as ec2.ErrInstanceNotFound so the frontend handles it correctly.
-func toInstanceNotFoundErr(err error) error {
+// wraps it as notFound, the frontend's not found error, so the frontend handles it correctly.
+func toInstanceNotFoundErr(err, notFound error) error {
 	if isNotFound(err) {
-		return fmt.Errorf("%w: %w", ec2.ErrInstanceNotFound, err)
+		return fmt.Errorf("%w: %w", notFound, err)
 	}
 	return err
 }

@@ -9,7 +9,7 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/gin-gonic/gin"
-	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/tootles/internal/backend"
 	"github.com/tinkerbell/tinkerbell/tootles/internal/frontend/ec2"
@@ -24,9 +24,9 @@ type Config struct {
 }
 
 // HardwareFilterer is the interface required to filter Hardware objects.
-// It is implemented by the kube and noop backends.
+// It is implemented by the kube backend's rendered reader and the noop backend.
 type HardwareFilterer interface {
-	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha1.Hardware, error)
+	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // SetBackendFromFilterer configures BackendEc2 and BackendHack from a HardwareFilterer.
