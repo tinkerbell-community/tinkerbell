@@ -124,6 +124,20 @@ func (c *Config) Execute(ctx context.Context, a spec.Action) error {
 		}
 	}()
 
+	// Attach to the container's stdout and stderr before starting it, so that none of its output
+	// is missed, and log them while it runs.
+	attachResp, err := c.Client.ContainerAttach(ctx, create.ID, client.ContainerAttachOptions{
+		Stream: true,
+		Stdout: true,
+		Stderr: true,
+	})
+	if err != nil {
+		return fmt.Errorf("error attaching to container: %w", err)
+	}
+	defer attachResp.Close()
+	output := make(chan struct{})
+	go logOutput(c.Log, attachResp.Reader, containerName, output)
+
 	// Issue the wait with a 'next-exit' condition so we can await a response originating from
 	// ContainerStart().
 	waitResult := c.Client.ContainerWait(ctx, create.ID, client.ContainerWaitOptions{Condition: container.WaitConditionNextExit})
@@ -132,37 +146,10 @@ func (c *Config) Execute(ctx context.Context, a spec.Action) error {
 		return fmt.Errorf("error starting container: %w", err)
 	}
 
-	// Attach to the container's stdout and stderr streams and log them
-	attachResp, err := c.Client.ContainerAttach(ctx, create.ID, client.ContainerAttachOptions{
-		Stream: true,
-		Stdout: true,
-		Stderr: true,
-		Logs:   true,
-	})
-	if err != nil {
-		return fmt.Errorf("error attaching to container: %w", err)
-	}
-	defer attachResp.Close()
-
-	// Stream logs in a goroutine so we don't block waiting for the container to exit
-	go func() {
-		buf := make([]byte, 4096)
-		for {
-			n, err := attachResp.Reader.Read(buf)
-			if n > 0 {
-				c.Log.Info(string(buf[:n]), "container_name", containerName)
-			}
-			if err != nil {
-				if err != io.EOF {
-					c.Log.Error(err, "error reading container output", "container_name", containerName)
-				}
-				break
-			}
-		}
-	}()
-
 	select {
 	case result := <-waitResult.Result:
+		// Log all the output, which may explain a failure, before the stream is closed.
+		waitOutput(output)
 		if result.StatusCode == 0 {
 			return nil
 		}
@@ -179,6 +166,7 @@ func (c *Config) Execute(ctx context.Context, a spec.Action) error {
 		if err != nil {
 			c.Log.Info("Failed to gracefully stop container", "error", err)
 		}
+		waitOutput(output)
 		return fmt.Errorf("context error: %w", ctx.Err())
 	}
 }
