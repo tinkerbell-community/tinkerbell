@@ -24,6 +24,30 @@ const (
 	defaultOperationTimeout = 10 * time.Minute
 )
 
+// operationTimeout returns how long op may run.
+func operationTimeout(op bmc.Operations) time.Duration {
+	if op.TimeoutSeconds > 0 {
+		return time.Duration(op.TimeoutSeconds) * time.Second
+	}
+	return defaultOperationTimeout
+}
+
+// describeOperation names op for conditions and logs.
+func describeOperation(op bmc.Operations) string {
+	switch {
+	case op.PowerAction != nil:
+		return "powerAction " + op.PowerAction.String()
+	case op.BootDevice != nil:
+		return "bootDevice " + op.BootDevice.Name.String()
+	case op.VirtualMediaAction != nil:
+		return "virtualMediaAction " + op.VirtualMediaAction.Kind.String()
+	case op.NetworkBootConfig != nil:
+		return "networkBootConfig"
+	default:
+		return "no operation"
+	}
+}
+
 // runOperation performs op on the BMC. These are the bmclib calls bmc Tasks have
 // always made for the equivalent v1alpha1 action.
 func runOperation(ctx context.Context, logger logr.Logger, op bmc.Operations, bmcClient *bmclib.Client) error {

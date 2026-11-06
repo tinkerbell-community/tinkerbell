@@ -8,6 +8,7 @@ import (
 	"github.com/cenkalti/backoff/v5"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -25,7 +26,10 @@ const (
 
 var schemeBuilder = runtime.NewSchemeBuilder(
 	scheme.AddToScheme,
+	// The deprecated bmc Machine and Task, which only exist in v1alpha1.
 	bmc.AddToScheme,
+	// Jobs.
+	bmcv2.AddToScheme,
 	// Needed so the Machine controller can read/write the linked Hardware object's
 	// status.attributes.outOfBand field.
 	v1alpha2.AddToScheme,
@@ -84,7 +88,7 @@ func (r *Reconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manager, bmc
 		return fmt.Errorf("unable to create Machines controller: %w", err)
 	}
 
-	if err := NewJobReconciler(mgr.GetClient()).SetupWithManager(ctx, mgr, opts); err != nil {
+	if err := NewJobReconciler(mgr.GetClient(), mgr.GetAPIReader(), bmcClient).SetupWithManager(ctx, mgr, opts); err != nil {
 		return fmt.Errorf("unable to create Jobs controller: %w", err)
 	}
 

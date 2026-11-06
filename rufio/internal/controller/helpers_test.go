@@ -2,6 +2,8 @@ package controller_test
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	bmclib "github.com/bmc-toolbox/bmclib/v2"
 	bmclibbmc "github.com/bmc-toolbox/bmclib/v2/bmc"
@@ -11,6 +13,7 @@ import (
 	"github.com/jacobweinstock/registrar"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"github.com/tinkerbell/tinkerbell/rufio/internal/controller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -24,12 +27,13 @@ import (
 // This source file is currently a bucket of stuff. If it grows too big, consider breaking it
 // into more granular helper sources.
 
-// newClientBuilder creates a fake kube client builder loaded with Rufio's and Kubernetes'
-// corev1 schemes. It uses a basic ObjectTracker to avoid managed fields issues with
-// controller-runtime v0.22+.
-func newClientBuilder() *fake.ClientBuilder {
+// newScheme returns a scheme with the types Rufio reads and writes.
+func newScheme() *runtime.Scheme {
 	scheme := runtime.NewScheme()
 	if err := bmc.AddToScheme(scheme); err != nil {
+		panic(err)
+	}
+	if err := bmcv2.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
 	if err := v1alpha2.AddToScheme(scheme); err != nil {
@@ -38,6 +42,14 @@ func newClientBuilder() *fake.ClientBuilder {
 	if err := corev1.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
+	return scheme
+}
+
+// newClientBuilder creates a fake kube client builder loaded with Rufio's and Kubernetes'
+// corev1 schemes. It uses a basic ObjectTracker to avoid managed fields issues with
+// controller-runtime v0.22+.
+func newClientBuilder() *fake.ClientBuilder {
+	scheme := newScheme()
 
 	ensureTypeMeta := func(obj client.Object) {
 		if obj != nil {
@@ -61,6 +73,7 @@ func newClientBuilder() *fake.ClientBuilder {
 		WithScheme(scheme).
 		WithObjectTracker(tracker).
 		WithIndex(&v1alpha2.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
+		WithIndex(&bmc.Task{}, ".metadata.controller", controller.TaskOwnerIndexFunc).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				err := c.Get(ctx, key, obj, opts...)
@@ -140,6 +153,38 @@ type testProvider struct {
 	// before the URL, since a BMC that still has the stricter TLS mode active can reject a
 	// plain-HTTP URL.
 	NetworkBootCallOrder []string
+
+	// FollowPowerSet makes PowerSet change the power state PowerStateGet reports,
+	// as a BMC does once the power action took effect.
+	FollowPowerSet bool
+
+	// mu guards the fields below and Powerstate, which tests running controllers
+	// concurrently read and change.
+	mu sync.Mutex
+	// Calls records every BMC call made through this provider, with its
+	// arguments, in order. Opens counts the BMC sessions opened.
+	Calls []string
+	Opens int
+}
+
+func (t *testProvider) recordf(format string, args ...any) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.Calls = append(t.Calls, fmt.Sprintf(format, args...))
+}
+
+// recorded returns a copy of the BMC calls made so far and the number of sessions opened.
+func (t *testProvider) recorded() ([]string, int) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return append([]string(nil), t.Calls...), t.Opens
+}
+
+// setPowerState changes the power state the provider reports.
+func (t *testProvider) setPowerState(s string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.Powerstate = s
 }
 
 func (t *testProvider) Name() string {
@@ -173,11 +218,17 @@ func (t *testProvider) Features() registrar.Features {
 // bmclib.Client.Inventory() calls in tests — no live BMC or Redfish simulator
 // needed.
 func (t *testProvider) Inventory(_ context.Context) (*common.Device, error) {
+	t.recordf("Inventory")
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	t.InventoryCalls++
 	return t.InventoryDevice, t.ErrInventory
 }
 
 func (t *testProvider) Open(_ context.Context) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.Opens++
 	return t.ErrOpen
 }
 
@@ -186,35 +237,59 @@ func (t *testProvider) Close(_ context.Context) error {
 }
 
 func (t *testProvider) PowerStateGet(_ context.Context) (string, error) {
+	t.recordf("PowerStateGet")
+	t.mu.Lock()
+	defer t.mu.Unlock()
 	return t.Powerstate, t.ErrPowerStateGet
 }
 
-func (t *testProvider) PowerSet(_ context.Context, _ string) (ok bool, err error) {
+func (t *testProvider) PowerSet(_ context.Context, state string) (ok bool, err error) {
+	t.recordf("PowerSet(%s)", state)
+	if t.FollowPowerSet && t.ErrPowerStateSet == nil {
+		switch state {
+		case "on":
+			t.setPowerState("on")
+		case "off", "soft":
+			t.setPowerState("off")
+		}
+	}
 	return t.PowerSetOK, t.ErrPowerStateSet
 }
 
-func (t *testProvider) BootDeviceSet(_ context.Context, _ string, _, _ bool) (ok bool, err error) {
+func (t *testProvider) BootDeviceSet(_ context.Context, device string, persistent, efiBoot bool) (ok bool, err error) {
+	t.recordf("BootDeviceSet(%s, persistent=%v, efi=%v)", device, persistent, efiBoot)
 	return t.BootdeviceOK, t.ErrBootDeviceSet
 }
 
-func (t *testProvider) SetVirtualMedia(_ context.Context, _ string, _ string) (ok bool, err error) {
+func (t *testProvider) SetVirtualMedia(_ context.Context, kind string, mediaURL string) (ok bool, err error) {
+	t.recordf("SetVirtualMedia(%s, %s)", kind, mediaURL)
 	return t.VirtualMediaOK, t.ErrVirtualMediaInsert
 }
 
-func (t *testProvider) SetNetworkBootEnabled(_ context.Context, _, _ *bool) (ok bool, err error) {
+func (t *testProvider) SetNetworkBootEnabled(_ context.Context, httpBoot, pxeBoot *bool) (ok bool, err error) {
+	t.recordf("SetNetworkBootEnabled(%v, %v)", fmtBoolPtr(httpBoot), fmtBoolPtr(pxeBoot))
 	return t.NetworkBootEnabledOK, t.ErrSetNetworkBootEnabled
 }
 
 func (t *testProvider) SetHTTPBootURI(_ context.Context, uri string) (ok bool, err error) {
+	t.recordf("SetHTTPBootURI(%s)", uri)
 	t.SetHTTPBootURICalls = append(t.SetHTTPBootURICalls, uri)
 	t.NetworkBootCallOrder = append(t.NetworkBootCallOrder, "SetHTTPBootURI")
 	return t.HTTPBootURIOK, t.ErrHTTPBootURISet
 }
 
 func (t *testProvider) SetHTTPBootTLSMode(_ context.Context, mode bmclibbmc.HTTPBootTLSMode) (ok bool, err error) {
+	t.recordf("SetHTTPBootTLSMode(%s)", mode)
 	t.SetHTTPBootTLSModeCalls = append(t.SetHTTPBootTLSModeCalls, string(mode))
 	t.NetworkBootCallOrder = append(t.NetworkBootCallOrder, "SetHTTPBootTLSMode")
 	return t.HTTPBootTLSModeOK, t.ErrHTTPBootTLSModeSet
+}
+
+func fmtBoolPtr(b *bool) string {
+	if b == nil {
+		return "nil"
+	}
+	return fmt.Sprint(*b)
 }
 
 // newMockBMCClientFactoryFunc returns a new BMCClientFactoryFunc.
