@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/go-logr/logr"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	"quamina.net/go/quamina"
 )
 
@@ -22,7 +24,7 @@ type evaluationData struct {
 	// Source is the Object that contains the references.
 	Source source `json:"source,omitempty"`
 	// Reference is a reference to another Object from the source.
-	Reference tinkerbell.Reference `json:"reference,omitempty"`
+	Reference v1alpha2.Reference `json:"reference,omitempty"`
 }
 
 // source is the Object that contains the references.
@@ -34,13 +36,24 @@ type source struct {
 }
 
 // ResolveReferences returns the objects hw's spec.references point to, keyed by
-// reference name. When b.Namespaces is set, a reference outside them is reported in
-// the error without being read. Otherwise a reference is read only if the allow
-// list matches it or the deny list does not; with no deny list configured, an
-// implicit deny-all rule is used and can still be overridden by an allow-list
-// match. Denied and unreadable references are omitted from the map and reported
-// in the error; other references are still returned.
-func (b *Backend) ResolveReferences(ctx context.Context, hw *tinkerbell.Hardware) (map[string]any, error) {
+// reference name. It is ResolveReferencesFor with hw as the source.
+func (b *Backend) ResolveReferences(ctx context.Context, hw *v1alpha1.Hardware) (map[string]any, error) {
+	refs := make(map[string]v1alpha2.Reference, len(hw.Spec.References))
+	for name, rf := range hw.Spec.References {
+		refs[name] = v1alpha2.Reference(rf)
+	}
+	return b.ResolveReferencesFor(ctx, types.NamespacedName{Namespace: hw.Namespace, Name: hw.Name}, refs)
+}
+
+// ResolveReferencesFor returns the objects refs point to, keyed by reference
+// name, for src, the object holding refs (a Hardware, Task or Workflow). When
+// b.Namespaces is set, a reference outside them is reported in the error without
+// being read. Otherwise a reference is read only if the allow list matches it or
+// the deny list does not; with no deny list configured, an implicit deny-all rule
+// is used and can still be overridden by an allow-list match. Rules see src as
+// the source. Denied and unreadable references are omitted from the map and
+// reported in the error; other references are still returned.
+func (b *Backend) ResolveReferencesFor(ctx context.Context, src types.NamespacedName, refs map[string]v1alpha2.Reference) (map[string]any, error) {
 	logger := logr.FromContextOrDiscard(ctx)
 	denylist := b.HardwareReferenceDenyListRules
 	if len(denylist) == 0 {
@@ -49,7 +62,7 @@ func (b *Backend) ResolveReferences(ctx context.Context, hw *tinkerbell.Hardware
 
 	references := make(map[string]any)
 	var refErr error
-	for refName, rf := range hw.Spec.References {
+	for refName, rf := range refs {
 		var missing []string
 		if rf.Name == "" {
 			missing = append(missing, "name")
@@ -75,7 +88,7 @@ func (b *Backend) ResolveReferences(ctx context.Context, hw *tinkerbell.Hardware
 		}
 
 		ed := evaluationData{
-			Source:    source{Name: hw.Name, Namespace: hw.Namespace},
+			Source:    source{Name: src.Name, Namespace: src.Namespace},
 			Reference: rf,
 		}
 		denied, drules, err := evaluate(ctx, denylist, ed)

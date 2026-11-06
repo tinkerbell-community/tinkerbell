@@ -7,10 +7,12 @@ import (
 	"testing"
 
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 )
 
@@ -191,11 +193,100 @@ func TestResolveReferencesAppliesPolicyToNormalizedResource(t *testing.T) {
 	}
 }
 
+// TestResolveReferencesFor resolves the references of objects other than
+// Hardware, such as Tasks and Workflows, with the same policy.
+func TestResolveReferencesFor(t *testing.T) {
+	cm := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1",
+		"kind":       "ConfigMap",
+		"metadata":   map[string]any{"name": "cm1", "namespace": "tink-system"},
+		"data":       map[string]any{"domain": "example.org"},
+	}}
+	refs := map[string]v1alpha2.Reference{
+		"cm": {Name: "cm1", Namespace: "tink-system", Version: "v1", Resource: "ConfigMaps"},
+	}
+	tests := map[string]struct {
+		source      types.NamespacedName
+		namespaces  []string
+		allow, deny []string
+		refs        map[string]v1alpha2.Reference
+		wantErr     bool
+	}{
+		"allowed by source name": {
+			source: types.NamespacedName{Namespace: "tink-system", Name: "install"},
+			allow:  []string{`{"source":{"name":["install"]}}`},
+			refs:   refs,
+		},
+		"source does not match the allow list": {
+			source:  types.NamespacedName{Namespace: "tink-system", Name: "other"},
+			allow:   []string{`{"source":{"name":["install"]}}`},
+			refs:    refs,
+			wantErr: true,
+		},
+		"allow overrides deny": {
+			source: types.NamespacedName{Namespace: "tink-system", Name: "install"},
+			allow:  []string{`{"source":{"name":["install"]}}`},
+			deny:   []string{`{"reference":{"resource":["configmaps"]}}`},
+			refs:   refs,
+		},
+		"outside the backend namespaces": {
+			source:     types.NamespacedName{Namespace: "tink-system", Name: "install"},
+			namespaces: []string{"other"},
+			allow:      []string{`{"source":{"name":["install"]}}`},
+			refs:       refs,
+			wantErr:    true,
+		},
+		"no references": {source: types.NamespacedName{Namespace: "tink-system", Name: "install"}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			b := &Backend{
+				dynamicClient:                   dynamicfake.NewSimpleDynamicClient(runtime.NewScheme(), cm),
+				Namespaces:                      tt.namespaces,
+				HardwareReferenceAllowListRules: tt.allow,
+				HardwareReferenceDenyListRules:  tt.deny,
+			}
+			got, err := b.ResolveReferencesFor(context.Background(), tt.source, tt.refs)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got == nil {
+				t.Fatal("want a map even when nothing resolves")
+			}
+			if wantResolved := len(tt.refs) > 0 && !tt.wantErr; wantResolved != (got["cm"] != nil) {
+				t.Fatalf("resolved %v, want the ConfigMap resolved: %v", got, wantResolved)
+			}
+		})
+	}
+}
+
+// TestResolveReferencesSource checks that the v1alpha1 wrapper evaluates rules
+// against the Hardware as the source.
+func TestResolveReferencesSource(t *testing.T) {
+	b := &Backend{
+		dynamicClient:                   &fakeDynamicClient{gvr: schema.GroupVersionResource{Version: "v1"}},
+		HardwareReferenceAllowListRules: []string{`{"source":{"name":["machine1"],"namespace":["tink-system"]}}`},
+	}
+	hw := &tinkerbell.Hardware{
+		ObjectMeta: metav1.ObjectMeta{Name: "machine1", Namespace: "tink-system"},
+		Spec: tinkerbell.HardwareSpec{References: map[string]tinkerbell.Reference{
+			"cm": {Name: "cm1", Namespace: "tink-system", Version: "v1", Resource: "configmaps"},
+		}},
+	}
+	if got, err := b.ResolveReferences(context.Background(), hw); err != nil || got["cm"] == nil {
+		t.Fatalf("resolved %v, %v; want the reference allowed for its Hardware", got, err)
+	}
+	hw.Name = "machine2"
+	if _, err := b.ResolveReferences(context.Background(), hw); err == nil {
+		t.Fatal("want another Hardware's reference denied")
+	}
+}
+
 // TestDocumentedRulesMatch guards the rule examples in docs/technical/REFERENCES.md.
 func TestDocumentedRulesMatch(t *testing.T) {
 	ed := evaluationData{
 		Source:    source{Name: "example1", Namespace: "tink-system"},
-		Reference: tinkerbell.Reference{Namespace: "example", Name: "exampleLVM", Group: "example.org", Version: "v1alpha1", Resource: "lvms"},
+		Reference: v1alpha2.Reference{Namespace: "example", Name: "exampleLVM", Group: "example.org", Version: "v1alpha1", Resource: "lvms"},
 	}
 	for _, rule := range []string{
 		`{"source":{"namespace":["tink-system"]}}`,
@@ -221,7 +312,7 @@ func TestMatch(t *testing.T) {
 		"no match empty rules": {
 			rules: []string{},
 			data: evaluationData{
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
@@ -233,13 +324,13 @@ func TestMatch(t *testing.T) {
 		},
 		"no match empty data struct": {
 			rules:         []string{`{"reference":{"name":[{"wildcard":"*"}]}}`},
-			data:          evaluationData{Reference: tinkerbell.Reference{}},
+			data:          evaluationData{Reference: v1alpha2.Reference{}},
 			expectedMatch: false,
 		},
 		"no match": {
 			rules: []string{`{"reference":{"resource":["workflows"]}},{"version":["example"]}`},
 			data: evaluationData{
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
@@ -252,7 +343,7 @@ func TestMatch(t *testing.T) {
 		"match": {
 			rules: []string{`{"reference":{"name":["example"]}}`},
 			data: evaluationData{
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
@@ -266,7 +357,7 @@ func TestMatch(t *testing.T) {
 		"deny all": {
 			rules: []string{`{"reference":{"name":[{"wildcard":"*"}]}}`},
 			data: evaluationData{
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
@@ -280,7 +371,7 @@ func TestMatch(t *testing.T) {
 		"bad rule": {
 			rules: []string{"this is not the rule format"},
 			data: evaluationData{
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
@@ -297,7 +388,7 @@ func TestMatch(t *testing.T) {
 				Source: source{
 					Namespace: "tink-system",
 				},
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
@@ -314,7 +405,7 @@ func TestMatch(t *testing.T) {
 				Source: source{
 					Namespace: "tink-system",
 				},
-				Reference: tinkerbell.Reference{
+				Reference: v1alpha2.Reference{
 					Namespace: "tink",
 					Name:      "example",
 					Group:     "tinkerbell.org",
