@@ -101,7 +101,14 @@ type WorkflowRule struct {
 
 // WorkflowConfig defines the Workflow to be created when a rule matches.
 type WorkflowConfig struct {
-	// Namespace is the namespace in which the Workflow will be created.
+	// Namespace must be empty or the Policy's own namespace. A rule naming another
+	// namespace is skipped: letting a Policy create Workflows elsewhere would let anyone
+	// who can write Policies in one namespace run Workflows against Hardware in another.
+	//
+	// Deprecated: Workflows are always created in the Policy's namespace. This field
+	// will be removed in a future release.
+	//
+	// +optional
 	Namespace string `json:"namespace,omitempty"`
 
 	// AddAttributes indicates if the Agent attributes should be added as an Annotation in the created Workflow.

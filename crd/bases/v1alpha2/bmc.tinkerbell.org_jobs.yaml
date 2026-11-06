@@ -76,9 +76,32 @@ spec:
                     description: InsecureTLS indicates whether to skip TLS certificate
                       verification when connecting to the BMC.
                     type: boolean
+                  port:
+                    description: |-
+                      Port is the port number for connecting to the BMC.
+                      When omitted, each provider uses its own default (623 for IPMI, 443 for Redfish).
+                    maximum: 65535
+                    minimum: 0
+                    type: integer
                   providerOptions:
                     description: ProviderOptions contains provider specific options.
                     properties:
+                      homeassistant:
+                        description: HomeAssistant contains the options to customize
+                          the HomeAssistant provider.
+                        properties:
+                          powerOperationDelaySeconds:
+                            description: PowerOperationDelaySeconds is the number
+                              of seconds to wait after a power operation before proceeding.
+                            format: int32
+                            type: integer
+                          switchEntityID:
+                            description: SwitchEntityID is the entity ID of the Home
+                              Assistant switch entity to control power state.
+                            type: string
+                        required:
+                        - switchEntityID
+                        type: object
                       intelAMT:
                         description: IntelAMT contains the options to customize the
                           IntelAMT provider.
@@ -304,6 +327,43 @@ spec:
                             should be set persistently as the first boot device.
                           type: boolean
                       type: object
+                    networkBootConfig:
+                      description: |-
+                        NetworkBootConfig enables/disables network boot protocol capabilities (UEFI HTTP Boot,
+                        legacy PXE) in BIOS/UEFI firmware, and/or sets the URL UEFI HTTP Boot fetches its boot
+                        image from. Support for the specific BMC vendor is implemented in bmclib.
+                      minProperties: 1
+                      properties:
+                        httpBootEnabled:
+                          description: |-
+                            HTTPBootEnabled enables (true) or disables (false) UEFI HTTP Boot capability, IPv4 and
+                            IPv6 both.
+                          type: boolean
+                        httpBootTLSMode:
+                          description: |-
+                            HTTPBootTLSMode sets the TLS authentication mode UEFI HTTP Boot uses to connect to the HTTP
+                            boot server: "None" allows fetching the boot image over plain HTTP, "OneWay" requires HTTPS
+                            with the server authenticated by the client. Some hardware defaults to "OneWay", which
+                            rejects an HTTPBootURL that isn't HTTPS. Independent of HTTPBootEnabled and HTTPBootURL.
+                          enum:
+                          - None
+                          - OneWay
+                          type: string
+                        httpBootURL:
+                          description: |-
+                            HTTPBootURL sets the URL UEFI HTTP Boot fetches its boot image from, via the standard
+                            Redfish ComputerSystem.Boot.HttpBootUri property. Independent of HTTPBootEnabled: setting
+                            the URL does not enable the capability, and enabling the capability does not require a URL.
+                          format: uri
+                          type: string
+                          x-kubernetes-validations:
+                          - message: httpBootURL must be an http or https URL
+                            rule: self.startsWith('http://') || self.startsWith('https://')
+                        pxeBootEnabled:
+                          description: PXEBootEnabled enables (true) or disables (false)
+                            legacy PXE boot capability.
+                          type: boolean
+                      type: object
                     powerAction:
                       description: PowerAction represents a baseboard management power
                         operation.
@@ -338,10 +398,11 @@ spec:
                       type: object
                   type: object
                   x-kubernetes-validations:
-                  - message: only one of powerAction, bootDevice, or virtualMediaAction
-                      can be specified
+                  - message: only one of powerAction, bootDevice, virtualMediaAction,
+                      or networkBootConfig can be specified
                     rule: '(has(self.powerAction) ? 1 : 0) + (has(self.bootDevice)
-                      ? 1 : 0) + (has(self.virtualMediaAction) ? 1 : 0) == 1'
+                      ? 1 : 0) + (has(self.virtualMediaAction) ? 1 : 0) + (has(self.networkBootConfig)
+                      ? 1 : 0) == 1'
                 minItems: 1
                 type: array
             required:

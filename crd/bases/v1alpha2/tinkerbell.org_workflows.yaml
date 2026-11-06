@@ -115,10 +115,12 @@ spec:
                 type: object
               references:
                 additionalProperties:
+                  description: Reference identifies a Kubernetes object, of any kind,
+                    whose contents are made available to templating.
                   properties:
                     group:
                       description: |-
-                        Group of the referent.
+                        Group of the referent. Empty for the core API group.
                         More info: https://kubernetes.io/docs/reference/using-api/#api-groups
                       type: string
                     name:
@@ -128,7 +130,7 @@ spec:
                       type: string
                     namespace:
                       description: |-
-                        Namespace of the referent.
+                        Namespace of the referent. Leave empty for cluster-scoped resources.
                         More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
                       type: string
                     resource:
@@ -141,6 +143,10 @@ spec:
                         API version of the referent.
                         More info: https://kubernetes.io/docs/reference/using-api/#api-versioning
                       type: string
+                  required:
+                  - name
+                  - resource
+                  - version
                   type: object
                 description: |-
                   References are dynamic and defined by the user.
@@ -255,6 +261,46 @@ spec:
                                               as the first boot device.
                                             type: boolean
                                         type: object
+                                      networkBootConfig:
+                                        description: |-
+                                          NetworkBootConfig enables/disables network boot protocol capabilities (UEFI HTTP Boot,
+                                          legacy PXE) in BIOS/UEFI firmware, and/or sets the URL UEFI HTTP Boot fetches its boot
+                                          image from. Support for the specific BMC vendor is implemented in bmclib.
+                                        minProperties: 1
+                                        properties:
+                                          httpBootEnabled:
+                                            description: |-
+                                              HTTPBootEnabled enables (true) or disables (false) UEFI HTTP Boot capability, IPv4 and
+                                              IPv6 both.
+                                            type: boolean
+                                          httpBootTLSMode:
+                                            description: |-
+                                              HTTPBootTLSMode sets the TLS authentication mode UEFI HTTP Boot uses to connect to the HTTP
+                                              boot server: "None" allows fetching the boot image over plain HTTP, "OneWay" requires HTTPS
+                                              with the server authenticated by the client. Some hardware defaults to "OneWay", which
+                                              rejects an HTTPBootURL that isn't HTTPS. Independent of HTTPBootEnabled and HTTPBootURL.
+                                            enum:
+                                            - None
+                                            - OneWay
+                                            type: string
+                                          httpBootURL:
+                                            description: |-
+                                              HTTPBootURL sets the URL UEFI HTTP Boot fetches its boot image from, via the standard
+                                              Redfish ComputerSystem.Boot.HttpBootUri property. Independent of HTTPBootEnabled: setting
+                                              the URL does not enable the capability, and enabling the capability does not require a URL.
+                                            format: uri
+                                            type: string
+                                            x-kubernetes-validations:
+                                            - message: httpBootURL must be an http
+                                                or https URL
+                                              rule: self.startsWith('http://') ||
+                                                self.startsWith('https://')
+                                          pxeBootEnabled:
+                                            description: PXEBootEnabled enables (true)
+                                              or disables (false) legacy PXE boot
+                                              capability.
+                                            type: boolean
+                                        type: object
                                       powerAction:
                                         description: PowerAction represents a baseboard
                                           management power operation.
@@ -291,10 +337,12 @@ spec:
                                     type: object
                                     x-kubernetes-validations:
                                     - message: only one of powerAction, bootDevice,
-                                        or virtualMediaAction can be specified
+                                        virtualMediaAction, or networkBootConfig can
+                                        be specified
                                       rule: '(has(self.powerAction) ? 1 : 0) + (has(self.bootDevice)
                                         ? 1 : 0) + (has(self.virtualMediaAction) ?
-                                        1 : 0) == 1'
+                                        1 : 0) + (has(self.networkBootConfig) ? 1
+                                        : 0) == 1'
                                   type: array
                                 preOperations:
                                   description: |-
@@ -326,6 +374,46 @@ spec:
                                               as the first boot device.
                                             type: boolean
                                         type: object
+                                      networkBootConfig:
+                                        description: |-
+                                          NetworkBootConfig enables/disables network boot protocol capabilities (UEFI HTTP Boot,
+                                          legacy PXE) in BIOS/UEFI firmware, and/or sets the URL UEFI HTTP Boot fetches its boot
+                                          image from. Support for the specific BMC vendor is implemented in bmclib.
+                                        minProperties: 1
+                                        properties:
+                                          httpBootEnabled:
+                                            description: |-
+                                              HTTPBootEnabled enables (true) or disables (false) UEFI HTTP Boot capability, IPv4 and
+                                              IPv6 both.
+                                            type: boolean
+                                          httpBootTLSMode:
+                                            description: |-
+                                              HTTPBootTLSMode sets the TLS authentication mode UEFI HTTP Boot uses to connect to the HTTP
+                                              boot server: "None" allows fetching the boot image over plain HTTP, "OneWay" requires HTTPS
+                                              with the server authenticated by the client. Some hardware defaults to "OneWay", which
+                                              rejects an HTTPBootURL that isn't HTTPS. Independent of HTTPBootEnabled and HTTPBootURL.
+                                            enum:
+                                            - None
+                                            - OneWay
+                                            type: string
+                                          httpBootURL:
+                                            description: |-
+                                              HTTPBootURL sets the URL UEFI HTTP Boot fetches its boot image from, via the standard
+                                              Redfish ComputerSystem.Boot.HttpBootUri property. Independent of HTTPBootEnabled: setting
+                                              the URL does not enable the capability, and enabling the capability does not require a URL.
+                                            format: uri
+                                            type: string
+                                            x-kubernetes-validations:
+                                            - message: httpBootURL must be an http
+                                                or https URL
+                                              rule: self.startsWith('http://') ||
+                                                self.startsWith('https://')
+                                          pxeBootEnabled:
+                                            description: PXEBootEnabled enables (true)
+                                              or disables (false) legacy PXE boot
+                                              capability.
+                                            type: boolean
+                                        type: object
                                       powerAction:
                                         description: PowerAction represents a baseboard
                                           management power operation.
@@ -362,10 +450,12 @@ spec:
                                     type: object
                                     x-kubernetes-validations:
                                     - message: only one of powerAction, bootDevice,
-                                        or virtualMediaAction can be specified
+                                        virtualMediaAction, or networkBootConfig can
+                                        be specified
                                       rule: '(has(self.powerAction) ? 1 : 0) + (has(self.bootDevice)
                                         ? 1 : 0) + (has(self.virtualMediaAction) ?
-                                        1 : 0) == 1'
+                                        1 : 0) + (has(self.networkBootConfig) ? 1
+                                        : 0) == 1'
                                   type: array
                               type: object
                             isoURL:

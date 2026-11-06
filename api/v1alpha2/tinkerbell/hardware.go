@@ -2,6 +2,7 @@ package tinkerbell
 
 import (
 	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -212,6 +213,40 @@ type OSIE struct {
 	// KernelURL, when defined, overrides the default URL to a kernel image.
 	// +optional
 	KernelURL string `json:"kernelURL,omitempty"`
+
+	// Files, when defined, is the set of additional files to be made available to the OSIE.
+	// They are served to iPXE clients as an extra initrd and appear under the /osie_files
+	// directory in the OSIE.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:XValidation:rule="self.all(a, self.exists_one(b, (b.path.startsWith('/') ? b.path.substring(1) : b.path) == (a.path.startsWith('/') ? a.path.substring(1) : a.path)))",message="files paths must be unique"
+	// +kubebuilder:validation:XValidation:rule="self.all(a, !self.exists(b, (b.path.startsWith('/') ? b.path.substring(1) : b.path).startsWith((a.path.startsWith('/') ? a.path.substring(1) : a.path) + '/')))",message="a files path must not be the parent directory of another"
+	// +optional
+	Files []OSIEFile `json:"files,omitempty"`
+}
+
+// OSIEFile represents a file to be made available to the OSIE (Operating System Installation Environment).
+// All files are relative to the /osie_files directory in the OSIE.
+type OSIEFile struct {
+	// Path is the file path where the file should be made available within the /osie_files directory in the OSIE.
+	// A leading "/" is ignored. Empty, "." and ".." segments are not allowed.
+	// +kubebuilder:validation:MaxLength=255
+	// +kubebuilder:validation:Pattern=`^/?[^/]+(/[^/]+)*$`
+	// +kubebuilder:validation:XValidation:rule="!self.split('/').exists(s, s == '.' || s == '..')",message="path must not contain '.' or '..' segments"
+	// +required
+	Path string `json:"path"`
+
+	// Contents is the contents of the file.
+	// +optional
+	Contents string `json:"contents"`
+
+	// Mode is the file's permission bits as an octal string, e.g. "0644", "644" or "0o644".
+	// Only permission bits are allowed (max "0777"); setuid, setgid and sticky bits are rejected.
+	// Symbolic forms like "rw-r--r--" and decimal values are invalid.
+	// Omitted or "0" means the default, "0400" (read-only for the owner).
+	// +kubebuilder:validation:MaxLength=8
+	// +kubebuilder:validation:Pattern=`^(0[oO])?0*[0-7]{1,3}$`
+	// +optional
+	Mode string `json:"mode,omitempty"`
 }
 
 // NetworkInterfaces maps a MAC address to a NetworkInterface.
@@ -507,25 +542,31 @@ type RPI struct {
 	SerialNum string `json:"serialNum"`
 }
 
+// Reference identifies a Kubernetes object, of any kind, whose contents are made available to templating.
 type Reference struct {
-	// Group of the referent.
+	// Group of the referent. Empty for the core API group.
 	// More info: https://kubernetes.io/docs/reference/using-api/#api-groups
+	// +optional
 	Group string `json:"group,omitempty"`
 
 	// Name of the referent.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+	// +required
 	Name string `json:"name,omitempty"`
 
-	// Namespace of the referent.
+	// Namespace of the referent. Leave empty for cluster-scoped resources.
 	// More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
+	// +optional
 	Namespace string `json:"namespace,omitempty"`
 
 	// Resource of the referent. Must be the pluralized kind of the referent. Must be all lowercase.
 	// More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+	// +required
 	Resource string `json:"resource,omitempty"`
 
 	// API version of the referent.
 	// More info: https://kubernetes.io/docs/reference/using-api/#api-versioning
+	// +required
 	Version string `json:"version,omitempty"`
 }
 
@@ -551,6 +592,12 @@ type StorageDevice struct {
 
 // HardwareStatus defines the observed state of Hardware.
 type HardwareStatus struct {
+	// Attributes describes the hardware itself, as observed by Tinkerbell. It is
+	// split by collection path rather than merged, so each collector owns a
+	// disjoint subtree and neither can clobber the other.
+	// +optional
+	Attributes *inventory.HardwareAttributes `json:"attributes,omitempty"`
+
 	// Conditions represents the latest available observations of an object's current state.
 	// +optional
 	Conditions []bmc.Condition `json:"conditions,omitempty"`

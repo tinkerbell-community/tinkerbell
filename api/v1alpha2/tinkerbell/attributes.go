@@ -32,27 +32,38 @@ type Processor struct {
 }
 
 type Memory struct {
-	Total  FieldPattern `json:"total,omitempty" yaml:"total,omitempty"`
-	Usable FieldPattern `json:"usable,omitempty" yaml:"usable,omitempty"`
+	TotalBytes  FieldPattern `json:"totalBytes,omitempty" yaml:"totalBytes,omitempty"`
+	UsableBytes FieldPattern `json:"usableBytes,omitempty" yaml:"usableBytes,omitempty"`
 }
 
 type Block struct {
-	Name              FieldPattern `json:"name,omitempty" yaml:"name,omitempty"`
-	ControllerType    FieldPattern `json:"controllerType,omitempty" yaml:"controllerType,omitempty"`
-	DriveType         FieldPattern `json:"driveType,omitempty" yaml:"driveType,omitempty"`
-	Size              FieldPattern `json:"size,omitempty" yaml:"size,omitempty"`
-	PhysicalBlockSize FieldPattern `json:"physicalBlockSize,omitempty" yaml:"physicalBlockSize,omitempty"`
-	Vendor            FieldPattern `json:"vendor,omitempty" yaml:"vendor,omitempty"`
-	Model             FieldPattern `json:"model,omitempty" yaml:"model,omitempty"`
-	WWN               FieldPattern `json:"wwn,omitempty" yaml:"wwn,omitempty"`
-	SerialNumber      FieldPattern `json:"serialNumber,omitempty" yaml:"serialNumber,omitempty"`
+	Name                   FieldPattern `json:"name,omitempty" yaml:"name,omitempty"`
+	ControllerType         FieldPattern `json:"controllerType,omitempty" yaml:"controllerType,omitempty"`
+	DriveType              FieldPattern `json:"driveType,omitempty" yaml:"driveType,omitempty"`
+	SizeBytes              FieldPattern `json:"sizeBytes,omitempty" yaml:"sizeBytes,omitempty"`
+	PhysicalBlockSizeBytes FieldPattern `json:"physicalBlockSizeBytes,omitempty" yaml:"physicalBlockSizeBytes,omitempty"`
+	Vendor                 FieldPattern `json:"vendor,omitempty" yaml:"vendor,omitempty"`
+	Model                  FieldPattern `json:"model,omitempty" yaml:"model,omitempty"`
+	WWN                    FieldPattern `json:"wwn,omitempty" yaml:"wwn,omitempty"`
+	SerialNumber           FieldPattern `json:"serialNumber,omitempty" yaml:"serialNumber,omitempty"`
+	// Path is the device's udev ID_PATH, i.e. /dev/disk/by-path/<path>.
+	Path FieldPattern `json:"path,omitempty" yaml:"path,omitempty"`
 }
 
 type Network struct {
-	Name                FieldPattern `json:"name,omitempty" yaml:"name,omitempty"`
-	Mac                 FieldPattern `json:"mac,omitempty" yaml:"mac,omitempty"`
-	Speed               FieldPattern `json:"speed,omitempty" yaml:"speed,omitempty"`
-	EnabledCapabilities FieldPattern `json:"enabledCapabilities,omitempty" yaml:"enabledCapabilities,omitempty"`
+	Name                FieldPattern  `json:"name,omitempty" yaml:"name,omitempty"`
+	Mac                 FieldPattern  `json:"mac,omitempty" yaml:"mac,omitempty"`
+	SpeedMbps           FieldPattern  `json:"speedMbps,omitempty" yaml:"speedMbps,omitempty"`
+	EnabledCapabilities FieldPattern  `json:"enabledCapabilities,omitempty" yaml:"enabledCapabilities,omitempty"`
+	LLDPNeighbors       *LLDPNeighbor `json:"lldpNeighbors,omitempty" yaml:"lldpNeighbors,omitempty"`
+}
+
+// LLDPNeighbor matches the LLDP neighbors the Agent observed on a network interface.
+type LLDPNeighbor struct {
+	ChassisID       FieldPattern `json:"chassisID,omitempty" yaml:"chassisID,omitempty"`
+	SystemName      FieldPattern `json:"systemName,omitempty" yaml:"systemName,omitempty"`
+	PortID          FieldPattern `json:"portID,omitempty" yaml:"portID,omitempty"`
+	PortDescription FieldPattern `json:"portDescription,omitempty" yaml:"portDescription,omitempty"`
 }
 
 type PCI struct {

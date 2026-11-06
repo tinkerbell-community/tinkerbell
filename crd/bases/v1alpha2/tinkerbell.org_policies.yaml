@@ -1065,15 +1065,23 @@ spec:
                                   type: array
                               type: object
                             namespace:
-                              description: Namespace is the namespace in which the
-                                Workflow will be created.
+                              description: |-
+                                Namespace must be empty or the Policy's own namespace. A rule naming another
+                                namespace is skipped: letting a Policy create Workflows elsewhere would let anyone
+                                who can write Policies in one namespace run Workflows against Hardware in another.
+
+                                Deprecated: Workflows are always created in the Policy's namespace. This field
+                                will be removed in a future release.
                               type: string
                             references:
                               additionalProperties:
+                                description: Reference identifies a Kubernetes object,
+                                  of any kind, whose contents are made available to
+                                  templating.
                                 properties:
                                   group:
                                     description: |-
-                                      Group of the referent.
+                                      Group of the referent. Empty for the core API group.
                                       More info: https://kubernetes.io/docs/reference/using-api/#api-groups
                                     type: string
                                   name:
@@ -1083,7 +1091,7 @@ spec:
                                     type: string
                                   namespace:
                                     description: |-
-                                      Namespace of the referent.
+                                      Namespace of the referent. Leave empty for cluster-scoped resources.
                                       More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
                                     type: string
                                   resource:
@@ -1096,6 +1104,10 @@ spec:
                                       API version of the referent.
                                       More info: https://kubernetes.io/docs/reference/using-api/#api-versioning
                                     type: string
+                                required:
+                                - name
+                                - resource
+                                - version
                                 type: object
                               description: |-
                                 References are dynamic and defined by the user.
@@ -1381,7 +1393,22 @@ spec:
                                           - true (exact match boolean)
                                       x-kubernetes-preserve-unknown-fields: true
                                     type: array
-                                  physicalBlockSize:
+                                  path:
+                                    description: Path is the device's udev ID_PATH,
+                                      i.e. /dev/disk/by-path/<path>.
+                                    items:
+                                      description: |-
+                                        PatternValue can hold a string, number, or boolean for exact matching.
+                                        PatternValue represents a Quamina pattern value.
+                                        It can be a plain value (string, number, boolean) for exact match,
+                                        or an object with pattern operators like prefix, suffix, wildcard, etc.
+                                        Examples:
+                                          - "value" (exact match string)
+                                          - 123 (exact match number)
+                                          - true (exact match boolean)
+                                      x-kubernetes-preserve-unknown-fields: true
+                                    type: array
+                                  physicalBlockSizeBytes:
                                     description: |-
                                       FieldPattern represents all possible pattern values for a single field.
                                       Multiple values in the array are combined with OR logic (any value can match).
@@ -1413,7 +1440,7 @@ spec:
                                           - true (exact match boolean)
                                       x-kubernetes-preserve-unknown-fields: true
                                     type: array
-                                  size:
+                                  sizeBytes:
                                     description: |-
                                       FieldPattern represents all possible pattern values for a single field.
                                       Multiple values in the array are combined with OR logic (any value can match).
@@ -1700,7 +1727,7 @@ spec:
                                 type: object
                               memory:
                                 properties:
-                                  total:
+                                  totalBytes:
                                     description: |-
                                       FieldPattern represents all possible pattern values for a single field.
                                       Multiple values in the array are combined with OR logic (any value can match).
@@ -1716,7 +1743,7 @@ spec:
                                           - true (exact match boolean)
                                       x-kubernetes-preserve-unknown-fields: true
                                     type: array
-                                  usable:
+                                  usableBytes:
                                     description: |-
                                       FieldPattern represents all possible pattern values for a single field.
                                       Multiple values in the array are combined with OR logic (any value can match).
@@ -1751,6 +1778,75 @@ spec:
                                           - true (exact match boolean)
                                       x-kubernetes-preserve-unknown-fields: true
                                     type: array
+                                  lldpNeighbors:
+                                    description: LLDPNeighbor matches the LLDP neighbors
+                                      the Agent observed on a network interface.
+                                    properties:
+                                      chassisID:
+                                        description: |-
+                                          FieldPattern represents all possible pattern values for a single field.
+                                          Multiple values in the array are combined with OR logic (any value can match).
+                                        items:
+                                          description: |-
+                                            PatternValue can hold a string, number, or boolean for exact matching.
+                                            PatternValue represents a Quamina pattern value.
+                                            It can be a plain value (string, number, boolean) for exact match,
+                                            or an object with pattern operators like prefix, suffix, wildcard, etc.
+                                            Examples:
+                                              - "value" (exact match string)
+                                              - 123 (exact match number)
+                                              - true (exact match boolean)
+                                          x-kubernetes-preserve-unknown-fields: true
+                                        type: array
+                                      portDescription:
+                                        description: |-
+                                          FieldPattern represents all possible pattern values for a single field.
+                                          Multiple values in the array are combined with OR logic (any value can match).
+                                        items:
+                                          description: |-
+                                            PatternValue can hold a string, number, or boolean for exact matching.
+                                            PatternValue represents a Quamina pattern value.
+                                            It can be a plain value (string, number, boolean) for exact match,
+                                            or an object with pattern operators like prefix, suffix, wildcard, etc.
+                                            Examples:
+                                              - "value" (exact match string)
+                                              - 123 (exact match number)
+                                              - true (exact match boolean)
+                                          x-kubernetes-preserve-unknown-fields: true
+                                        type: array
+                                      portID:
+                                        description: |-
+                                          FieldPattern represents all possible pattern values for a single field.
+                                          Multiple values in the array are combined with OR logic (any value can match).
+                                        items:
+                                          description: |-
+                                            PatternValue can hold a string, number, or boolean for exact matching.
+                                            PatternValue represents a Quamina pattern value.
+                                            It can be a plain value (string, number, boolean) for exact match,
+                                            or an object with pattern operators like prefix, suffix, wildcard, etc.
+                                            Examples:
+                                              - "value" (exact match string)
+                                              - 123 (exact match number)
+                                              - true (exact match boolean)
+                                          x-kubernetes-preserve-unknown-fields: true
+                                        type: array
+                                      systemName:
+                                        description: |-
+                                          FieldPattern represents all possible pattern values for a single field.
+                                          Multiple values in the array are combined with OR logic (any value can match).
+                                        items:
+                                          description: |-
+                                            PatternValue can hold a string, number, or boolean for exact matching.
+                                            PatternValue represents a Quamina pattern value.
+                                            It can be a plain value (string, number, boolean) for exact match,
+                                            or an object with pattern operators like prefix, suffix, wildcard, etc.
+                                            Examples:
+                                              - "value" (exact match string)
+                                              - 123 (exact match number)
+                                              - true (exact match boolean)
+                                          x-kubernetes-preserve-unknown-fields: true
+                                        type: array
+                                    type: object
                                   mac:
                                     description: |-
                                       FieldPattern represents all possible pattern values for a single field.
@@ -1783,7 +1879,7 @@ spec:
                                           - true (exact match boolean)
                                       x-kubernetes-preserve-unknown-fields: true
                                     type: array
-                                  speed:
+                                  speedMbps:
                                     description: |-
                                       FieldPattern represents all possible pattern values for a single field.
                                       Multiple values in the array are combined with OR logic (any value can match).

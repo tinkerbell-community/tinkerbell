@@ -37,6 +37,21 @@ type ProviderOptions struct {
 	// RPC contains the options to customize the RPC provider.
 	// +optional
 	RPC *RPCOptions `json:"rpc,omitempty"`
+
+	// HomeAssistant contains the options to customize the HomeAssistant provider.
+	// +optional
+	HomeAssistant *HomeAssistantOptions `json:"homeassistant,omitempty"`
+}
+
+// HomeAssistantOptions has the config options for the Home Assistant provider,
+// which controls power through a Home Assistant switch entity (e.g. a smart plug).
+type HomeAssistantOptions struct {
+	// SwitchEntityID is the entity ID of the Home Assistant switch entity to control power state.
+	SwitchEntityID string `json:"switchEntityID"`
+
+	// PowerOperationDelaySeconds is the number of seconds to wait after a power operation before proceeding.
+	// +optional
+	PowerOperationDelaySeconds uint32 `json:"powerOperationDelaySeconds,omitempty"`
 }
 
 // ProviderName is the bmclib specific provider name. Names are case insensitive.

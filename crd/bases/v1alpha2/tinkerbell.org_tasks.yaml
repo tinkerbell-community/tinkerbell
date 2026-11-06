@@ -151,10 +151,12 @@ spec:
                 type: object
               references:
                 additionalProperties:
+                  description: Reference identifies a Kubernetes object, of any kind,
+                    whose contents are made available to templating.
                   properties:
                     group:
                       description: |-
-                        Group of the referent.
+                        Group of the referent. Empty for the core API group.
                         More info: https://kubernetes.io/docs/reference/using-api/#api-groups
                       type: string
                     name:
@@ -164,7 +166,7 @@ spec:
                       type: string
                     namespace:
                       description: |-
-                        Namespace of the referent.
+                        Namespace of the referent. Leave empty for cluster-scoped resources.
                         More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/
                       type: string
                     resource:
@@ -177,6 +179,10 @@ spec:
                         API version of the referent.
                         More info: https://kubernetes.io/docs/reference/using-api/#api-versioning
                       type: string
+                  required:
+                  - name
+                  - resource
+                  - version
                   type: object
                 description: |-
                   References are dynamic and defined by the user.

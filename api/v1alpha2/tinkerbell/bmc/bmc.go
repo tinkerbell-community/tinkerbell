@@ -56,6 +56,13 @@ type Connection struct {
 	// +kubebuilder:validation:MinLength=1
 	Host string `json:"host"`
 
+	// Port is the port number for connecting to the BMC.
+	// When omitted, each provider uses its own default (623 for IPMI, 443 for Redfish).
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=65535
+	// +optional
+	Port int `json:"port,omitempty"`
+
 	// InsecureTLS indicates whether to skip TLS certificate verification when connecting to the BMC.
 	// +optional
 	InsecureTLS bool `json:"insecureTLS,omitempty"`
