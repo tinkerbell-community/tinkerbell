@@ -18,4 +18,7 @@ func TestBackend(t *testing.T) {
 	if !errors.Is(err, errAlways) {
 		t.Error("expected errAlways")
 	}
+	if _, err := b.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{}); !errors.Is(err, errAlways) {
+		t.Errorf("FilterHardwareV1Alpha2() error = %v, want errAlways", err)
+	}
 }
