@@ -379,11 +379,12 @@ func pointerToValue[V any](ptr *V) V {
 	return *ptr
 }
 
-// firstAction returns the first Action of the first Task in the Workflow.
+// firstAction returns the first Action of the Workflow: that of its first Task with Actions. A native
+// Task's Actions can all be skipped.
 func firstAction(w *v1alpha2.Workflow) *v1alpha2.ActionWithMetadata {
-	if len(w.Status.RenderedTasks) > 0 {
-		if len(w.Status.RenderedTasks[0].Actions) > 0 {
-			return &w.Status.RenderedTasks[0].Actions[0]
+	for i := range w.Status.RenderedTasks {
+		if len(w.Status.RenderedTasks[i].Actions) > 0 {
+			return &w.Status.RenderedTasks[i].Actions[0]
 		}
 	}
 	return nil

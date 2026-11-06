@@ -10,6 +10,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tinkerbell/tinkerbell/api/conversion"
+	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -433,5 +434,71 @@ func TestDisabledNative(t *testing.T) {
 	want := v1alpha2.WorkflowStatus{Metadata: v1alpha2.WorkflowMetadata{Task: v1alpha2.Metadata{AgentID: "agent-hw"}}}
 	if d := cmp.Diff(want, got.Status, cmpopts.EquateEmpty()); d != "" {
 		t.Errorf("status (-want +got):\n%s", d)
+	}
+}
+
+// TestGlobalTimeoutFirstActionSkipped verifies the Workflow's timeout starts with its first action when its
+// first task runs nothing.
+func TestGlobalTimeoutFirstActionSkipped(t *testing.T) {
+	wf := nativeWorkflow()
+	start := metav1.NewTime(TestTime.Now())
+	wf.Status = v1alpha2.WorkflowStatus{
+		GlobalTimeout: 600,
+		Metadata: v1alpha2.WorkflowMetadata{
+			Workflow: v1alpha2.Metadata{State: v1alpha2.StateRunning},
+			Task:     v1alpha2.Metadata{AgentID: "agent-2", ID: "t1"},
+			Action:   v1alpha2.Metadata{ID: "b0", State: v1alpha2.StateRunning},
+		},
+		RenderedTasks: []v1alpha2.TaskWithMetadata{
+			{Name: "t0", Metadata: v1alpha2.Metadata{ID: "t0", AgentID: "agent-hw", State: v1alpha2.StateSuccess}},
+			{Name: "t1", Metadata: v1alpha2.Metadata{ID: "t1", AgentID: "agent-2"}, Actions: []v1alpha2.ActionWithMetadata{{Metadata: v1alpha2.Metadata{ID: "b0", State: v1alpha2.StateRunning, StartTime: &start}}}},
+		},
+	}
+	c := GetFakeClientBuilder().WithObjects(wf).Build()
+	r := NewReconciler(c, fakeReferences{})
+	r.nowFunc = TestTime.Now
+	if _, err := r.Reconcile(context.Background(), reconcile.Request{NamespacedName: client.ObjectKeyFromObject(wf)}); err != nil {
+		t.Fatal(err)
+	}
+	got := &v1alpha2.Workflow{}
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(wf), got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Status.GlobalExecutionStop == nil {
+		t.Fatal("the Workflow's timeout did not start")
+	}
+}
+
+func TestEFIBoot(t *testing.T) {
+	v1 := func(uefi bool) *v1alpha2.Hardware {
+		return v2(t, &v1alpha1.Hardware{
+			ObjectMeta: metav1.ObjectMeta{Name: "hw", Namespace: "default"},
+			Spec:       v1alpha1.HardwareSpec{Interfaces: []v1alpha1.Interface{{DHCP: &v1alpha1.DHCP{MAC: string(mac1), UEFI: uefi}}}},
+		}).(*v1alpha2.Hardware)
+	}
+	withBMC := func(hw *v1alpha2.Hardware, mode v1alpha2.FirmwareMode) *v1alpha2.Hardware {
+		hw = hw.DeepCopy()
+		hw.Spec.BMC = &v1alpha2.BMC{BootMode: mode, Connection: &bmc.Connection{Host: "10.0.0.1"}}
+		return hw
+	}
+	native := &v1alpha2.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "hw", Namespace: "default"}}
+	tests := map[string]struct {
+		hw   *v1alpha2.Hardware
+		want bool
+	}{
+		"v1alpha1 Hardware booting UEFI": {hw: v1(true), want: true},
+		"v1alpha1 Hardware booting BIOS": {hw: v1(false)},
+		// spec.bmc translated from the bmc Machine has the default boot mode, which says nothing.
+		"v1alpha1 Hardware booting BIOS with a translated BMC": {hw: withBMC(v1(false), v1alpha2.FirmwareModeUEFI)},
+		"v1alpha2 Hardware booting UEFI":                       {hw: withBMC(native, v1alpha2.FirmwareModeUEFI), want: true},
+		"v1alpha2 Hardware with the default boot mode":         {hw: withBMC(native, ""), want: true},
+		"v1alpha2 Hardware booting BIOS":                       {hw: withBMC(native, v1alpha2.FirmwareModeBIOS)},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			if got := efiBoot(tt.hw); got != tt.want {
+				t.Errorf("efiBoot = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

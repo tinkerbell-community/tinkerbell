@@ -98,7 +98,7 @@ func (s *state) prepareWorkflow(ctx context.Context) (reconcile.Result, error) {
 			}
 			ops := []bmc.Operations{
 				{PowerAction: valueToPointer(bmc.PowerActionHardOff)},
-				{BootDevice: &bmc.BootDeviceConfig{Name: bmc.BootDevicePXE, EFIBoot: s.efiBoot(hw)}},
+				{BootDevice: &bmc.BootDeviceConfig{Name: bmc.BootDevicePXE, EFIBoot: efiBoot(hw)}},
 				{PowerAction: valueToPointer(bmc.PowerActionOn)},
 			}
 
@@ -137,7 +137,7 @@ func (s *state) prepareWorkflow(ctx context.Context) (reconcile.Result, error) {
 				// empty to unmount/eject the media
 				{VirtualMediaAction: &bmc.VirtualMediaAction{MediaURL: "", Kind: bmc.VirtualMediaCD}},
 				{VirtualMediaAction: &bmc.VirtualMediaAction{MediaURL: bo.ISOURL, Kind: bmc.VirtualMediaCD}},
-				{BootDevice: &bmc.BootDeviceConfig{Name: bmc.BootDeviceCDROM, EFIBoot: s.efiBoot(hw)}},
+				{BootDevice: &bmc.BootDeviceConfig{Name: bmc.BootDeviceCDROM, EFIBoot: efiBoot(hw)}},
 				{PowerAction: valueToPointer(bmc.PowerActionOn)},
 			}
 
@@ -198,10 +198,11 @@ func (s *state) prepareWorkflow(ctx context.Context) (reconcile.Result, error) {
 }
 
 // efiBoot reports whether the Hardware boots with UEFI. Hardware created through v1alpha1 says so with
-// dhcp.uefi on an interface, as v1alpha1 boot Jobs used; other Hardware with spec.bmc.bootMode, UEFI unless
-// it is BIOS.
-func (s *state) efiBoot(hw *v1alpha2.Hardware) bool {
-	if engine.Compat(s.workflow) {
+// dhcp.uefi on an interface, which v1alpha1 boot Jobs used, whichever way the Workflow runs; its
+// spec.bmc.bootMode, if it has a spec.bmc at all, is only the default. Other Hardware says so with
+// spec.bmc.bootMode: UEFI unless it is BIOS.
+func efiBoot(hw *v1alpha2.Hardware) bool {
+	if _, ok := hw.Annotations[conversion.AnnotationV1Alpha1]; ok {
 		v1 := &v1alpha1.Hardware{}
 		if err := conversion.HardwareToV1Alpha1(hw, v1); err == nil {
 			for _, iface := range v1.Spec.Interfaces {
@@ -212,7 +213,7 @@ func (s *state) efiBoot(hw *v1alpha2.Hardware) bool {
 		}
 		return false
 	}
-	return hw.Spec.BMC == nil || hw.Spec.BMC.BootMode != v1alpha2.FirmwareModeBIOS
+	return hw.Spec.BMC != nil && hw.Spec.BMC.BootMode != v1alpha2.FirmwareModeBIOS
 }
 
 // templateData holds data available for templating in customboot actions.
