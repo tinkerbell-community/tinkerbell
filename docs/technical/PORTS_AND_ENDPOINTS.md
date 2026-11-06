@@ -384,8 +384,12 @@ Messages are logged by Smee and can be used for debugging boot issues.
 ### SSH (TCP :2222)
 
 SecondStar provides an SSH-to-serial-over-IPMI bridge. Operators SSH to
-`<bmc-ip>@tinkerbell:2222` and are connected to the machine's serial console
-via IPMI SOL (Serial Over LAN).
+`<hardware-name>@tinkerbell:2222` with a key listed in the Hardware's
+`spec.instance.sshKeys` and are connected to the machine's serial console
+via IPMI SOL (Serial Over LAN). The BMC is the Hardware's `spec.bmc.connection`
+or, for Hardware created through v1alpha1 without one, the bmc `Machine` its
+`bmcRef` names; the IPMI port and cipher suite come from the connection's
+`providerOptions.ipmi` (port 623 when unset).
 
 - Idle timeout: 15 minutes (configurable)
 - Requires `ipmi` at `/usr/sbin/ipmi`
