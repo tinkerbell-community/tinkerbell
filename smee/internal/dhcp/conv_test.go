@@ -333,8 +333,8 @@ func TestConvertV1Alpha1Compat(t *testing.T) {
 		if got.Netboot.Facility != "onprem" {
 			t.Errorf("facility = %q, want onprem", got.Netboot.Facility)
 		}
-		if got.DHCP.LeaseTime != 0 || got.DHCPv6.LeaseTime != 0 {
-			t.Errorf("lease times = %d, %d, want the v1alpha1 unset lease time, 0", got.DHCP.LeaseTime, got.DHCPv6.LeaseTime)
+		if got.DHCP.LeaseTime != 86400 || got.DHCPv6.LeaseTime != 0 {
+			t.Errorf("lease times = %d, %d, want the v1alpha2 defaults 86400 and 0 (the DHCPv6 default lifetime)", got.DHCP.LeaseTime, got.DHCPv6.LeaseTime)
 		}
 		want := OSIE{BaseURL: &url.URL{Scheme: "http", Host: "osie:8080"}, Kernel: "k"}
 		if diff := cmp.Diff(want, got.Netboot.OSIE); diff != "" {

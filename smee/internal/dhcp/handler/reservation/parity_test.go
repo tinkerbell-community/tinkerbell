@@ -53,6 +53,8 @@ func TestReplyParity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				// Deliberate difference: no positive lease_time now gets the v1alpha2 default.
+				old.DHCP.LeaseTime, _ = paritytest.ApplyLeaseDefaults(f.Hardware, mac, old.DHCP)
 				serves := !old.DHCP.Disabled && hasIPv4Reservation(old.DHCP)
 				if gotServes := !d.Disabled && hasIPv4Reservation(d); gotServes != serves {
 					t.Fatalf("answers = %v, want %v", gotServes, serves)

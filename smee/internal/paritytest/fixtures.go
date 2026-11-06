@@ -61,8 +61,9 @@ func ipv4(address string) *v1alpha1.IP {
 
 // Fixtures returns v1alpha1 Hardware covering what Smee reads: every DHCP,
 // netboot, OSIE and metadata setting, unset values, and the values the
-// conversion cannot carry to v1alpha2 as they are (an unset lease time, the
-// facility, OSIE base URLs). Each fixture is served the same through v1alpha2.
+// conversion cannot carry to v1alpha2 as they are (the facility, OSIE base
+// URLs). An unset lease time is served the v1alpha2 defaults now; see
+// ApplyLeaseDefaults. Each fixture is served the same through v1alpha2.
 func Fixtures() []Fixture {
 	return []Fixture{
 		{Name: "full IPv4", Hardware: hardware("full-ipv4", v1alpha1.HardwareSpec{

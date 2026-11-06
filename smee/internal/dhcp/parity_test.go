@@ -34,7 +34,7 @@ func TestConvertParity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				compareParity(t, want, got)
+				compareParity(t, f.Hardware, want, got)
 			})
 		}
 		for _, ip := range f.IPs() {
@@ -47,7 +47,7 @@ func TestConvertParity(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				compareParity(t, want, got)
+				compareParity(t, f.Hardware, want, got)
 			})
 		}
 	}
@@ -56,8 +56,17 @@ func TestConvertParity(t *testing.T) {
 // compareParity compares want, from v1alpha1, and got, from v1alpha2, the way
 // Smee's consumers read them. v1alpha1 had one DHCP structure for both DHCPv4
 // and DHCPv6; v1alpha2 has one per family.
-func compareParity(t *testing.T, want, got dhcp.Hardware) {
+//
+// One difference is deliberate: an interface with no positive lease_time now
+// gets the v1alpha2 lease defaults (see paritytest.ApplyLeaseDefaults).
+func compareParity(t *testing.T, hw *v1alpha1.Hardware, want, got dhcp.Hardware) {
 	t.Helper()
+	v4Lease, v6Lease := paritytest.ApplyLeaseDefaults(hw, want.DHCP.MACAddress, want.DHCP)
+	wantV4 := *want.DHCP
+	wantV4.LeaseTime = v4Lease
+	want.DHCP = &wantV4
+	wantV6 := dhcpv6Of(want.DHCP)
+	wantV6.LeaseTime = v6Lease
 
 	// The DHCPv4 handler answers when DHCP is enabled and there is an IPv4
 	// address, and then serves all of it.
@@ -68,7 +77,7 @@ func compareParity(t *testing.T, want, got dhcp.Hardware) {
 			t.Errorf("DHCPv4 data differs (-v1alpha1 +v1alpha2):\n%s", diff)
 		}
 	}
-	if diff := cmp.Diff(dhcpv6Of(want.DHCP), dhcpv6Of(got.DHCPv6), cmpOpts); diff != "" {
+	if diff := cmp.Diff(wantV6, dhcpv6Of(got.DHCPv6), cmpOpts); diff != "" {
 		t.Errorf("DHCPv6 data differs (-v1alpha1 +v1alpha2):\n%s", diff)
 	}
 	// The iPXE script, TFTP and ISO handlers read the interface's addressing.

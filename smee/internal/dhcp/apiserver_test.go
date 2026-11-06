@@ -68,7 +68,7 @@ func TestConvertParityThroughAPIServer(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				compareParity(t, want, got)
+				compareParity(t, f.Hardware, want, got)
 			})
 		}
 		for _, ip := range f.IPs() {
@@ -81,7 +81,7 @@ func TestConvertParityThroughAPIServer(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				compareParity(t, want, got)
+				compareParity(t, f.Hardware, want, got)
 			})
 		}
 	}

@@ -24,9 +24,11 @@ type v1alpha1Compat struct {
 	// facility is metadata.facility.facility_code, the facility kernel argument.
 	// v1alpha2 has no facility.
 	facility string
-	// leaseTime is the interface's lease_time as Smee read it. An unset lease
-	// time was served as 0 over DHCPv4, and as the default lifetime over DHCPv6;
-	// v1alpha2 holds the CRD default, 86400, instead.
+	// leaseTime is the interface's lease_time, when it sets one. v1alpha1 served
+	// it over both DHCPv4 and DHCPv6, while the conversion keeps it for the
+	// interface's address family only. An unset (or zero) lease_time gets the
+	// v1alpha2 defaults, as v1alpha2 Hardware does: 86400 seconds over DHCPv4
+	// (v1alpha1 served 0) and the default lifetime over DHCPv6.
 	leaseTime *uint32
 	// osie is the interface's netboot.osie, as long as it still converts to the
 	// Hardware's instance.osie. The conversion turns a base URL and file names
@@ -60,11 +62,13 @@ func v1alpha1CompatFor(hw *v1alpha2.Hardware, mac v1alpha2.MAC) (v1alpha1Compat,
 	}
 	iface := old.Spec.Interfaces[i]
 
-	lease := v1alpha1LeaseTime
-	if v, err := safecast.Convert[uint32](iface.DHCP.LeaseTime); err == nil {
-		lease = v
+	if iface.DHCP.LeaseTime > 0 {
+		lease := v1alpha1LeaseTime
+		if v, err := safecast.Convert[uint32](iface.DHCP.LeaseTime); err == nil {
+			lease = v
+		}
+		c.leaseTime = &lease
 	}
-	c.leaseTime = &lease
 
 	if osieConvertsTo(iface, hw.Spec.Instance) {
 		o := OSIE{}

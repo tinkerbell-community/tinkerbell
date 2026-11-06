@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"strings"
 
 	"github.com/ccoveille/go-safecast/v2"
 	"github.com/insomniacslk/dhcp/dhcpv4"
@@ -294,4 +295,24 @@ func transform(i v1alpha1.Interface, m *v1alpha1.HardwareMetadata) (*dhcp.DHCP, 
 	}
 
 	return d, n, nil
+}
+
+// V1Alpha2LeaseDefault is the DHCPv4 lease time v1alpha2 gives an interface
+// that sets none (the CRD default of dhcp.ipv4.leaseTimeSeconds).
+const V1Alpha2LeaseDefault uint32 = 86400
+
+// ApplyLeaseDefaults updates d, from the v1alpha1 conversion above, to what Smee
+// serves now. Hardware created through v1alpha1 whose interface sets no
+// positive lease_time used to be served lease time 0 over DHCPv4 (and Smee's
+// default lifetime over DHCPv6); it now gets the v1alpha2 defaults like any
+// other Hardware. It returns the DHCPv4 and DHCPv6 lease times to expect: d is
+// v1alpha1's single structure for both families.
+func ApplyLeaseDefaults(hw *v1alpha1.Hardware, mac net.HardwareAddr, d *dhcp.DHCP) (v4, v6 uint32) {
+	for _, iface := range hw.Spec.Interfaces {
+		if iface.DHCP != nil && strings.EqualFold(iface.DHCP.MAC, mac.String()) && iface.DHCP.LeaseTime <= 0 {
+			// Over DHCPv6, 0 means the handler's default lifetime.
+			return V1Alpha2LeaseDefault, 0
+		}
+	}
+	return d.LeaseTime, d.LeaseTime
 }
