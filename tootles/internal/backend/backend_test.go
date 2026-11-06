@@ -13,7 +13,9 @@ import (
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/tootles/internal/frontend/ec2"
+	"github.com/tinkerbell/tinkerbell/tootles/internal/frontend/nocloud"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/yaml"
 )
 
 type mockReader struct {
@@ -57,11 +59,13 @@ func createdAsV1Alpha1(tb testing.TB, hw *v1alpha1.Hardware) *v1alpha2.Hardware 
 // v1alpha1Fixtures are Hardware created through v1alpha1, each with data some endpoint serves.
 func v1alpha1Fixtures() map[string]*v1alpha1.Hardware {
 	userData := "#cloud-config\nhostname: my-host\n"
+	vendorData := "#cloud-config\npackages: [vim]\n"
 	return map[string]*v1alpha1.Hardware{
 		"empty": {},
 		"full metadata": {
 			Spec: v1alpha1.HardwareSpec{
-				UserData: &userData,
+				UserData:   &userData,
+				VendorData: &vendorData,
 				Metadata: &v1alpha1.HardwareMetadata{
 					Instance: &v1alpha1.MetadataInstance{
 						ID:       "inst-123",
@@ -172,7 +176,63 @@ func TestV1Alpha1Parity(t *testing.T) {
 			if diff := cmp.Diff(wantHack, gotHack); diff != "" {
 				t.Errorf("hack (-v1alpha1 +v1alpha2):\n%s", diff)
 			}
+
+			// NoCloud is new: it serves the EC2 identity of the instance as meta-data and
+			// the user and vendor data as they are.
+			wantMetaData := map[string]any{}
+			if id := wantEC2.Metadata.InstanceID; id != "" {
+				wantMetaData["instance-id"] = id
+			}
+			if hostname := wantEC2.Metadata.LocalHostname; hostname != "" {
+				wantMetaData["local-hostname"] = hostname
+			}
+			if keys := wantEC2.Metadata.PublicKeys; len(keys) > 0 {
+				// YAML lists decode as []any.
+				list := []any{}
+				for _, k := range keys {
+					list = append(list, k)
+				}
+				wantMetaData["public-keys"] = list
+			}
+			for lookup, get := range map[string]func() (nocloud.Instance, error){
+				"by IP":        func() (nocloud.Instance, error) { return b.GetNoCloudInstance(ctx, "10.0.0.1") },
+				"by lookup ID": func() (nocloud.Instance, error) { return b.GetNoCloudInstanceByLookupID(ctx, "inst-123") },
+			} {
+				got, err := get()
+				if err != nil {
+					t.Fatal(err)
+				}
+				gotMetaData := map[string]any{}
+				if err := yaml.Unmarshal([]byte(got.MetaData), &gotMetaData); err != nil {
+					t.Fatalf("NoCloud %s meta-data %q: %v", lookup, got.MetaData, err)
+				}
+				if diff := cmp.Diff(wantMetaData, gotMetaData); diff != "" {
+					t.Errorf("NoCloud %s meta-data (-want +got):\n%s", lookup, diff)
+				}
+				got.MetaData = ""
+				want := nocloud.Instance{UserData: wantEC2.Userdata, VendorData: deref(hw.Spec.VendorData)}
+				if diff := cmp.Diff(want, got); diff != "" {
+					t.Errorf("NoCloud %s (-want +got):\n%s", lookup, diff)
+				}
+			}
 		})
+	}
+}
+
+func TestNoCloudMetaDataFormat(t *testing.T) {
+	hw := v1alpha1Fixtures()["full metadata"]
+	b := New(&mockReader{hw: createdAsV1Alpha1(t, hw)})
+	got, err := b.GetNoCloudInstance(context.Background(), "10.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "instance-id: inst-123\nlocal-hostname: my-host\npublic-keys:\n- ssh-ed25519 AAAATESTKEY1 a@test\n- ssh-rsa AAAATESTKEY2 b@example\n"
+	if got.MetaData != want {
+		t.Fatalf("meta-data = %q, want %q", got.MetaData, want)
+	}
+	b = New(&mockReader{hw: createdAsV1Alpha1(t, &v1alpha1.Hardware{})})
+	if got, err := b.GetNoCloudInstance(context.Background(), "10.0.0.1"); err != nil || got.MetaData != "{}\n" {
+		t.Fatalf("meta-data = %q, %v; want an empty YAML mapping", got.MetaData, err)
 	}
 }
 
@@ -276,6 +336,68 @@ func TestEC2InstanceV1Alpha2(t *testing.T) {
 	}
 }
 
+func TestNoCloudInstanceV1Alpha2(t *testing.T) {
+	withMetadata := v1alpha2Native()
+	withMetadata.Spec.Instance.Metadata = ptr("instance-id: custom\n")
+	withMetadata.Spec.Instance.NetworkConfig = ptr("version: 2\n")
+	createdThroughV1Alpha1WithMetadata := createdAsV1Alpha1(t, v1alpha1Fixtures()["full metadata"])
+	createdThroughV1Alpha1WithMetadata.Spec.Instance.Metadata = ptr("instance-id: added-later\n")
+	tests := map[string]struct {
+		hw   *v1alpha2.Hardware
+		ip   string
+		want nocloud.Instance
+	}{
+		"instance metadata": {
+			hw: withMetadata, ip: "10.0.0.1",
+			want: nocloud.Instance{
+				MetaData:      "instance-id: custom\n",
+				UserData:      "#cloud-config\n",
+				VendorData:    "#cloud-config\npackages: [vim]\n",
+				NetworkConfig: "version: 2\n",
+			},
+		},
+		"without instance metadata": {
+			hw: v1alpha2Native(), ip: "10.0.0.1",
+			want: nocloud.Instance{
+				MetaData:   "instance-id: lookup-1\nlocal-hostname: host4\npublic-keys:\n- ssh-ed25519 AAAATESTKEY1 a@test\n",
+				UserData:   "#cloud-config\n",
+				VendorData: "#cloud-config\npackages: [vim]\n",
+			},
+		},
+		"instance metadata added to Hardware created through v1alpha1": {
+			hw: createdThroughV1Alpha1WithMetadata, ip: "10.0.0.1",
+			want: nocloud.Instance{
+				MetaData:   "instance-id: added-later\n",
+				UserData:   "#cloud-config\nhostname: my-host\n",
+				VendorData: "#cloud-config\npackages: [vim]\n",
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			reader := &mockReader{hw: tt.hw}
+			got, err := New(reader).GetNoCloudInstance(context.Background(), tt.ip)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if reader.opts != (data.HardwareFilter{ByIPAddress: tt.ip}) {
+				t.Errorf("filter = %+v, want a lookup by IP", reader.opts)
+			}
+			if diff := cmp.Diff(tt.want, got); diff != "" {
+				t.Fatalf("(-want +got):\n%s", diff)
+			}
+		})
+	}
+
+	reader := &mockReader{hw: withMetadata}
+	if _, err := New(reader).GetNoCloudInstanceByLookupID(context.Background(), "lookup-1"); err != nil {
+		t.Fatal(err)
+	}
+	if reader.opts != (data.HardwareFilter{ByInstanceID: "lookup-1"}) {
+		t.Errorf("filter = %+v, want a lookup by lookup ID", reader.opts)
+	}
+}
+
 func TestHackInstanceV1Alpha2(t *testing.T) {
 	got, err := New(&mockReader{hw: v1alpha2Native()}).GetHackInstance(context.Background(), "10.0.0.1")
 	if err != nil {
@@ -316,6 +438,10 @@ func TestErrors(t *testing.T) {
 			check("EC2 by IP", err, ec2.ErrInstanceNotFound)
 			_, err = b.GetEC2InstanceByInstanceID(ctx, "inst-1")
 			check("EC2 by instance ID", err, ec2.ErrInstanceNotFound)
+			_, err = b.GetNoCloudInstance(ctx, "10.0.0.1")
+			check("NoCloud by IP", err, nocloud.ErrInstanceNotFound)
+			_, err = b.GetNoCloudInstanceByLookupID(ctx, "inst-1")
+			check("NoCloud by lookup ID", err, nocloud.ErrInstanceNotFound)
 			if _, err := b.GetHackInstance(ctx, "10.0.0.1"); err == nil {
 				t.Error("hack: want an error")
 			}

@@ -36,6 +36,7 @@ const (
 	routeEC2Metadata       = "/2009-04-04/"
 	routeTootles           = "/tootles/"
 	routeHackMetadata      = "/metadata"
+	routeNoCloud           = "/nocloud/"
 	routeISO               = smee.ISOURI
 	routeISOV6             = smee.ISOURIV6
 	routeIPXEBinary        = smee.IPXEBinaryURI
@@ -113,6 +114,12 @@ func startHTTPServer(ctx context.Context, globals *flag.GlobalConfig, s *flag.Sm
 		routeList.Register(routeHackMetadata,
 			middleware.WithLogLevel(middleware.LogLevelAlways, h.Config.HackMetadataHandler()),
 			"Hack metadata handler",
+			httpserver.WithHTTPSEnabled(tlsEnabled),
+			httpserver.WithRewriteHTTPToHTTPS(tlsEnabled),
+		)
+		routeList.Register(routeNoCloud,
+			middleware.WithLogLevel(middleware.LogLevelAlways, h.Config.NoCloudHandler()),
+			"NoCloud metadata handler",
 			httpserver.WithHTTPSEnabled(tlsEnabled),
 			httpserver.WithRewriteHTTPToHTTPS(tlsEnabled),
 		)

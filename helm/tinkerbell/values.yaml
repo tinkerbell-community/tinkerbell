@@ -208,7 +208,7 @@ deployment:
     tootles:
       debugMode: false
       logLevel: 0
-      instanceEndpoint: false # if true, Tootles will serve metadata at /tootles/instanceID/<instanceID> to _any_ client
+      instanceEndpoint: false # if true, Tootles will serve metadata at /tootles/instanceID/<instanceID> and /nocloud/<lookupID>/ to _any_ client
     ui:
       debugMode: false
       enableAutoLogin: false

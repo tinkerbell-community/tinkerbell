@@ -159,6 +159,8 @@ All metadata routes identify the requesting machine by its source IP address
 | `/2009-04-04/meta-data/operating-system/license_activation/state` | GET | ✅ | ✅ | License activation state. |
 | `/tootles/` | GET | ✅ | ✅ | Instance-endpoint mirror of EC2 metadata (enabled via `--tootles-instance-endpoint`). Supports paths like `/tootles/instanceID/<id>/2009-04-04/...` |
 | `/metadata` | GET | ✅ | ✅ | Legacy JSON endpoint returning Hardware storage/filesystem configuration. Used by the rootio action. |
+| `/nocloud/{meta-data,user-data,vendor-data,network-config}` | GET | ✅ | ✅ | cloud-init NoCloud datasource (`ds=nocloud;s=http://<tootles>/nocloud/`): the Hardware's `spec.instance` `metadata`, `userdata`, `vendordata` and `networkConfig`. Without `metadata`, meta-data holds the `instance-id`, `local-hostname` and `public-keys` the EC2 routes serve. |
+| `/nocloud/<lookupID>/...` | GET | ✅ | ✅ | The NoCloud files of the Hardware whose `spec.instance.lookupID` is `<lookupID>`, whatever the source IP (enabled via `--tootles-instance-endpoint`). |
 
 EC2 data is shaped after v1alpha1 Hardware. Hardware created through v1alpha1 serves it exactly
 as before. Hardware created as v1alpha2 serves `instance-id` (`spec.instance.lookupID`),

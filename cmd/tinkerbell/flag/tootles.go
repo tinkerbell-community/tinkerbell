@@ -34,5 +34,5 @@ var TootlesLogLevel = Config{
 
 var TootlesInstanceEndpoint = Config{
 	Name:  "tootles-instance-endpoint",
-	Usage: "whether to enable /tootles/instanceID/<instanceID> endpoint that is independent from client IP address",
+	Usage: "whether to enable the /tootles/instanceID/<instanceID> and /nocloud/<lookupID> endpoints that are independent from client IP address",
 }

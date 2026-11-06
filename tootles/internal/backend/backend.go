@@ -1,5 +1,5 @@
 // Package backend provides tootles-specific backend logic for converting Hardware resources
-// into EC2 and Hack instance metadata formats.
+// into EC2, NoCloud and Hack instance metadata formats.
 //
 // Hardware is read as v1alpha2. The EC2 and Hack formats are shaped after v1alpha1 Hardware
 // (metadata.instance, facility, plan, operating system, ...), so they are built from the v1alpha1
@@ -22,8 +22,10 @@ import (
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	"github.com/tinkerbell/tinkerbell/tootles/internal/frontend/ec2"
+	"github.com/tinkerbell/tinkerbell/tootles/internal/frontend/nocloud"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
+	"sigs.k8s.io/yaml"
 )
 
 const tracerName = "github.com/tinkerbell/tinkerbell"
@@ -105,6 +107,51 @@ func (b *Backend) GetEC2InstanceByInstanceID(ctx context.Context, instanceID str
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return data.Ec2Instance{}, err
+	}
+
+	span.SetStatus(codes.Ok, "")
+
+	return i, nil
+}
+
+// GetNoCloudInstance returns the NoCloud data of the hardware associated with the given IP.
+func (b *Backend) GetNoCloudInstance(ctx context.Context, ip string) (nocloud.Instance, error) {
+	tracer := otel.Tracer(tracerName)
+	ctx, span := tracer.Start(ctx, "tootles.backend.GetNoCloudInstance")
+	defer span.End()
+
+	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip})
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nocloud.Instance{}, toInstanceNotFoundErr(err, nocloud.ErrInstanceNotFound)
+	}
+	i, err := noCloudInstance(hw, ip)
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nocloud.Instance{}, err
+	}
+
+	span.SetStatus(codes.Ok, "")
+
+	return i, nil
+}
+
+// GetNoCloudInstanceByLookupID returns the NoCloud data of the hardware with the given
+// spec.instance.lookupID.
+func (b *Backend) GetNoCloudInstanceByLookupID(ctx context.Context, lookupID string) (nocloud.Instance, error) {
+	tracer := otel.Tracer(tracerName)
+	ctx, span := tracer.Start(ctx, "tootles.backend.GetNoCloudInstanceByLookupID")
+	defer span.End()
+
+	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByInstanceID: lookupID})
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nocloud.Instance{}, toInstanceNotFoundErr(err, nocloud.ErrInstanceNotFound)
+	}
+	i, err := noCloudInstance(hw, "")
+	if err != nil {
+		span.SetStatus(codes.Error, err.Error())
+		return nocloud.Instance{}, err
 	}
 
 	span.SetStatus(codes.Ok, "")
@@ -270,6 +317,53 @@ func interfaceWithAddress(hw *v1alpha2.Hardware, ip string) (*v1alpha2.IPAM, *v1
 		return withIPAM[0], nil
 	}
 	return nil, nil
+}
+
+// noCloudMetaData is the NoCloud meta-data served for Hardware without spec.instance.metadata.
+type noCloudMetaData struct {
+	InstanceID    string   `json:"instance-id,omitempty"`
+	LocalHostname string   `json:"local-hostname,omitempty"`
+	PublicKeys    []string `json:"public-keys,omitempty"`
+}
+
+// noCloudInstance returns the NoCloud data of hw: spec.instance metadata, userdata, vendordata
+// and networkConfig. Without spec.instance.metadata, as for all Hardware created through
+// v1alpha1, the meta-data is the instance-id, local-hostname and public-keys tootles serves
+// as EC2 data. ip is the address the request came from, empty when hw was looked up by its
+// lookup ID.
+func noCloudInstance(hw *v1alpha2.Hardware, ip string) (nocloud.Instance, error) {
+	var i nocloud.Instance
+	if inst := hw.Spec.Instance; inst != nil {
+		i.UserData = deref(inst.Userdata)
+		i.VendorData = deref(inst.Vendordata)
+		i.NetworkConfig = deref(inst.NetworkConfig)
+		if inst.Metadata != nil {
+			i.MetaData = *inst.Metadata
+			return i, nil
+		}
+	}
+
+	e, err := ec2Instance(hw, ip)
+	if err != nil {
+		return nocloud.Instance{}, err
+	}
+	md, err := yaml.Marshal(noCloudMetaData{
+		InstanceID:    e.Metadata.InstanceID,
+		LocalHostname: e.Metadata.LocalHostname,
+		PublicKeys:    e.Metadata.PublicKeys,
+	})
+	if err != nil {
+		return nocloud.Instance{}, fmt.Errorf("encode meta-data of hardware %s/%s: %w", hw.Namespace, hw.Name, err)
+	}
+	i.MetaData = string(md)
+	return i, nil
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // notFounder is implemented by errors that indicate a resource was not found.
