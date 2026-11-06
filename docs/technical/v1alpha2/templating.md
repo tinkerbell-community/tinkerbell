@@ -156,6 +156,8 @@ References work the same way they do in v1alpha1. Entries name external objects 
 
 When a task sets `spec.tasks[].hardware.hardwareRef`, `.hardware` provides access to that entire `Hardware` object. The `Hardware` object is rendered before the `Workflow` (see [Rendering order](#rendering-order)), so its values are already fully rendered.
 
+The Workflow is rendered for each of its tasks, with that task's Hardware. For a task without a `hardwareRef` (for example one run by an administrative Agent), it is rendered with the Hardware of the first task that has one, so every task sees the same rendering. A Workflow can only use Hardware in its own namespace.
+
 ```gotemplate
 {{ .hardware.spec.attributes.arch }}
 ```
@@ -170,6 +172,7 @@ A `Task` is a reusable definition of `Actions`. When a `Workflow` runs a `Task`,
 | `.references` | User-defined references declared on the Task (`spec.references`). |
 | `.task` | The Task object itself (self-reference). |
 | `.workflow` | The Workflow object that is running this Task. |
+| `.metadata_url` | The base URL of the Tootles metadata service, when the Tink controller knows it. |
 
 ### `.hardware`
 
@@ -242,6 +245,18 @@ Because `.workflow` values are user-supplied and may be absent, prefer null-safe
 
 The `Workflow` is rendered before the `Task` (see [Rendering order](#rendering-order)), so the `.workflow` values a Task sees are already fully rendered.
 
+### `.metadata_url`
+
+`.metadata_url` is the base URL of the Tootles metadata service (`--tink-controller-metadata-url`, or derived from the public IP and the HTTP port when Tootles is enabled). It is absent, and using it is an error, when the controller does not know it.
+
+```gotemplate
+{{ .metadata_url }}/2009-04-04/user-data
+```
+
+### What a rendered Task runs
+
+A rendered Task's environment is the Task's `env`, overridden by the Workflow's `globals.env`, overridden by the task's `extra.env`; its volumes are the Task's, then the globals', then the extra's. Each Action's own `env` and `volumes` apply on top when the Action is served. A task without an `agentID` runs on its Hardware's Agent (`spec.agentID`). A Task translated from a v1alpha1 Template keeps the template task's name.
+
 ### The `if` conditional on Actions
 
 Each Action has an optional `if` field that determines whether the Action runs. It is a string boolean intended to be produced by templating:
@@ -259,6 +274,8 @@ actions:
 ```
 
 Templating runs before the value is interpreted, so it is the **template output** — not the raw field — that must resolve to `true`/`false`/`""`.
+
+Actions that do not run are left out of the rendered Task. A task whose Actions are all left out is complete as soon as it is rendered, and a Workflow whose tasks all are succeeds without running anything.
 
 ## Rendering order
 
