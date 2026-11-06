@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"time"
 
 	"github.com/tinkerbell/tinkerbell/api/conversion"
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
@@ -16,6 +17,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -109,10 +111,21 @@ func ensureOwned[T client.Object](ctx context.Context, c client.Client, want, ex
 	kind := fmt.Sprintf("%T", want)
 	err := c.Get(ctx, key, existing)
 	if apierrors.IsNotFound(err) {
-		if err := c.Create(ctx, want); err != nil {
+		err = c.Create(ctx, want)
+		if err == nil {
+			return nil
+		}
+		if !apierrors.IsAlreadyExists(err) {
 			return fmt.Errorf("creating %s %s: %w", kind, key, err)
 		}
-		return nil
+		// Created meanwhile, e.g. by the other user of a Template's Tasks: once the cache has it, it is
+		// checked like any existing object.
+		if werr := wait.PollUntilContextTimeout(ctx, 50*time.Millisecond, 2*time.Second, true, func(ctx context.Context) (bool, error) {
+			return c.Get(ctx, key, existing) == nil, nil
+		}); werr != nil {
+			return fmt.Errorf("creating %s %s: %w", kind, key, err)
+		}
+		err = nil
 	}
 	if err != nil {
 		return fmt.Errorf("getting %s %s: %w", kind, key, err)

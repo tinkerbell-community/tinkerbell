@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -399,5 +400,34 @@ func TestStoredPolicySpec(t *testing.T) {
 	}
 	if policy.ResourceVersion != rv {
 		t.Error("an unchanged Policy was updated")
+	}
+}
+
+// TestEnsureTemplateTasksCreatedMeanwhile verifies a Task created by the other user of a Template's Tasks
+// between the cached read and the create is checked rather than reported as an error.
+func TestEnsureTemplateTasksCreatedMeanwhile(t *testing.T) {
+	tpl := template(oneTask)
+	conv, err := ConvertTemplate(tpl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := newClient(t, tpl)
+	// The other translator's Task, which a stale cache does not have yet.
+	if err := EnsureTemplateTasks(context.Background(), c, tpl, conv); err != nil {
+		t.Fatal(err)
+	}
+	gets := 0
+	stale := interceptor.NewClient(c.(client.WithWatch), interceptor.Funcs{
+		Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
+			if _, ok := obj.(*v1alpha2.Task); ok {
+				if gets++; gets == 1 {
+					return apierrors.NewNotFound(v1alpha2.GroupVersion.WithResource("tasks").GroupResource(), key.Name)
+				}
+			}
+			return c.Get(ctx, key, obj, opts...)
+		},
+	})
+	if err := EnsureTemplateTasks(context.Background(), stale, tpl, conv); err != nil {
+		t.Fatalf("err = %v, want the concurrently created Task accepted", err)
 	}
 }
