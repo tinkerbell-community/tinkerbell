@@ -242,6 +242,16 @@ type ReferencePattern struct {
 // +kubebuilder:validation:XPreserveUnknownFields
 type PatternValue apiextensionsv1.JSON
 
+// MarshalJSON encodes the pattern value as is. A defined type does not inherit
+// apiextensionsv1.JSON's methods, so without these it would encode as {"Raw": ...}.
+func (p PatternValue) MarshalJSON() ([]byte, error) { return apiextensionsv1.JSON(p).MarshalJSON() }
+
+// UnmarshalJSON decodes any JSON value: a string, number, boolean, or a pattern
+// operator object such as {"prefix": "52:54"}.
+func (p *PatternValue) UnmarshalJSON(b []byte) error {
+	return (*apiextensionsv1.JSON)(p).UnmarshalJSON(b)
+}
+
 // FieldPattern represents all possible pattern values for a single field.
 // Multiple values in the array are combined with OR logic (any value can match).
 type FieldPattern []PatternValue
