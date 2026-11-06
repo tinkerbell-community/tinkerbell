@@ -186,6 +186,7 @@ func WithMachineConditionMessage(m string) MachineSetConditionOption {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="bmc.tinkerbell.org Machine is deprecated; set the BMC connection in tinkerbell.org/v1alpha2 Hardware spec.bmc"
 // +kubebuilder:resource:path=machines,scope=Namespaced,categories=tinkerbell,singular=machine
 // +kubebuilder:metadata:labels=clusterctl.cluster.x-k8s.io=
 // +kubebuilder:metadata:labels=clusterctl.cluster.x-k8s.io/move=

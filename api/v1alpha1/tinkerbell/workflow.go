@@ -43,7 +43,7 @@ const (
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=workflows,scope=Namespaced,categories=tinkerbell,shortName=wf,singular=workflow
-// +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="tinkerbell.org/v1alpha1 Workflow is deprecated; use tinkerbell.org/v1alpha2"
 // +kubebuilder:printcolumn:JSONPath=".spec.templateRef",name=Template,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
 // +kubebuilder:printcolumn:JSONPath=".status.currentState.taskName",name=Task,type=string,priority=1

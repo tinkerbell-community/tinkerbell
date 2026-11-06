@@ -16,6 +16,11 @@ rules:
   - apiGroups: ["apiextensions.k8s.io"]
     resources: ["customresourcedefinitions"]
     verbs: ["create", "delete", "get", "list", "patch", "update"]
+  # After moving stored objects to the current API version, Tinkerbell records
+  # that only that version is stored (status.storedVersions).
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions/status"]
+    verbs: ["get", "patch", "update"]
   - apiGroups: ["tinkerbell.org"]
     resources: ["hardware", "hardware/status"]
     verbs: ["create", "get", "list", "patch", "update", "watch"]
@@ -28,6 +33,12 @@ rules:
   - apiGroups: ["tinkerbell.org"]
     resources: ["workflowrulesets"]
     verbs: ["get", "list", "watch"]
+  - apiGroups: ["tinkerbell.org"]
+    resources: ["tasks", "tasks/status"]
+    verbs: ["create", "get", "list", "patch", "update", "watch"]
+  - apiGroups: ["tinkerbell.org"]
+    resources: ["policies"]
+    verbs: ["create", "get", "list", "patch", "update", "watch"]
   - apiGroups: ["bmc.tinkerbell.org"]
     resources: ["jobs", "jobs/status", "tasks", "tasks/status"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"]
@@ -114,6 +125,40 @@ subjects:
     name: {{ include "tinkerbell.serviceAccountName" . }}
     namespace: {{ include "tinkerbell.namespace" . }}
 {{- end }}
+---
+# Conversion webhook Role — always namespaced. Tinkerbell keeps the CRD conversion
+# webhook's CA and serving certificate in a Secret it creates and renews.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "tinkerbell.fullname" . }}-conversion-webhook
+  namespace: {{ include "tinkerbell.namespace" . }}
+  labels:
+    {{- include "tinkerbell.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames: [{{ tpl .Values.deployment.envs.globals.conversionWebhookCertSecret . | quote }}]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "tinkerbell.fullname" . }}-conversion-webhook
+  namespace: {{ include "tinkerbell.namespace" . }}
+  labels:
+    {{- include "tinkerbell.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "tinkerbell.fullname" . }}-conversion-webhook
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "tinkerbell.serviceAccountName" . }}
+    namespace: {{ include "tinkerbell.namespace" . }}
 ---
 # Leader election Role — always namespaced, grants access to leases and configmaps for leader election
 apiVersion: rbac.authorization.k8s.io/v1

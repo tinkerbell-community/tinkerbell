@@ -1,8 +1,17 @@
 # This kustomization.yaml is intended to allow using `kubectl apply -k` for CRDs.
+#
+# Hardware, Workflow and bmc Job serve v1alpha1 and v1alpha2 and store v1alpha2.
+# The API server needs Tinkerbell's conversion webhook to serve v1alpha1 for them;
+# Tinkerbell sets spec.conversion (Service and CA bundle) when it installs the CRDs
+# itself (--enable-crd-migrations). If you install them with this file, configure
+# spec.conversion to point at the conversion webhook Service yourself.
 resources:
   - bases/tinkerbell.org_hardware.yaml
-  - bases/tinkerbell.org_templates.yaml
   - bases/tinkerbell.org_workflows.yaml
+  - bases/tinkerbell.org_tasks.yaml
+  - bases/tinkerbell.org_policies.yaml
+  - bases/tinkerbell.org_templates.yaml
+  - bases/tinkerbell.org_workflowrulesets.yaml
   - bases/bmc.tinkerbell.org_jobs.yaml
   - bases/bmc.tinkerbell.org_machines.yaml
   - bases/bmc.tinkerbell.org_tasks.yaml

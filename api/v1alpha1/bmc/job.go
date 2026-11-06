@@ -142,7 +142,7 @@ func FormatTaskName(job Job, n int) string {
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="bmc.tinkerbell.org/v1alpha1 Job is deprecated; use bmc.tinkerbell.org/v1alpha2"
 // +kubebuilder:resource:path=jobs,scope=Namespaced,categories=tinkerbell,singular=job,shortName=j
 
 // Job is the Schema for the bmcjobs API.

@@ -30,6 +30,7 @@ type TemplateStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=templates,scope=Namespaced,categories=tinkerbell,shortName=tpl,singular=template
 // +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="Template is deprecated; use tinkerbell.org/v1alpha2 Task"
 // +kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
 
 // Template is the Schema for the Templates API.

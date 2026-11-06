@@ -146,6 +146,7 @@ func (t *Task) HasCondition(cType TaskConditionType, cStatus ConditionStatus) bo
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="bmc.tinkerbell.org Task is deprecated; use bmc.tinkerbell.org/v1alpha2 Job operations"
 // +kubebuilder:resource:path=tasks,scope=Namespaced,categories=tinkerbell,singular=task,shortName=t
 
 // Task is the Schema for the Task API.

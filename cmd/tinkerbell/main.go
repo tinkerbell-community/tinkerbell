@@ -8,8 +8,8 @@ import (
 	"syscall"
 )
 
-//go:generate go tool controller-gen crd webhook paths="../../api/v1alpha1/..." output:crd:artifacts:config=../../crd/bases/v1alpha1
-//go:generate go tool controller-gen crd webhook paths="../../api/v1alpha2/..." output:crd:artifacts:config=../../crd/bases/v1alpha2
+//go:generate go tool controller-gen crd webhook paths="../../api/..." output:crd:artifacts:config=../../crd/bases
+//go:generate go run ../../script/crdtrim ../../crd/bases/tinkerbell.org_tasks.yaml:v1alpha1
 //go:generate go tool controller-gen paths="../../..." object:headerFile="../../script/boilerplate.go.txt"
 //go:generate go tool buf generate ../.. --config ../../buf.yaml --template ../../buf.gen.yaml --output ../../
 func main() {

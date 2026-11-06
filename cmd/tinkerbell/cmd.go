@@ -73,6 +73,12 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 			EnableKubeAPIServer: (embeddedApiserverExecute != nil),
 			EnableETCD:          (embeddedEtcdExecute != nil),
 		},
+		ConversionWebhook: flag.ConversionWebhookConfig{
+			BindAddr:       ":9443",
+			ServiceName:    "tinkerbell-conversion-webhook",
+			ServicePort:    443,
+			CertSecretName: "tinkerbell-conversion-webhook",
+		},
 		BackendKubeOptions: flag.BackendKubeOptions{
 			QPS:                         defaultQPS,      // Default QPS value. A negative value disables client-side ratelimiting.
 			Burst:                       defaultBurst,    // Default burst value.
@@ -408,18 +414,29 @@ func executeWithOutput(ctx context.Context, cancel context.CancelFunc, args []st
 	}
 	switch globals.Backend {
 	case "kube":
-		if globals.EnableCRDMigrations {
-			backendNoIndexes, err := newKubeBackend(ctx, globals.BackendKubeConfig, "", globals.BackendKubeNamespaces, nil, WithQPS(globals.BackendKubeOptions.QPS), WithBurst(globals.BackendKubeOptions.Burst))
-			if err != nil {
-				return startupErr(fmt.Errorf("failed to create kube backend with no indexes: %w", err))
+		backendNoIndexes, err := newKubeBackend(ctx, globals.BackendKubeConfig, "", globals.BackendKubeNamespaces, nil, WithQPS(globals.BackendKubeOptions.QPS), WithBurst(globals.BackendKubeOptions.Burst))
+		if err != nil {
+			return startupErr(fmt.Errorf("failed to create kube backend with no indexes: %w", err))
+		}
+		// Wait for the API server to be healthy and ready.
+		// Use configurable timeout and poll interval to prevent permanent error loops on first boot.
+		if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, globals.BackendKubeOptions.APIServerHealthTimeout, globals.BackendKubeOptions.APIServerHealthPollInterval, nil); err != nil {
+			return startupErr(fmt.Errorf("failed to wait for API server health: %w", err))
+		}
+		// The API server calls the conversion webhook to serve v1alpha1 Hardware,
+		// Workflows and Jobs, which are stored as v1alpha2. It must be serving before
+		// the CRDs point at it and before anything reads those objects.
+		webhook, err := startConversionWebhook(ctx, g, cliLog, backendNoIndexes.ClientConfig, globals.ConversionWebhook, podNS, globals.EmbeddedGlobalConfig.EnableKubeAPIServer)
+		if err != nil {
+			if globals.EnableCRDMigrations {
+				return startupErr(err)
 			}
-			// Wait for the API server to be healthy and ready.
-			// Use configurable timeout and poll interval to prevent permanent error loops on first boot.
-			if err := backendNoIndexes.WaitForAPIServer(ctx, cliLog, globals.BackendKubeOptions.APIServerHealthTimeout, globals.BackendKubeOptions.APIServerHealthPollInterval, nil); err != nil {
-				return startupErr(fmt.Errorf("failed to wait for API server health: %w", err))
-			}
+			// The CRDs are managed elsewhere and may not use this webhook.
+			cliLog.Info("WARNING: conversion webhook not started; v1alpha1 objects can only be served if another webhook converts them", "error", err.Error())
+		}
 
-			tb, err := crd.NewTinkerbell(crd.WithLogger(cliLog), crd.WithRestConfig(backendNoIndexes.ClientConfig))
+		if globals.EnableCRDMigrations {
+			tb, err := crd.NewTinkerbell(crd.WithLogger(cliLog), crd.WithRestConfig(backendNoIndexes.ClientConfig), crd.WithConversionWebhook(webhook))
 			if err != nil {
 				return startupErr(fmt.Errorf("failed to create CRD migrator: %w", err))
 			}

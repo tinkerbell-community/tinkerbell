@@ -43,6 +43,7 @@ type GlobalConfig struct {
 	MemlimitRatio         float64
 	EmbeddedGlobalConfig  EmbeddedGlobalConfig
 	BackendKubeOptions    BackendKubeOptions
+	ConversionWebhook     ConversionWebhookConfig
 	TLS                   TLSConfig
 	PrintVersion          bool
 }
@@ -60,6 +61,17 @@ type BackendKubeOptions struct {
 	Rendering                       bool
 	APIServerHealthTimeout          time.Duration
 	APIServerHealthPollInterval     time.Duration
+}
+
+// ConversionWebhookConfig configures the CRD conversion webhook the API server
+// calls to serve v1alpha1 for Tinkerbell objects stored as v1alpha2.
+type ConversionWebhookConfig struct {
+	BindAddr         string
+	ServiceName      string
+	ServiceNamespace string
+	ServicePort      int
+	URL              string
+	CertSecretName   string
 }
 
 type TLSConfig struct {
@@ -113,6 +125,12 @@ func RegisterGlobal(fs *Set, gc *GlobalConfig) {
 	fs.Register(OTELInsecure, ffval.NewValueDefault(&gc.OTELInsecure, gc.OTELInsecure))
 	fs.RegisterFamily(PublicIP, V4, &ntip.Addr{Addr: &gc.PublicIP})
 	fs.RegisterFamily(PublicIP, V6, &ntip.Addr{Addr: &gc.PublicIPv6})
+	fs.Register(ConversionWebhookBindAddr, ffval.NewValueDefault(&gc.ConversionWebhook.BindAddr, gc.ConversionWebhook.BindAddr))
+	fs.Register(ConversionWebhookServiceName, ffval.NewValueDefault(&gc.ConversionWebhook.ServiceName, gc.ConversionWebhook.ServiceName))
+	fs.Register(ConversionWebhookServiceNamespace, ffval.NewValueDefault(&gc.ConversionWebhook.ServiceNamespace, gc.ConversionWebhook.ServiceNamespace))
+	fs.Register(ConversionWebhookServicePort, ffval.NewValueDefault(&gc.ConversionWebhook.ServicePort, gc.ConversionWebhook.ServicePort))
+	fs.Register(ConversionWebhookURL, ffval.NewValueDefault(&gc.ConversionWebhook.URL, gc.ConversionWebhook.URL))
+	fs.Register(ConversionWebhookCertSecret, ffval.NewValueDefault(&gc.ConversionWebhook.CertSecretName, gc.ConversionWebhook.CertSecretName))
 	fs.Register(TLSCertFile, ffval.NewValueDefault(&gc.TLS.CertFile, gc.TLS.CertFile))
 	fs.Register(TLSKeyFile, ffval.NewValueDefault(&gc.TLS.KeyFile, gc.TLS.KeyFile))
 	fs.Register(DisableHTTPToHTTPSRedirect, ffval.NewValueDefault(&gc.TLS.DisableHTTPToHTTPSRedirect, gc.TLS.DisableHTTPToHTTPSRedirect))
@@ -275,7 +293,37 @@ var EnableETCD = Config{
 
 var EnableCRDMigrations = Config{
 	Name:  "enable-crd-migrations",
-	Usage: "create CRDs in the cluster; defaults to false when the backend namespace is set",
+	Usage: "create CRDs in the cluster and move stored objects to the current API version; defaults to false when the backend namespace is set",
+}
+
+var ConversionWebhookBindAddr = Config{
+	Name:  "conversion-webhook-bind-addr",
+	Usage: "[conversion webhook] address the CRD conversion webhook listens on; the API server calls it to serve v1alpha1 Tinkerbell objects",
+}
+
+var ConversionWebhookServiceName = Config{
+	Name:  "conversion-webhook-service-name",
+	Usage: "[conversion webhook] name of the Service the API server reaches the conversion webhook through",
+}
+
+var ConversionWebhookServiceNamespace = Config{
+	Name:  "conversion-webhook-service-namespace",
+	Usage: "[conversion webhook] namespace of the conversion webhook Service and certificate Secret; defaults to the pod's namespace",
+}
+
+var ConversionWebhookServicePort = Config{
+	Name:  "conversion-webhook-service-port",
+	Usage: "[conversion webhook] port of the conversion webhook Service",
+}
+
+var ConversionWebhookURL = Config{
+	Name:  "conversion-webhook-url",
+	Usage: "[conversion webhook] URL the API server calls the conversion webhook at, instead of the Service; for API servers outside the cluster network",
+}
+
+var ConversionWebhookCertSecret = Config{
+	Name:  "conversion-webhook-cert-secret",
+	Usage: "[conversion webhook] Secret that holds the conversion webhook's CA and serving certificate; created when missing",
 }
 
 var BindAddr = Config{

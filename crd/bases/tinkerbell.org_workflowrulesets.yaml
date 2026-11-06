@@ -18,7 +18,10 @@ spec:
     singular: workflowruleset
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - deprecated: true
+    deprecationWarning: WorkflowRuleSet is deprecated; use tinkerbell.org/v1alpha2
+      Policy
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: Workflow is the Schema for the Workflows API.

@@ -1,0 +1,20 @@
+{{- if not .Values.deployment.envs.globals.conversionWebhookUrl }}
+# The API server reaches the CRD conversion webhook through this Service. It is
+# separate from the main Service so the webhook is never exposed outside the cluster.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ tpl .Values.deployment.envs.globals.conversionWebhookServiceName . }}
+  namespace: {{ include "tinkerbell.namespace" . }}
+  labels:
+    {{- include "tinkerbell.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- toYaml .Values.service.selector | nindent 4 }}
+  ports:
+    - name: webhook
+      port: {{ .Values.deployment.envs.globals.conversionWebhookServicePort }}
+      targetPort: webhook
+      protocol: TCP
+{{- end }}

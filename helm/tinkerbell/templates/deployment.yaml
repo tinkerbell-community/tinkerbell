@@ -117,6 +117,9 @@ spec:
               protocol: {{ .protocol }}
             {{- end }}
           {{- end }}
+            - containerPort: {{ include "tinkerbell.conversionWebhookPort" . }}
+              name: webhook
+              protocol: TCP
           {{- if and .Values.deployment.envs.globals.tlsCertFile .Values.deployment.envs.globals.tlsKeyFile }}
             - containerPort: {{ .Values.deployment.envs.globals.httpsPort }}
             {{- with .Values.service.ports.https }}

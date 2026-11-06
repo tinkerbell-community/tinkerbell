@@ -22,6 +22,8 @@ spec:
     - jsonPath: .status.state
       name: State
       type: string
+    deprecated: true
+    deprecationWarning: Template is deprecated; use tinkerbell.org/v1alpha2 Task
     name: v1alpha1
     schema:
       openAPIV3Schema:

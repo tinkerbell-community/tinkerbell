@@ -29,7 +29,7 @@ type HardwareList struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=hardware,scope=Namespaced,categories=tinkerbell,singular=hardware,shortName=hw
-// +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="tinkerbell.org/v1alpha1 Hardware is deprecated; use tinkerbell.org/v1alpha2"
 // +kubebuilder:printcolumn:JSONPath=".status.state",name=State,type=string
 // +kubebuilder:metadata:labels=clusterctl.cluster.x-k8s.io=
 // +kubebuilder:metadata:labels=clusterctl.cluster.x-k8s.io/move=

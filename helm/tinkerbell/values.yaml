@@ -36,6 +36,16 @@ deployment:
       bindAddress: "" # derives TINKERBELL_BIND_ADDRESS, matching the --bind-address flag
       disableHttpToHttpsRedirect: false # set true to stop auto-redirecting plain HTTP requests to HTTPS when TLS is enabled
       enableCRDMigrations: true
+      # The API server calls this webhook to serve v1alpha1 Hardware, Workflows and
+      # Jobs, which are stored as v1alpha2. Tinkerbell creates the certificate Secret
+      # and points the CRDs at the Service (see conversionWebhook below).
+      conversionWebhookBindAddr: ":9443"
+      conversionWebhookCertSecret: '{{ include "tinkerbell.fullname" . }}-conversion-webhook'
+      conversionWebhookServiceName: '{{ include "tinkerbell.fullname" . }}-conversion-webhook'
+      conversionWebhookServiceNamespace: '{{ include "tinkerbell.namespace" . }}'
+      conversionWebhookServicePort: 443
+      # Set when the API server cannot reach Services (e.g. it runs outside the cluster network).
+      conversionWebhookUrl: ""
       enableRufioController: true
       enableSecondstar: true
       enableSmee: true

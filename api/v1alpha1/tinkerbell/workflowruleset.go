@@ -6,6 +6,7 @@ import metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 // +kubebuilder:object:root=true
 // +kubebuilder:resource:path=workflowrulesets,scope=Namespaced,categories=tinkerbell,shortName=wrs,singular=workflowruleset
 // +kubebuilder:storageversion
+// +kubebuilder:deprecatedversion:warning="WorkflowRuleSet is deprecated; use tinkerbell.org/v1alpha2 Policy"
 
 // Workflow is the Schema for the Workflows API.
 type WorkflowRuleSet struct {

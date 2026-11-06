@@ -229,3 +229,10 @@ imagePullSecrets:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+The conversion webhook's container port, taken from its bind address (":9443").
+*/}}
+{{- define "tinkerbell.conversionWebhookPort" -}}
+{{- regexReplaceAll "^.*:" .Values.deployment.envs.globals.conversionWebhookBindAddr "" -}}
+{{- end }}

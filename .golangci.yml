@@ -56,6 +56,8 @@ linters:
           files:
             - $all
             - "!**/pkg/backend/kube/*.go"
+            # The CRD storage migration rewrites every object of a CRD; it reads no references.
+            - "!**/crd/crd.go"
           deny:
             - pkg: k8s.io/client-go/dynamic
               desc: read referenced objects through kube.Backend.ResolveReferences, which applies the reference policy

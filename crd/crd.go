@@ -3,8 +3,10 @@ package crd
 import (
 	"context"
 	"embed"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/avast/retry-go/v4"
@@ -16,7 +18,9 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
+	sigsyaml "sigs.k8s.io/yaml"
 )
 
 //go:embed bases
@@ -33,10 +37,14 @@ func mustReadCRD(path string) []byte {
 // Tinkerbell is the struct that holds the raw custom resource definitions
 // and a CRD client for operations.
 type Tinkerbell struct {
-	CRDs       map[string][]byte
-	Client     clientset.Interface
+	CRDs   map[string][]byte
+	Client clientset.Interface
+	// Dynamic is used to rewrite objects into the storage version. It is
+	// created from the rest config when not set.
+	Dynamic    dynamic.Interface
 	Logger     logr.Logger
 	restConfig *rest.Config
+	webhook    *ConversionWebhook
 }
 
 const (
@@ -44,35 +52,78 @@ const (
 	GroupTinkerbell = "tinkerbell.org"
 	// GroupBMC is the API group for BMC resources.
 	GroupBMC = "bmc.tinkerbell.org"
+
+	fieldManager = "Tinkerbell CLI"
 )
 
 // AvailableVersions lists all supported CRD API versions.
 var AvailableVersions = []string{"v1alpha1", "v1alpha2"}
 
-// TinkerbellDefaults contains all the v1alpha1 Tinkerbell CRDs.
+// TinkerbellDefaults contains every Tinkerbell CRD, as installed: kinds that
+// exist in both API versions are served in both and stored as v1alpha2, with
+// v1alpha1 converted by the conversion webhook. Kinds that only exist in
+// v1alpha1 (Template, WorkflowRuleSet, and the bmc Machine and Task) are
+// deprecated.
 var TinkerbellDefaults = map[string][]byte{
-	"hardware.tinkerbell.org":         mustReadCRD("bases/v1alpha1/tinkerbell.org_hardware.yaml"),
-	"templates.tinkerbell.org":        mustReadCRD("bases/v1alpha1/tinkerbell.org_templates.yaml"),
-	"workflows.tinkerbell.org":        mustReadCRD("bases/v1alpha1/tinkerbell.org_workflows.yaml"),
-	"workflowrulesets.tinkerbell.org": mustReadCRD("bases/v1alpha1/tinkerbell.org_workflowrulesets.yaml"),
-	"jobs.bmc.tinkerbell.org":         mustReadCRD("bases/v1alpha1/bmc.tinkerbell.org_jobs.yaml"),
-	"machines.bmc.tinkerbell.org":     mustReadCRD("bases/v1alpha1/bmc.tinkerbell.org_machines.yaml"),
-	"tasks.bmc.tinkerbell.org":        mustReadCRD("bases/v1alpha1/bmc.tinkerbell.org_tasks.yaml"),
+	"hardware.tinkerbell.org":         mustReadCRD("bases/tinkerbell.org_hardware.yaml"),
+	"workflows.tinkerbell.org":        mustReadCRD("bases/tinkerbell.org_workflows.yaml"),
+	"tasks.tinkerbell.org":            mustReadCRD("bases/tinkerbell.org_tasks.yaml"),
+	"policies.tinkerbell.org":         mustReadCRD("bases/tinkerbell.org_policies.yaml"),
+	"templates.tinkerbell.org":        mustReadCRD("bases/tinkerbell.org_templates.yaml"),
+	"workflowrulesets.tinkerbell.org": mustReadCRD("bases/tinkerbell.org_workflowrulesets.yaml"),
+	"jobs.bmc.tinkerbell.org":         mustReadCRD("bases/bmc.tinkerbell.org_jobs.yaml"),
+	"machines.bmc.tinkerbell.org":     mustReadCRD("bases/bmc.tinkerbell.org_machines.yaml"),
+	"tasks.bmc.tinkerbell.org":        mustReadCRD("bases/bmc.tinkerbell.org_tasks.yaml"),
 }
 
-// TinkerbellV1Alpha2 contains all the v1alpha2 Tinkerbell CRDs.
-var TinkerbellV1Alpha2 = map[string][]byte{
-	"hardware.tinkerbell.org":  mustReadCRD("bases/v1alpha2/tinkerbell.org_hardware.yaml"),
-	"tasks.tinkerbell.org":     mustReadCRD("bases/v1alpha2/tinkerbell.org_tasks.yaml"),
-	"workflows.tinkerbell.org": mustReadCRD("bases/v1alpha2/tinkerbell.org_workflows.yaml"),
-	"policies.tinkerbell.org":  mustReadCRD("bases/v1alpha2/tinkerbell.org_policies.yaml"),
-	"jobs.bmc.tinkerbell.org":  mustReadCRD("bases/v1alpha2/bmc.tinkerbell.org_jobs.yaml"),
+// CRDsByVersion maps an API version to single-version views of the CRDs that
+// serve it, for documentation and the UI. They are not meant to be installed.
+var CRDsByVersion = versionViews(TinkerbellDefaults)
+
+// TinkerbellV1Alpha2 contains single-version views of the v1alpha2 CRDs.
+var TinkerbellV1Alpha2 = CRDsByVersion["v1alpha2"]
+
+// versionViews splits multi-version CRDs into one CRD per version.
+func versionViews(crds map[string][]byte) map[string]map[string][]byte {
+	out := map[string]map[string][]byte{}
+	for name, raw := range crds {
+		var c apiv1.CustomResourceDefinition
+		if err := sigsyaml.Unmarshal(raw, &c); err != nil {
+			panic(fmt.Sprintf("decoding embedded CRD %s: %v", name, err))
+		}
+		for _, v := range c.Spec.Versions {
+			view := c.DeepCopy()
+			view.Spec.Versions = []apiv1.CustomResourceDefinitionVersion{v}
+			view.Status = apiv1.CustomResourceDefinitionStatus{}
+			b, err := sigsyaml.Marshal(view)
+			if err != nil {
+				panic(fmt.Sprintf("encoding CRD %s %s: %v", name, v.Name, err))
+			}
+			if out[v.Name] == nil {
+				out[v.Name] = map[string][]byte{}
+			}
+			out[v.Name][name] = b
+		}
+	}
+	return out
 }
 
-// CRDsByVersion maps API version strings to their CRD source maps.
-var CRDsByVersion = map[string]map[string][]byte{
-	"v1alpha1": TinkerbellDefaults,
-	"v1alpha2": TinkerbellV1Alpha2,
+// ConversionWebhook tells the API server how to reach the conversion webhook
+// for CRDs that serve more than one version.
+type ConversionWebhook struct {
+	// ServiceNamespace, ServiceName and ServicePort identify the Service in
+	// front of the webhook. They are ignored when URL is set.
+	ServiceNamespace string
+	ServiceName      string
+	ServicePort      int32
+	// URL is the webhook's address, for API servers that cannot reach Services
+	// (for example the embedded API server).
+	URL string
+	// Path is the HTTP path of the webhook, used with a Service.
+	Path string
+	// CABundle is the PEM encoded CA certificate that signed the webhook's
+	// serving certificate.
+	CABundle []byte
 }
 
 // ConfigOption is a function that sets a configuration option.
@@ -88,6 +139,13 @@ func WithRestConfig(config *rest.Config) ConfigOption {
 func WithLogger(logger logr.Logger) ConfigOption {
 	return func(t *Tinkerbell) {
 		t.Logger = logger
+	}
+}
+
+// WithConversionWebhook configures the conversion webhook of multi-version CRDs.
+func WithConversionWebhook(w ConversionWebhook) ConfigOption {
+	return func(t *Tinkerbell) {
+		t.webhook = &w
 	}
 }
 
@@ -120,6 +178,14 @@ func NewTinkerbell(opts ...ConfigOption) (Tinkerbell, error) {
 			return Tinkerbell{}, fmt.Errorf("failed to create CRD client: %w", err)
 		}
 		tbell.Client = client
+		if tbell.Dynamic == nil {
+			// Conversions of deprecated versions warn on every object; don't log those.
+			dcfg := rest.CopyConfig(tbell.restConfig)
+			dcfg.WarningHandler = rest.NoWarnings{}
+			if tbell.Dynamic, err = dynamic.NewForConfig(dcfg); err != nil {
+				return Tinkerbell{}, fmt.Errorf("failed to create dynamic client: %w", err)
+			}
+		}
 	}
 
 	if tbell.Client == nil {
@@ -129,23 +195,28 @@ func NewTinkerbell(opts ...ConfigOption) (Tinkerbell, error) {
 	return tbell, nil
 }
 
+// MigrateAndReady installs or upgrades the CRDs, waits for them to be
+// established, and then rewrites existing objects into the storage version.
 func (t Tinkerbell) MigrateAndReady(ctx context.Context) error {
 	if err := t.Migrate(ctx); err != nil {
 		return err
 	}
-
-	return t.Ready(ctx)
+	if err := t.Ready(ctx); err != nil {
+		return err
+	}
+	return t.MigrateStorage(ctx)
 }
 
 // Migrate applies the CRDs to the cluster.
 func (t Tinkerbell) Migrate(ctx context.Context) error {
-	// TODO: should we check for differences in the CRDs? Should we check for the presence of the CRDs?
-	// This function should eventually grow to handle upgrades.
 	decoder := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
 	for _, raw := range t.CRDs {
 		obj := &unstructured.Unstructured{}
 		if _, _, err := decoder.Decode(raw, nil, obj); err != nil {
 			return fmt.Errorf("failed to decode YAML: %w", err)
+		}
+		if err := t.setConversion(obj); err != nil {
+			return err
 		}
 
 		// Try apply, if that fails, try create. Apply only works if the CRD already exists.
@@ -159,6 +230,131 @@ func (t Tinkerbell) Migrate(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// setConversion points a multi-version CRD at the conversion webhook. Their
+// versions have different schemas, so serving them without conversion would
+// hand clients objects of the wrong shape.
+func (t Tinkerbell) setConversion(obj *unstructured.Unstructured) error {
+	versions, _, _ := unstructured.NestedSlice(obj.Object, "spec", "versions")
+	if len(versions) < 2 {
+		return nil
+	}
+	if t.webhook == nil {
+		return fmt.Errorf("CRD %s serves several versions and needs the conversion webhook, which is not configured", obj.GetName())
+	}
+	cc := map[string]any{}
+	if t.webhook.URL != "" {
+		cc["url"] = t.webhook.URL
+	} else {
+		cc["service"] = map[string]any{
+			"namespace": t.webhook.ServiceNamespace,
+			"name":      t.webhook.ServiceName,
+			"port":      int64(t.webhook.ServicePort),
+			"path":      t.webhook.Path,
+		}
+	}
+	if len(t.webhook.CABundle) > 0 {
+		cc["caBundle"] = base64.StdEncoding.EncodeToString(t.webhook.CABundle)
+	}
+	return unstructured.SetNestedMap(obj.Object, map[string]any{
+		"strategy": "Webhook",
+		"webhook": map[string]any{
+			"clientConfig":             cc,
+			"conversionReviewVersions": []any{"v1"},
+		},
+	}, "spec", "conversion")
+}
+
+// MigrateStorage rewrites the objects of every CRD that still has objects
+// stored in an older version, so that they are stored in the current storage
+// version, and then records that only the storage version is in use. For the
+// Tinkerbell CRDs that serve v1alpha1 and v1alpha2, this moves every object
+// to v1alpha2; the API server converts each one through the webhook.
+func (t Tinkerbell) MigrateStorage(ctx context.Context) error {
+	for name := range t.CRDs {
+		c, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("failed to get CRD %s: %w", name, err)
+		}
+		storage := ""
+		for _, v := range c.Spec.Versions {
+			if v.Storage {
+				storage = v.Name
+			}
+		}
+		if storage == "" || len(c.Status.StoredVersions) == 0 || slices.Equal(c.Status.StoredVersions, []string{storage}) {
+			continue
+		}
+		if t.Dynamic == nil {
+			return errors.New("migrating stored objects needs a dynamic client")
+		}
+		n, err := t.rewrite(ctx, c, storage)
+		if err != nil {
+			return fmt.Errorf("rewriting %s objects into %s: %w", c.Spec.Names.Plural, storage, err)
+		}
+		if err := t.setStoredVersions(ctx, name, storage); err != nil {
+			return fmt.Errorf("updating stored versions of CRD %s: %w", name, err)
+		}
+		if t.Logger.GetSink() != nil {
+			t.Logger.Info("migrated stored objects", "resource", gvr(c, storage).String(), "objects", n, "previousStoredVersions", c.Status.StoredVersions)
+		}
+	}
+	return nil
+}
+
+func (t Tinkerbell) rewrite(ctx context.Context, c *apiv1.CustomResourceDefinition, version string) (int, error) {
+	res := t.Dynamic.Resource(gvr(c, version))
+	count := 0
+	opts := metav1.ListOptions{Limit: 250}
+	for {
+		list, err := res.List(ctx, opts)
+		if err != nil {
+			return count, err
+		}
+		for i := range list.Items {
+			item := &list.Items[i]
+			if err := retry.Do(func() error {
+				ri := res.Namespace(item.GetNamespace())
+				_, err := ri.Update(ctx, item, metav1.UpdateOptions{FieldManager: "tinkerbell-storage-migration"})
+				if err == nil || isNotFound(err) {
+					return nil
+				}
+				if isConflict(err) {
+					// Changed meanwhile: that write already stored the new version, but
+					// re-read and rewrite anyway rather than reason about it.
+					fresh, gerr := ri.Get(ctx, item.GetName(), metav1.GetOptions{})
+					if gerr != nil {
+						if isNotFound(gerr) {
+							return nil
+						}
+						return gerr
+					}
+					item = fresh
+				}
+				return err
+			}, retry.Attempts(5), retry.Delay(200*time.Millisecond), retry.Context(ctx), retry.LastErrorOnly(true)); err != nil {
+				return count, fmt.Errorf("%s/%s: %w", item.GetNamespace(), item.GetName(), err)
+			}
+			count++
+		}
+		if list.GetContinue() == "" {
+			return count, nil
+		}
+		opts.Continue = list.GetContinue()
+	}
+}
+
+func (t Tinkerbell) setStoredVersions(ctx context.Context, name, version string) error {
+	return retry.Do(func() error {
+		c, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		c.Status.StoredVersions = []string{version}
+		_, err = t.Client.ApiextensionsV1().CustomResourceDefinitions().UpdateStatus(ctx, c, metav1.UpdateOptions{FieldManager: fieldManager})
+		return err
+	}, retry.Attempts(5), retry.Delay(200*time.Millisecond), retry.Context(ctx), retry.LastErrorOnly(true))
 }
 
 // Ready checks if the CRDs exist in the cluster and are established.
@@ -193,7 +389,7 @@ func (t Tinkerbell) create(ctx context.Context, obj *unstructured.Unstructured) 
 	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, &crdef); err != nil {
 		return fmt.Errorf("failed to convert unstructured to CRD: %w", err)
 	}
-	if _, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, &crdef, metav1.CreateOptions{FieldManager: "Tinkerbell CLI"}); err != nil {
+	if _, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Create(ctx, &crdef, metav1.CreateOptions{FieldManager: fieldManager}); err != nil {
 		return fmt.Errorf("failed to create CRD: %w", err)
 	}
 
@@ -206,7 +402,7 @@ func (t Tinkerbell) apply(ctx context.Context, obj *unstructured.Unstructured) e
 		return fmt.Errorf("failed to convert unstructured to CRD: %w", err)
 	}
 
-	if _, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Apply(ctx, crdef, metav1.ApplyOptions{FieldManager: "Tinkerbell CLI"}); err != nil {
+	if _, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Apply(ctx, crdef, metav1.ApplyOptions{FieldManager: fieldManager}); err != nil {
 		return fmt.Errorf("failed to apply CRD: %w", err)
 	}
 
@@ -227,7 +423,7 @@ func (t Tinkerbell) update(ctx context.Context, obj *unstructured.Unstructured) 
 	crdef.ResourceVersion = existingCRD.ResourceVersion
 	crdef.UID = existingCRD.UID
 	crdef.CreationTimestamp = existingCRD.CreationTimestamp
-	if _, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Update(ctx, &crdef, metav1.UpdateOptions{FieldManager: "Tinkerbell CLI"}); err != nil {
+	if _, err := t.Client.ApiextensionsV1().CustomResourceDefinitions().Update(ctx, &crdef, metav1.UpdateOptions{FieldManager: fieldManager}); err != nil {
 		return fmt.Errorf("failed to update CRD: %w", err)
 	}
 
