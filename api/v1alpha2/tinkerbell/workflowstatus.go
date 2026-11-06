@@ -102,6 +102,9 @@ type Metadata struct {
 	EndTime *metav1.Time `json:"endTime,omitempty"`
 
 	ExecutionDuration string `json:"executionDuration,omitempty"`
+
+	// Message is a human readable description of the most recent state, such as why an Action failed.
+	Message string `json:"message,omitempty"`
 }
 
 // JobStatus holds the state of a specific job.bmc.tinkerbell.org object created.

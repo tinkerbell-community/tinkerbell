@@ -640,6 +640,10 @@ spec:
                           don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                           intent and helps make sure that UIDs and names do not get conflated.
                         type: string
+                      message:
+                        description: Message is a human readable description of the
+                          most recent state, such as why an Action failed.
+                        type: string
                       name:
                         type: string
                       startTime:
@@ -667,6 +671,10 @@ spec:
                           don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                           intent and helps make sure that UIDs and names do not get conflated.
                         type: string
+                      message:
+                        description: Message is a human readable description of the
+                          most recent state, such as why an Action failed.
+                        type: string
                       name:
                         type: string
                       startTime:
@@ -693,6 +701,10 @@ spec:
                           UID is a type that holds unique ID values, including UUIDs.  Because we
                           don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                           intent and helps make sure that UIDs and names do not get conflated.
+                        type: string
+                      message:
+                        description: Message is a human readable description of the
+                          most recent state, such as why an Action failed.
                         type: string
                       name:
                         type: string
@@ -735,6 +747,11 @@ spec:
                                   don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                                   intent and helps make sure that UIDs and names do not get conflated.
                                 type: string
+                              message:
+                                description: Message is a human readable description
+                                  of the most recent state, such as why an Action
+                                  failed.
+                                type: string
                               name:
                                 type: string
                               startTime:
@@ -759,9 +776,10 @@ spec:
                           command:
                             description: |-
                               Command defines the command to use when launching the image. It overrides the default command
-                              of the Action image. It must be a unix path to an executable program. When omitted, the image's
-                              default command/entrypoint is used.
-                            pattern: ^(/[^/ ]*)+$
+                              (entrypoint) of the Action image. It is the path to an executable program, or a program name
+                              resolved through the image's PATH, as Docker does. When omitted, the image's default
+                              command/entrypoint is used.
+                            pattern: ^\S+$
                             type: string
                           env:
                             additionalProperties:
@@ -861,6 +879,10 @@ spec:
                             UID is a type that holds unique ID values, including UUIDs.  Because we
                             don't ONLY use UUIDs, this is an alias to string.  Being a type captures
                             intent and helps make sure that UIDs and names do not get conflated.
+                          type: string
+                        message:
+                          description: Message is a human readable description of
+                            the most recent state, such as why an Action failed.
                           type: string
                         name:
                           type: string

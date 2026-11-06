@@ -72,6 +72,7 @@ require (
 	k8s.io/kubernetes v1.36.4
 	quamina.net/go/quamina v1.5.2-0.20250207005432-0526acc321a8
 	sigs.k8s.io/controller-runtime v0.24.1
+	sigs.k8s.io/randfill v1.0.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
@@ -351,7 +352,6 @@ require (
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.36.0 // indirect
 	sigs.k8s.io/controller-tools v0.23.0 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
-	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
 )
 
