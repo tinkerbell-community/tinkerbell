@@ -472,12 +472,6 @@ spec:
                               minimum: 0
                               type: integer
                           type: object
-                          x-kubernetes-validations:
-                          - message: TFTPServerName and BootFileName must both be
-                              specified or both be empty
-                            rule: (has(self.tftpServerName) && self.tftpServerName
-                              != "") == (has(self.bootFileName) && self.bootFileName
-                              != "")
                         ipv6:
                           description: IPv6 is the options for serving dhcpv6 requests.
                           properties:
@@ -537,16 +531,19 @@ spec:
                                       DestinationDescriptor is the network address and prefix length in CIDR form,
                                       e.g., "192.168.1.0/24" or "2001:db8::/64". Must be a valid IPv4 or IPv6 CIDR;
                                       the family must match the enclosing IPAM field (ipv4 or ipv6).
+                                    maxLength: 49
                                     type: string
                                   router:
                                     description: |-
                                       Router is the IP address of the router for this route. Must be a valid IPv4 or IPv6
                                       address; the family must match the enclosing IPAM field (ipv4 or ipv6).
+                                    maxLength: 45
                                     type: string
                                 required:
                                 - destinationDescriptor
                                 - router
                                 type: object
+                              maxItems: 32
                               type: array
                             domainSearchList:
                               description: DomainSearchList to serve via DHCPv6 option
@@ -625,16 +622,19 @@ spec:
                                       DestinationDescriptor is the network address and prefix length in CIDR form,
                                       e.g., "192.168.1.0/24" or "2001:db8::/64". Must be a valid IPv4 or IPv6 CIDR;
                                       the family must match the enclosing IPAM field (ipv4 or ipv6).
+                                    maxLength: 49
                                     type: string
                                   router:
                                     description: |-
                                       Router is the IP address of the router for this route. Must be a valid IPv4 or IPv6
                                       address; the family must match the enclosing IPAM field (ipv4 or ipv6).
+                                    maxLength: 45
                                     type: string
                                 required:
                                 - destinationDescriptor
                                 - router
                                 type: object
+                              maxItems: 32
                               type: array
                             domainSearchList:
                               description: DomainSearchList to serve via DHCPv6 option
@@ -730,6 +730,12 @@ spec:
                                 If specified, BootFileName must also be specified.
                               type: string
                           type: object
+                          x-kubernetes-validations:
+                          - message: TFTPServerName and BootFileName must both be
+                              specified or both be empty
+                            rule: (has(self.tftpServerName) && self.tftpServerName
+                              != "") == (has(self.bootFileName) && self.bootFileName
+                              != "")
                         ipv6:
                           description: IPv6 is the options specific for network booting
                             via IPv6.
@@ -821,6 +827,7 @@ spec:
                   type: object
                 description: NetworkInterfaces defines the desired DHCP and netboot
                   configuration for a network interface.
+                maxProperties: 64
                 type: object
               references:
                 additionalProperties:

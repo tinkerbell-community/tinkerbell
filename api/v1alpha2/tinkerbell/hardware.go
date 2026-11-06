@@ -215,6 +215,7 @@ type OSIE struct {
 }
 
 // NetworkInterfaces maps a MAC address to a NetworkInterface.
+// +kubebuilder:validation:MaxProperties=64
 type NetworkInterfaces map[MAC]NetworkInterface
 
 // MAC is a Media Access Control address. MACs must use lower case letters.
@@ -248,7 +249,6 @@ type DHCP struct {
 }
 
 // DHCPv4 describes basic network configuration to be served in DHCPv4 responses.
-// +kubebuilder:validation:XValidation:rule=(has(self.tftpServerName) && self.tftpServerName != "") == (has(self.bootFileName) && self.bootFileName != ""),message="TFTPServerName and BootFileName must both be specified or both be empty"
 type DHCPv4 struct {
 	// Disabled indicates that DHCPv4 should not be served for this interface.
 	// When true, no DHCPv4 offer or ack will be sent for this MAC address.
@@ -313,6 +313,7 @@ type IP struct {
 
 	// ClasslessStaticRoutes defines static routes to be sent via DHCP option 121 (RFC 3442) or for DHCPv6 these will be available for statically being configured.
 	// +optional
+	// +kubebuilder:validation:MaxItems=32
 	ClasslessStaticRoutes []ClasslessStaticRoute `json:"classlessStaticRoutes,omitempty"`
 
 	// DomainSearchList to serve via DHCPv6 option 24 (RFC 3646) and DHCPv4 option 15 (or 119) (RFC 3397). They must be listed in order of priority.
@@ -357,9 +358,11 @@ type ClasslessStaticRoute struct {
 	// DestinationDescriptor is the network address and prefix length in CIDR form,
 	// e.g., "192.168.1.0/24" or "2001:db8::/64". Must be a valid IPv4 or IPv6 CIDR;
 	// the family must match the enclosing IPAM field (ipv4 or ipv6).
+	// +kubebuilder:validation:MaxLength=49
 	DestinationDescriptor string `json:"destinationDescriptor"`
 	// Router is the IP address of the router for this route. Must be a valid IPv4 or IPv6
 	// address; the family must match the enclosing IPAM field (ipv4 or ipv6).
+	// +kubebuilder:validation:MaxLength=45
 	Router string `json:"router"`
 }
 
@@ -401,6 +404,8 @@ type Netboot struct {
 	RPI *RPI `json:"rpi,omitempty"`
 }
 
+// Netbootv4 holds the netboot options served in DHCPv4 responses.
+// +kubebuilder:validation:XValidation:rule=(has(self.tftpServerName) && self.tftpServerName != "") == (has(self.bootFileName) && self.bootFileName != ""),message="TFTPServerName and BootFileName must both be specified or both be empty"
 type Netbootv4 struct {
 	// BootFileName is the boot file name. DHCP option 67.
 	// Used for explicit boot file configuration, required by some network boot clients
@@ -416,6 +421,8 @@ type Netbootv4 struct {
 	// +optional
 	TFTPServerName string `json:"tftpServerName,omitempty"`
 }
+
+// Netbootv6 holds the netboot options served in DHCPv6 responses.
 type Netbootv6 struct {
 	// BootFileParams are parameters for the boot file. DHCPv6 option 60 (RFC 5970).
 	// +optional
