@@ -522,10 +522,10 @@ func WorkflowRuleSetPage(cfg PageConfig, rulesetData WorkflowRuleSetPageData) te
 	})
 }
 
-// Detail Pages
-
-// HardwareDetailPage shows details for a specific hardware resource.
-func HardwareDetailPage(cfg PageConfig, hw HardwareDetail) templ.Component {
+// ResourceListPage is a resource list page: a heading, then the children (such
+// as notices), then the table in a container with id contentID, which the
+// table's pagination swaps.
+func ResourceListPage(cfg PageConfig, title, description, contentID string, table templ.Component) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -570,17 +570,330 @@ func HardwareDetailPage(cfg PageConfig, hw HardwareDetail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = DetailMainContent("Hardware", hw.Name, hw.Namespace, cfg.BaseURL+"/hardware", HardwareDetailContent(hw, cfg.BaseURL)).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<div class=\"flex flex-col flex-1 min-h-0 min-w-0\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "</div>")
+			templ_7745c5c3_Err = Header().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"flex-1 overflow-y-auto overflow-x-hidden\"><div class=\"p-6 bg-gray-50 dark:bg-darkBg\"><div class=\"mb-6\"><h1 class=\"text-2xl font-light text-gray-900 dark:text-white\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var19 string
+			templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(title)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 104, Col: 76}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</h1><p class=\"mt-1 text-sm text-gray-500 dark:text-gray-400\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var20 string
+			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(description)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 105, Col: 77}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</p></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templ_7745c5c3_Var17.Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "<div id=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var21 string
+			templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.ResolveAttributeValue(contentID)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 108, Col: 25}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var21)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = table.Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div></div></div></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Hardware - "+hw.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Tinkerbell - "+title, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var18), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// TaskPage is the v1alpha2 Task listing page.
+func TaskPage(cfg PageConfig, data TaskPageData) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var22 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var22 == nil {
+			templ_7745c5c3_Var22 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = ResourceListPage(cfg, "Tasks", "Reusable Actions that Workflows run on Hardware", "tasks-content", TaskTableContent(data)).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// PolicyPage is the Policy listing page.
+func PolicyPage(cfg PageConfig, data PolicyPageData) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var23 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var23 == nil {
+			templ_7745c5c3_Var23 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Err = ResourceListPage(cfg, "Policies", "Rules for automatic Workflow creation and reference access", "policies-content", PolicyTableContent(data)).Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// Detail Pages
+
+// TaskDetailPage shows details for a specific v1alpha2 Task.
+func TaskDetailPage(cfg PageConfig, task TaskDetail) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var24 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var24 == nil {
+			templ_7745c5c3_Var24 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var25 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = DetailMainContent("Tasks", task.Name, task.Namespace, cfg.BaseURL+"/tasks", TaskDetailContent(task, cfg.BaseURL)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("Task - "+task.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var25), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// PolicyDetailPage shows details for a specific Policy.
+func PolicyDetailPage(cfg PageConfig, policy PolicyDetail) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var26 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var26 == nil {
+			templ_7745c5c3_Var26 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var27 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = DetailMainContent("Policies", policy.Name, policy.Namespace, cfg.BaseURL+"/policies", PolicyDetailContent(policy, cfg.BaseURL)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("Policy - "+policy.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var27), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// HardwareDetailPage shows details for a specific hardware resource.
+func HardwareDetailPage(cfg PageConfig, hw HardwareDetail) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var28 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var28 == nil {
+			templ_7745c5c3_Var28 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var29 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = DetailMainContent("Hardware", hw.Name, hw.Namespace, cfg.BaseURL+"/hardware", HardwareDetailContent(hw, cfg.BaseURL)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("Hardware - "+hw.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var29), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -605,12 +918,12 @@ func WorkflowDetailPage(cfg PageConfig, wf WorkflowDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var19 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var19 == nil {
-			templ_7745c5c3_Var19 = templ.NopComponent
+		templ_7745c5c3_Var30 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var30 == nil {
+			templ_7745c5c3_Var30 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var20 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var31 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -622,7 +935,7 @@ func WorkflowDetailPage(cfg PageConfig, wf WorkflowDetail) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -638,13 +951,13 @@ func WorkflowDetailPage(cfg PageConfig, wf WorkflowDetail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Workflow - "+wf.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var20), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Workflow - "+wf.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var31), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -669,12 +982,12 @@ func TemplateDetailPage(cfg PageConfig, tpl TemplateDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var21 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var21 == nil {
-			templ_7745c5c3_Var21 = templ.NopComponent
+		templ_7745c5c3_Var32 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var32 == nil {
+			templ_7745c5c3_Var32 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var22 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var33 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -686,7 +999,7 @@ func TemplateDetailPage(cfg PageConfig, tpl TemplateDetail) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -702,13 +1015,13 @@ func TemplateDetailPage(cfg PageConfig, tpl TemplateDetail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Template - "+tpl.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var22), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Template - "+tpl.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var33), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -733,12 +1046,12 @@ func BMCMachineDetailPage(cfg PageConfig, machine BMCMachineDetail) templ.Compon
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var23 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var23 == nil {
-			templ_7745c5c3_Var23 = templ.NopComponent
+		templ_7745c5c3_Var34 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var34 == nil {
+			templ_7745c5c3_Var34 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var24 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var35 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -750,7 +1063,7 @@ func BMCMachineDetailPage(cfg PageConfig, machine BMCMachineDetail) templ.Compon
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -766,13 +1079,13 @@ func BMCMachineDetailPage(cfg PageConfig, machine BMCMachineDetail) templ.Compon
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Machine - "+machine.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var24), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Machine - "+machine.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var35), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -797,12 +1110,12 @@ func BMCJobDetailPage(cfg PageConfig, job BMCJobDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var25 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var25 == nil {
-			templ_7745c5c3_Var25 = templ.NopComponent
+		templ_7745c5c3_Var36 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var36 == nil {
+			templ_7745c5c3_Var36 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var26 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var37 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -814,7 +1127,7 @@ func BMCJobDetailPage(cfg PageConfig, job BMCJobDetail) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -830,13 +1143,13 @@ func BMCJobDetailPage(cfg PageConfig, job BMCJobDetail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Job - "+job.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var26), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Job - "+job.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var37), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -861,12 +1174,12 @@ func BMCTaskDetailPage(cfg PageConfig, task BMCTaskDetail) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var27 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var27 == nil {
-			templ_7745c5c3_Var27 = templ.NopComponent
+		templ_7745c5c3_Var38 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var38 == nil {
+			templ_7745c5c3_Var38 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var28 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var39 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -878,7 +1191,7 @@ func BMCTaskDetailPage(cfg PageConfig, task BMCTaskDetail) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 27, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -894,13 +1207,13 @@ func BMCTaskDetailPage(cfg PageConfig, task BMCTaskDetail) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 28, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Task - "+task.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var28), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Task - "+task.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var39), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -910,247 +1223,6 @@ func BMCTaskDetailPage(cfg PageConfig, task BMCTaskDetail) templ.Component {
 
 // WorkflowRuleSetDetailPage shows details for a specific workflowruleset.
 func WorkflowRuleSetDetailPage(cfg PageConfig, rs WorkflowRuleSetDetail) templ.Component {
-	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
-			return templ_7745c5c3_CtxErr
-		}
-		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-		if !templ_7745c5c3_IsBuffer {
-			defer func() {
-				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err == nil {
-					templ_7745c5c3_Err = templ_7745c5c3_BufErr
-				}
-			}()
-		}
-		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var29 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var29 == nil {
-			templ_7745c5c3_Var29 = templ.NopComponent
-		}
-		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var30 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-			if !templ_7745c5c3_IsBuffer {
-				defer func() {
-					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err == nil {
-						templ_7745c5c3_Err = templ_7745c5c3_BufErr
-					}
-				}()
-			}
-			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 29, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = DetailMainContent("Workflow Rulesets", rs.Name, rs.Namespace, cfg.BaseURL+"/workflows/rulesets", WorkflowRuleSetDetailContent(rs, cfg.BaseURL)).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 30, "</div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			return nil
-		})
-		templ_7745c5c3_Err = Layout("WorkflowRuleSet - "+rs.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var30), templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		return nil
-	})
-}
-
-// NotFoundPage shows a styled 404 page for missing resources.
-func NotFoundPage(cfg PageConfig, resourceType, resourceName, resourceNamespace, backLink, backLinkLabel, message string) templ.Component {
-	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
-			return templ_7745c5c3_CtxErr
-		}
-		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-		if !templ_7745c5c3_IsBuffer {
-			defer func() {
-				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-				if templ_7745c5c3_Err == nil {
-					templ_7745c5c3_Err = templ_7745c5c3_BufErr
-				}
-			}()
-		}
-		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var31 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var31 == nil {
-			templ_7745c5c3_Var31 = templ.NopComponent
-		}
-		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var32 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
-			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
-			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
-			if !templ_7745c5c3_IsBuffer {
-				defer func() {
-					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
-					if templ_7745c5c3_Err == nil {
-						templ_7745c5c3_Err = templ_7745c5c3_BufErr
-					}
-				}()
-			}
-			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 31, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "<div class=\"flex flex-col flex-1 min-h-0 min-w-0\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = Header().Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 33, "<div class=\"flex-1 overflow-y-auto overflow-x-hidden\"><div class=\"p-6 bg-gray-50 dark:bg-darkBg max-w-full\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = BackLink(backLinkLabel, backLink).Render(ctx, templ_7745c5c3_Buffer)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 34, "<div class=\"flex items-center justify-center min-h-[60vh]\"><div class=\"text-center max-w-md\"><div class=\"mx-auto h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-6\"><svg class=\"h-8 w-8 text-red-600 dark:text-red-400\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z\"></path></svg></div><h2 class=\"text-2xl font-light text-gray-900 dark:text-white mb-2\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var33 string
-			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(resourceType)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 188, Col: 89}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 35, " Not Found</h2><p class=\"text-gray-600 dark:text-gray-400 mb-4\">The ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var34 string
-			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(resourceType)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 190, Col: 27}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 36, " <span class=\"font-mono font-medium text-gray-900 dark:text-white\">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var35 string
-			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(resourceNamespace)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 190, Col: 115}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 37, "/")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var36 string
-			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(resourceName)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 190, Col: 132}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 38, "</span> does not exist.</p>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			if message != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 39, "<p class=\"text-sm text-gray-500 dark:text-gray-500 mb-6\">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var37 string
-				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(message)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 193, Col: 75}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "</p>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<a href=\"")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var38 templ.SafeURL
-			templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(backLink))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 195, Col: 41}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "\" class=\"inline-flex items-center px-4 py-2 bg-tink-teal-600 hover:bg-tink-teal-700 text-white font-medium rounded-lg transition-colors\"><svg class=\"h-4 w-4 mr-2\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 19l-7-7m0 0l7-7m-7 7h18\"></path></svg> Back to ")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var39 string
-			templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(backLinkLabel)
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 199, Col: 32}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</a></div></div></div></div></div></div>")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			return nil
-		})
-		templ_7745c5c3_Err = Layout("Not Found - "+resourceType, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var32), templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		return nil
-	})
-}
-
-// LoginPage is the service token login page.
-func LoginPage(baseURL string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -1183,7 +1255,248 @@ func LoginPage(baseURL string) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<div class=\"min-h-screen flex flex-col bg-gray-50 dark:bg-darkBg\"><!-- Dark/Light mode toggle in top-right corner --><div class=\"fixed top-4 right-4 z-10\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 41, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = DetailMainContent("Workflow Rulesets", rs.Name, rs.Namespace, cfg.BaseURL+"/workflows/rulesets", WorkflowRuleSetDetailContent(rs, cfg.BaseURL)).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 42, "</div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("WorkflowRuleSet - "+rs.Name, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var41), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// NotFoundPage shows a styled 404 page for missing resources.
+func NotFoundPage(cfg PageConfig, resourceType, resourceName, resourceNamespace, backLink, backLinkLabel, message string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var42 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var42 == nil {
+			templ_7745c5c3_Var42 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var43 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = MobileMenuOverlay().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Sidebar(cfg.Namespaces, cfg.BaseURL).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<div class=\"flex flex-col flex-1 min-h-0 min-w-0\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = Header().Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "<div class=\"flex-1 overflow-y-auto overflow-x-hidden\"><div class=\"p-6 bg-gray-50 dark:bg-darkBg max-w-full\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = BackLink(backLinkLabel, backLink).Render(ctx, templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<div class=\"flex items-center justify-center min-h-[60vh]\"><div class=\"text-center max-w-md\"><div class=\"mx-auto h-16 w-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-6\"><svg class=\"h-8 w-8 text-red-600 dark:text-red-400\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z\"></path></svg></div><h2 class=\"text-2xl font-light text-gray-900 dark:text-white mb-2\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var44 string
+			templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(resourceType)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 247, Col: 89}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, " Not Found</h2><p class=\"text-gray-600 dark:text-gray-400 mb-4\">The ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var45 string
+			templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(resourceType)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 249, Col: 27}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, " <span class=\"font-mono font-medium text-gray-900 dark:text-white\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var46 string
+			templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(resourceNamespace)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 249, Col: 115}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "/")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var47 string
+			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(resourceName)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 249, Col: 132}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</span> does not exist.</p>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			if message != "" {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<p class=\"text-sm text-gray-500 dark:text-gray-500 mb-6\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var48 string
+				templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(message)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 252, Col: 75}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</p>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "<a href=\"")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var49 templ.SafeURL
+			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(backLink))
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 254, Col: 41}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\" class=\"inline-flex items-center px-4 py-2 bg-tink-teal-600 hover:bg-tink-teal-700 text-white font-medium rounded-lg transition-colors\"><svg class=\"h-4 w-4 mr-2\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 19l-7-7m0 0l7-7m-7 7h18\"></path></svg> Back to ")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var50 string
+			templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(backLinkLabel)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 258, Col: 32}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</a></div></div></div></div></div></div>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			return nil
+		})
+		templ_7745c5c3_Err = Layout("Not Found - "+resourceType, cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var43), templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		return nil
+	})
+}
+
+// LoginPage is the service token login page.
+func LoginPage(baseURL string) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var51 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var51 == nil {
+			templ_7745c5c3_Var51 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
+		templ_7745c5c3_Var52 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+			if !templ_7745c5c3_IsBuffer {
+				defer func() {
+					templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+					if templ_7745c5c3_Err == nil {
+						templ_7745c5c3_Err = templ_7745c5c3_BufErr
+					}
+				}()
+			}
+			ctx = templ.InitializeContext(ctx)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<div class=\"min-h-screen flex flex-col bg-gray-50 dark:bg-darkBg\"><!-- Dark/Light mode toggle in top-right corner --><div class=\"fixed top-4 right-4 z-10\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1191,33 +1504,33 @@ func LoginPage(baseURL string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, "</div><!-- Scrollable content area --><div class=\"flex-1 overflow-y-auto flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8\"><div class=\"max-w-md w-full space-y-8\"><!-- Logo --><div class=\"text-center\"><img src=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "</div><!-- Scrollable content area --><div class=\"flex-1 overflow-y-auto flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8\"><div class=\"max-w-md w-full space-y-8\"><!-- Logo --><div class=\"text-center\"><img src=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var42 string
-			templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(baseURL + "/artwork/Tinkerbell-Logo-Landscape-Dark-2.png")
+			var templ_7745c5c3_Var53 string
+			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue(baseURL + "/artwork/Tinkerbell-Logo-Landscape-Dark-2.png")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 224, Col: 69}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 283, Col: 69}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "\" alt=\"Tinkerbell Logo\" class=\"h-16 w-auto dark:hidden mx-auto\"> <img src=\"")
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var53)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var43 string
-			templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue(baseURL + "/artwork/Tinkerbell-Logo-Landscape-Light-2.png")
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 229, Col: 70}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "\" alt=\"Tinkerbell Logo\" class=\"h-16 w-auto dark:hidden mx-auto\"> <img src=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\" alt=\"Tinkerbell Logo\" class=\"h-16 w-auto hidden dark:block mx-auto\"><h2 class=\"mt-6 text-center text-3xl font-light text-gray-900 dark:text-white\">Sign In</h2></div><!-- Login Form --><div class=\"mt-8 bg-white dark:bg-darkBorderSoft rounded-lg shadow px-4 py-5 sm:px-6\"><form id=\"loginForm\" onsubmit=\"return handleLoginFormSubmit(event)\" class=\"space-y-6\"><!-- API Server URL Input --><div><label for=\"apiServerInput\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Kubernetes API Server URL</label> <input id=\"apiServerInput\" name=\"apiServer\" type=\"text\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-darkBorder rounded-lg shadow-sm focus:ring-tink-teal-500 focus:border-tink-teal-500 bg-white dark:bg-darkNav text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 dark:placeholder-gray-500\" placeholder=\"https://kubernetes.default.svc or https://192.168.1.1:6443\"></div><!-- Token Input --><div><label for=\"tokenInput\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Service Account Token</label> <textarea id=\"tokenInput\" name=\"token\" rows=\"6\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-darkBorder rounded-lg shadow-sm focus:ring-tink-teal-500 focus:border-tink-teal-500 bg-white dark:bg-darkNav text-gray-900 dark:text-gray-100 font-mono text-sm placeholder-gray-400 dark:placeholder-gray-500\" placeholder=\"Paste your service account token here...\"></textarea></div><!-- TLS Verification Checkbox --><div class=\"flex items-center\"><input id=\"insecureSkipVerify\" name=\"insecureSkipVerify\" type=\"checkbox\" class=\"h-4 w-4 text-tink-teal-600 focus:ring-tink-teal-500 border-gray-300 dark:border-darkBorder rounded\"> <label for=\"insecureSkipVerify\" class=\"ml-2 flex items-center text-sm text-gray-700 dark:text-gray-300\">Skip TLS verification (insecure)<div class=\"relative ml-1 group\"><svg class=\"w-4 h-4 text-gray-400 dark:text-gray-500 cursor-help\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z\" clip-rule=\"evenodd\"></path></svg><div class=\"absolute left-0 bottom-6 mb-1 hidden group-hover:block w-64 p-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded shadow-lg z-10\">⚠️ Warning: Disabling TLS verification exposes you to man-in-the-middle attacks. Only use this for development/testing with self-signed certificates.</div></div></label></div><!-- Error Message --><div id=\"loginError\" class=\"rounded-lg bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-800 hidden\"><div class=\"p-3\"><div class=\"flex items-center\"><svg class=\"w-5 h-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z\" clip-rule=\"evenodd\"></path></svg><p class=\"text-sm text-red-800 dark:text-red-200 flex-1\" id=\"loginErrorMessage\"></p></div></div><!-- Collapsible Details Section --><div id=\"loginErrorDetailsSection\" class=\"hidden border-t border-red-300 dark:border-red-800\"><button type=\"button\" onclick=\"toggleErrorDetails()\" class=\"w-full px-3 py-2 text-left text-xs text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors flex items-center justify-between\"><span class=\"font-medium\">Technical details</span> <svg id=\"errorDetailsArrow\" class=\"w-4 h-4 transition-transform duration-200\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\"></path></svg></button><div id=\"loginErrorDetails\" class=\"max-h-0 overflow-hidden transition-all duration-200\"><div class=\"px-3 pb-3\"><code class=\"block text-xs bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 p-2 rounded font-mono whitespace-pre-wrap break-all\"></code></div></div></div></div><!-- Success Message --><div id=\"loginSuccess\" class=\"p-3 rounded-lg bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-800 hidden\"><div class=\"flex items-center\"><svg class=\"w-5 h-5 text-green-600 dark:text-green-400 mr-2 flex-shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z\" clip-rule=\"evenodd\"></path></svg><p class=\"text-sm text-green-800 dark:text-green-200\" id=\"loginSuccessMessage\"></p></div></div><!-- Submit Button --><button type=\"submit\" id=\"loginButton\" class=\"w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-tink-teal-600 hover:bg-tink-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tink-teal-500 dark:focus:ring-offset-darkBg transition-colors\">Sign in</button></form></div><!-- Info --><div class=\"mt-6 text-center text-xs text-gray-500 dark:text-gray-400\"><p>Your token stays in your browser and is never saved on our servers.</p></div><!-- Collapsible Token Generation Instructions --><div class=\"mt-4\"><button type=\"button\" onclick=\"toggleTokenInstructions()\" aria-expanded=\"false\" aria-controls=\"tokenInstructions\" class=\"w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-darkBorderSoft rounded-lg hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span class=\"flex items-center\"><!-- Help/Question icon --><svg class=\"w-5 h-5 mr-2 text-tink-teal-600 dark:text-tink-teal-400\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg> How to generate a token</span> <svg id=\"tokenInstructionsArrow\" class=\"w-5 h-5 transition-transform duration-300\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\"></path></svg></button><div id=\"tokenInstructions\" class=\"overflow-hidden transition-all duration-300 ease-in-out max-h-0 opacity-0\"><div class=\"mt-3 space-y-4\"><!-- Step 1 --><div class=\"bg-white dark:bg-darkBorderSoft rounded-lg border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-start justify-between mb-2\"><div class=\"flex items-center\"><span class=\"flex items-center justify-center w-6 h-6 rounded-full bg-tink-teal-100 dark:bg-tink-teal-900 text-tink-teal-700 dark:text-tink-teal-300 text-xs font-bold mr-2\">1</span><h5 class=\"text-sm font-semibold text-gray-900 dark:text-white\">Create a ServiceAccount</h5></div><button onclick=\"copyToClipboard('step1-code', this)\" class=\"copy-btn p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors\" title=\"Copy to clipboard\"><svg class=\"w-4 h-4 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-4 h-4 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Creates a new service account that the dashboard will use to authenticate with your cluster.</p><code id=\"step1-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono\">kubectl create serviceaccount my-admin-sa --namespace=tinkerbell</code></div><!-- Step 2 --><div class=\"bg-white dark:bg-darkBorderSoft rounded-lg border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-center mb-2\"><span class=\"flex items-center justify-center w-6 h-6 rounded-full bg-tink-teal-100 dark:bg-tink-teal-900 text-tink-teal-700 dark:text-tink-teal-300 text-xs font-bold mr-2\">2</span><h5 class=\"text-sm font-semibold text-gray-900 dark:text-white\">Grant permissions</h5></div><div class=\"bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-2 mb-3\"><p class=\"text-xs text-yellow-800 dark:text-yellow-200\"><strong>Note:</strong> If you previously created a ClusterRoleBinding, delete it first with:  <code class=\"bg-yellow-100 dark:bg-yellow-900/40 px-1 rounded\">kubectl delete clusterrolebinding my-admin-sa-binding</code></p></div><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Choose one of the following permission levels:</p><!-- Cluster-wide access option --><div class=\"mt-3\"><div class=\"flex items-start justify-between mb-1\"><p class=\"text-xs font-semibold text-gray-700 dark:text-gray-300\">Cluster-wide access:</p><button onclick=\"copyToClipboard('step2-cluster-code', this)\" class=\"copy-btn p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors cursor-pointer\" title=\"Copy to clipboard\"><svg class=\"w-3.5 h-3.5 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3.5 h-3.5 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><code id=\"step2-cluster-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono\">kubectl create clusterrolebinding my-admin-sa-binding --clusterrole=cluster-admin --serviceaccount=tinkerbell:my-admin-sa</code></div><!-- Namespace-specific access option --><div class=\"mt-3\"><div class=\"flex items-start justify-between mb-1\"><p class=\"text-xs font-semibold text-gray-700 dark:text-gray-300\">Or namespace-specific access (recommended):</p><button onclick=\"copyToClipboard('step2-namespace-code', this)\" class=\"copy-btn p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors cursor-pointer\" title=\"Copy to clipboard\"><svg class=\"w-3.5 h-3.5 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3.5 h-3.5 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><code id=\"step2-namespace-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono whitespace-pre-wrap break-words\">kubectl create role tinkerbell-admin --verb=get,list --resource=hardware.tinkerbell.org,templates.tinkerbell.org,workflows.tinkerbell.org,workflowrulesets.tinkerbell.org --resource=jobs.bmc.tinkerbell.org,machines.bmc.tinkerbell.org,tasks.bmc.tinkerbell.org --namespace=tinkerbell && kubectl create rolebinding my-admin-sa-binding --role=tinkerbell-admin --serviceaccount=tinkerbell:my-admin-sa --namespace=tinkerbell</code><p class=\"text-xs text-gray-500 dark:text-gray-400 mt-1\">Note: Creates a custom role with Tinkerbell resource permissions.</p></div></div><!-- Step 3 --><div class=\"bg-white dark:bg-darkBorderSoft rounded-lg border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-start justify-between mb-2\"><div class=\"flex items-center\"><span class=\"flex items-center justify-center w-6 h-6 rounded-full bg-tink-teal-100 dark:bg-tink-teal-900 text-tink-teal-700 dark:text-tink-teal-300 text-xs font-bold mr-2\">3</span><h5 class=\"text-sm font-semibold text-gray-900 dark:text-white\">Generate token</h5></div><button onclick=\"copyToClipboard('step3-code', this)\" class=\"copy-btn p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors\" title=\"Copy to clipboard\"><svg class=\"w-4 h-4 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-4 h-4 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Creates a token for the service account. Default expiry is 1 hour.</p><code id=\"step3-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono\">kubectl create token my-admin-sa --namespace=tinkerbell</code><!-- Token duration options --><div class=\"mt-3 pt-3 border-t border-gray-200 dark:border-darkBorder\"><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Or create a longer-lived token:</p><div class=\"flex flex-wrap gap-2\"><button onclick=\"copyToClipboard(null, this, 'kubectl create token my-admin-sa --namespace=tinkerbell --duration=24h')\" class=\"copy-btn inline-flex items-center px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-darkBg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span>24 hours</span> <svg class=\"w-3 h-3 ml-1 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3 h-3 ml-1 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button> <button onclick=\"copyToClipboard(null, this, 'kubectl create token my-admin-sa --namespace=tinkerbell --duration=168h')\" class=\"copy-btn inline-flex items-center px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-darkBg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span>1 week</span> <svg class=\"w-3 h-3 ml-1 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3 h-3 ml-1 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button> <button onclick=\"copyToClipboard(null, this, 'kubectl create token my-admin-sa --namespace=tinkerbell --duration=8760h')\" class=\"copy-btn inline-flex items-center px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-darkBg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span>1 year</span> <svg class=\"w-3 h-3 ml-1 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3 h-3 ml-1 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div></div></div></div></div></div></div></div><!-- Footer with CNCF Trademarks -->")
+			var templ_7745c5c3_Var54 string
+			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(baseURL + "/artwork/Tinkerbell-Logo-Landscape-Light-2.png")
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 288, Col: 70}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "\" alt=\"Tinkerbell Logo\" class=\"h-16 w-auto hidden dark:block mx-auto\"><h2 class=\"mt-6 text-center text-3xl font-light text-gray-900 dark:text-white\">Sign In</h2></div><!-- Login Form --><div class=\"mt-8 bg-white dark:bg-darkBorderSoft rounded-lg shadow px-4 py-5 sm:px-6\"><form id=\"loginForm\" onsubmit=\"return handleLoginFormSubmit(event)\" class=\"space-y-6\"><!-- API Server URL Input --><div><label for=\"apiServerInput\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Kubernetes API Server URL</label> <input id=\"apiServerInput\" name=\"apiServer\" type=\"text\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-darkBorder rounded-lg shadow-sm focus:ring-tink-teal-500 focus:border-tink-teal-500 bg-white dark:bg-darkNav text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400 dark:placeholder-gray-500\" placeholder=\"https://kubernetes.default.svc or https://192.168.1.1:6443\"></div><!-- Token Input --><div><label for=\"tokenInput\" class=\"block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2\">Service Account Token</label> <textarea id=\"tokenInput\" name=\"token\" rows=\"6\" class=\"w-full px-3 py-2 border border-gray-300 dark:border-darkBorder rounded-lg shadow-sm focus:ring-tink-teal-500 focus:border-tink-teal-500 bg-white dark:bg-darkNav text-gray-900 dark:text-gray-100 font-mono text-sm placeholder-gray-400 dark:placeholder-gray-500\" placeholder=\"Paste your service account token here...\"></textarea></div><!-- TLS Verification Checkbox --><div class=\"flex items-center\"><input id=\"insecureSkipVerify\" name=\"insecureSkipVerify\" type=\"checkbox\" class=\"h-4 w-4 text-tink-teal-600 focus:ring-tink-teal-500 border-gray-300 dark:border-darkBorder rounded\"> <label for=\"insecureSkipVerify\" class=\"ml-2 flex items-center text-sm text-gray-700 dark:text-gray-300\">Skip TLS verification (insecure)<div class=\"relative ml-1 group\"><svg class=\"w-4 h-4 text-gray-400 dark:text-gray-500 cursor-help\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z\" clip-rule=\"evenodd\"></path></svg><div class=\"absolute left-0 bottom-6 mb-1 hidden group-hover:block w-64 p-2 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 text-xs rounded shadow-lg z-10\">⚠️ Warning: Disabling TLS verification exposes you to man-in-the-middle attacks. Only use this for development/testing with self-signed certificates.</div></div></label></div><!-- Error Message --><div id=\"loginError\" class=\"rounded-lg bg-red-100 dark:bg-red-900 border border-red-300 dark:border-red-800 hidden\"><div class=\"p-3\"><div class=\"flex items-center\"><svg class=\"w-5 h-5 text-red-600 dark:text-red-400 mr-2 flex-shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z\" clip-rule=\"evenodd\"></path></svg><p class=\"text-sm text-red-800 dark:text-red-200 flex-1\" id=\"loginErrorMessage\"></p></div></div><!-- Collapsible Details Section --><div id=\"loginErrorDetailsSection\" class=\"hidden border-t border-red-300 dark:border-red-800\"><button type=\"button\" onclick=\"toggleErrorDetails()\" class=\"w-full px-3 py-2 text-left text-xs text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-800 transition-colors flex items-center justify-between\"><span class=\"font-medium\">Technical details</span> <svg id=\"errorDetailsArrow\" class=\"w-4 h-4 transition-transform duration-200\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\"></path></svg></button><div id=\"loginErrorDetails\" class=\"max-h-0 overflow-hidden transition-all duration-200\"><div class=\"px-3 pb-3\"><code class=\"block text-xs bg-red-50 dark:bg-red-950 text-red-900 dark:text-red-100 p-2 rounded font-mono whitespace-pre-wrap break-all\"></code></div></div></div></div><!-- Success Message --><div id=\"loginSuccess\" class=\"p-3 rounded-lg bg-green-100 dark:bg-green-900 border border-green-300 dark:border-green-800 hidden\"><div class=\"flex items-center\"><svg class=\"w-5 h-5 text-green-600 dark:text-green-400 mr-2 flex-shrink-0\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z\" clip-rule=\"evenodd\"></path></svg><p class=\"text-sm text-green-800 dark:text-green-200\" id=\"loginSuccessMessage\"></p></div></div><!-- Submit Button --><button type=\"submit\" id=\"loginButton\" class=\"w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-tink-teal-600 hover:bg-tink-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tink-teal-500 dark:focus:ring-offset-darkBg transition-colors\">Sign in</button></form></div><!-- Info --><div class=\"mt-6 text-center text-xs text-gray-500 dark:text-gray-400\"><p>Your token stays in your browser and is never saved on our servers.</p></div><!-- Collapsible Token Generation Instructions --><div class=\"mt-4\"><button type=\"button\" onclick=\"toggleTokenInstructions()\" aria-expanded=\"false\" aria-controls=\"tokenInstructions\" class=\"w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-darkBorderSoft rounded-lg hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span class=\"flex items-center\"><!-- Help/Question icon --><svg class=\"w-5 h-5 mr-2 text-tink-teal-600 dark:text-tink-teal-400\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg> How to generate a token</span> <svg id=\"tokenInstructionsArrow\" class=\"w-5 h-5 transition-transform duration-300\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\"></path></svg></button><div id=\"tokenInstructions\" class=\"overflow-hidden transition-all duration-300 ease-in-out max-h-0 opacity-0\"><div class=\"mt-3 space-y-4\"><!-- Step 1 --><div class=\"bg-white dark:bg-darkBorderSoft rounded-lg border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-start justify-between mb-2\"><div class=\"flex items-center\"><span class=\"flex items-center justify-center w-6 h-6 rounded-full bg-tink-teal-100 dark:bg-tink-teal-900 text-tink-teal-700 dark:text-tink-teal-300 text-xs font-bold mr-2\">1</span><h5 class=\"text-sm font-semibold text-gray-900 dark:text-white\">Create a ServiceAccount</h5></div><button onclick=\"copyToClipboard('step1-code', this)\" class=\"copy-btn p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors\" title=\"Copy to clipboard\"><svg class=\"w-4 h-4 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-4 h-4 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Creates a new service account that the dashboard will use to authenticate with your cluster.</p><code id=\"step1-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono\">kubectl create serviceaccount my-admin-sa --namespace=tinkerbell</code></div><!-- Step 2 --><div class=\"bg-white dark:bg-darkBorderSoft rounded-lg border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-center mb-2\"><span class=\"flex items-center justify-center w-6 h-6 rounded-full bg-tink-teal-100 dark:bg-tink-teal-900 text-tink-teal-700 dark:text-tink-teal-300 text-xs font-bold mr-2\">2</span><h5 class=\"text-sm font-semibold text-gray-900 dark:text-white\">Grant permissions</h5></div><div class=\"bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-2 mb-3\"><p class=\"text-xs text-yellow-800 dark:text-yellow-200\"><strong>Note:</strong> If you previously created a ClusterRoleBinding, delete it first with:  <code class=\"bg-yellow-100 dark:bg-yellow-900/40 px-1 rounded\">kubectl delete clusterrolebinding my-admin-sa-binding</code></p></div><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Choose one of the following permission levels:</p><!-- Cluster-wide access option --><div class=\"mt-3\"><div class=\"flex items-start justify-between mb-1\"><p class=\"text-xs font-semibold text-gray-700 dark:text-gray-300\">Cluster-wide access:</p><button onclick=\"copyToClipboard('step2-cluster-code', this)\" class=\"copy-btn p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors cursor-pointer\" title=\"Copy to clipboard\"><svg class=\"w-3.5 h-3.5 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3.5 h-3.5 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><code id=\"step2-cluster-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono\">kubectl create clusterrolebinding my-admin-sa-binding --clusterrole=cluster-admin --serviceaccount=tinkerbell:my-admin-sa</code></div><!-- Namespace-specific access option --><div class=\"mt-3\"><div class=\"flex items-start justify-between mb-1\"><p class=\"text-xs font-semibold text-gray-700 dark:text-gray-300\">Or namespace-specific access (recommended):</p><button onclick=\"copyToClipboard('step2-namespace-code', this)\" class=\"copy-btn p-1 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors cursor-pointer\" title=\"Copy to clipboard\"><svg class=\"w-3.5 h-3.5 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3.5 h-3.5 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><code id=\"step2-namespace-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono whitespace-pre-wrap break-words\">kubectl create role tinkerbell-admin --verb=get,list --resource=hardware.tinkerbell.org,workflows.tinkerbell.org,tasks.tinkerbell.org,policies.tinkerbell.org,templates.tinkerbell.org,workflowrulesets.tinkerbell.org --resource=jobs.bmc.tinkerbell.org,machines.bmc.tinkerbell.org,tasks.bmc.tinkerbell.org --namespace=tinkerbell && kubectl create rolebinding my-admin-sa-binding --role=tinkerbell-admin --serviceaccount=tinkerbell:my-admin-sa --namespace=tinkerbell</code><p class=\"text-xs text-gray-500 dark:text-gray-400 mt-1\">Note: Creates a custom role with Tinkerbell resource permissions.</p></div></div><!-- Step 3 --><div class=\"bg-white dark:bg-darkBorderSoft rounded-lg border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-start justify-between mb-2\"><div class=\"flex items-center\"><span class=\"flex items-center justify-center w-6 h-6 rounded-full bg-tink-teal-100 dark:bg-tink-teal-900 text-tink-teal-700 dark:text-tink-teal-300 text-xs font-bold mr-2\">3</span><h5 class=\"text-sm font-semibold text-gray-900 dark:text-white\">Generate token</h5></div><button onclick=\"copyToClipboard('step3-code', this)\" class=\"copy-btn p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-darkBorder transition-colors\" title=\"Copy to clipboard\"><svg class=\"w-4 h-4 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-4 h-4 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Creates a token for the service account. Default expiry is 1 hour.</p><code id=\"step3-code\" class=\"block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono\">kubectl create token my-admin-sa --namespace=tinkerbell</code><!-- Token duration options --><div class=\"mt-3 pt-3 border-t border-gray-200 dark:border-darkBorder\"><p class=\"text-xs text-gray-500 dark:text-gray-400 mb-2\">Or create a longer-lived token:</p><div class=\"flex flex-wrap gap-2\"><button onclick=\"copyToClipboard(null, this, 'kubectl create token my-admin-sa --namespace=tinkerbell --duration=24h')\" class=\"copy-btn inline-flex items-center px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-darkBg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span>24 hours</span> <svg class=\"w-3 h-3 ml-1 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3 h-3 ml-1 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button> <button onclick=\"copyToClipboard(null, this, 'kubectl create token my-admin-sa --namespace=tinkerbell --duration=168h')\" class=\"copy-btn inline-flex items-center px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-darkBg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span>1 week</span> <svg class=\"w-3 h-3 ml-1 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3 h-3 ml-1 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button> <button onclick=\"copyToClipboard(null, this, 'kubectl create token my-admin-sa --namespace=tinkerbell --duration=8760h')\" class=\"copy-btn inline-flex items-center px-2 py-1 text-xs rounded-md bg-gray-100 dark:bg-darkBg text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-darkBorder transition-colors\"><span>1 year</span> <svg class=\"w-3 h-3 ml-1 copy-icon\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z\"></path></svg> <svg class=\"w-3 h-3 ml-1 check-icon hidden text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M5 13l4 4L19 7\"></path></svg></button></div></div></div></div></div></div></div></div><!-- Footer with CNCF Trademarks -->")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1225,13 +1538,13 @@ func LoginPage(baseURL string) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</div><!-- Inline script for form submission --> <script>\n\t\t\tfunction toggleErrorDetails() {\n\t\t\t\tconst details = document.getElementById('loginErrorDetails');\n\t\t\t\tconst arrow = document.getElementById('errorDetailsArrow');\n\t\t\t\tconst isCollapsed = details.classList.contains('max-h-0');\n\t\t\t\t\n\t\t\t\tif (isCollapsed) {\n\t\t\t\t\tdetails.classList.remove('max-h-0');\n\t\t\t\t\tdetails.classList.add('max-h-96');\n\t\t\t\t\tarrow.classList.add('rotate-180');\n\t\t\t\t} else {\n\t\t\t\t\tdetails.classList.add('max-h-0');\n\t\t\t\t\tdetails.classList.remove('max-h-96');\n\t\t\t\t\tarrow.classList.remove('rotate-180');\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction toggleTokenInstructions() {\n\t\t\t\tconst instructions = document.getElementById('tokenInstructions');\n\t\t\t\tconst arrow = document.getElementById('tokenInstructionsArrow');\n\t\t\t\tconst button = arrow.closest('button');\n\t\t\t\tconst isCollapsed = instructions.classList.contains('max-h-0');\n\t\t\t\t\n\t\t\t\tif (isCollapsed) {\n\t\t\t\t\t// Expand\n\t\t\t\t\tinstructions.classList.remove('max-h-0', 'opacity-0');\n\t\t\t\t\tinstructions.classList.add('max-h-[2000px]', 'opacity-100');\n\t\t\t\t\tarrow.classList.add('rotate-180');\n\t\t\t\t\tbutton.setAttribute('aria-expanded', 'true');\n\t\t\t\t} else {\n\t\t\t\t\t// Collapse\n\t\t\t\t\tinstructions.classList.add('max-h-0', 'opacity-0');\n\t\t\t\t\tinstructions.classList.remove('max-h-[2000px]', 'opacity-100');\n\t\t\t\t\tarrow.classList.remove('rotate-180');\n\t\t\t\t\tbutton.setAttribute('aria-expanded', 'false');\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction copyToClipboard(elementId, button, directText) {\n\t\t\t\tconst text = directText || document.getElementById(elementId).textContent;\n\t\t\t\t\n\t\t\t\t// Show success feedback function\n\t\t\t\tfunction showSuccess() {\n\t\t\t\t\tconst copyIcon = button.querySelector('.copy-icon');\n\t\t\t\t\tconst checkIcon = button.querySelector('.check-icon');\n\t\t\t\t\tif (copyIcon && checkIcon) {\n\t\t\t\t\t\tcopyIcon.classList.add('hidden');\n\t\t\t\t\t\tcheckIcon.classList.remove('hidden');\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Reset after 2 seconds\n\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\tcopyIcon.classList.remove('hidden');\n\t\t\t\t\t\t\tcheckIcon.classList.add('hidden');\n\t\t\t\t\t\t}, 2000);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Try modern clipboard API first (requires HTTPS)\n\t\t\t\tif (navigator.clipboard && window.isSecureContext) {\n\t\t\t\t\tnavigator.clipboard.writeText(text).then(showSuccess).catch(err => {\n\t\t\t\t\t\tconsole.error('Clipboard API failed:', err);\n\t\t\t\t\t\tfallbackCopy(text, showSuccess);\n\t\t\t\t\t});\n\t\t\t\t} else {\n\t\t\t\t\t// Fallback for HTTP contexts\n\t\t\t\t\tfallbackCopy(text, showSuccess);\n\t\t\t\t}\n\t\t\t}\n\t\t\t\n\t\t\tfunction fallbackCopy(text, onSuccess) {\n\t\t\t\tconst textarea = document.createElement('textarea');\n\t\t\t\ttextarea.value = text;\n\t\t\t\ttextarea.style.position = 'fixed';\n\t\t\t\ttextarea.style.left = '-9999px';\n\t\t\t\ttextarea.style.top = '-9999px';\n\t\t\t\tdocument.body.appendChild(textarea);\n\t\t\t\ttextarea.focus();\n\t\t\t\ttextarea.select();\n\t\t\t\t\n\t\t\t\ttry {\n\t\t\t\t\tdocument.execCommand('copy');\n\t\t\t\t\tonSuccess();\n\t\t\t\t} catch (err) {\n\t\t\t\t\tconsole.error('Fallback copy failed:', err);\n\t\t\t\t\talert('Copy failed. Please select and copy manually.');\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tdocument.body.removeChild(textarea);\n\t\t\t}\n\n\t\t\tfunction handleLoginFormSubmit(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\t\n\t\t\t\tconst apiServerInput = document.getElementById('apiServerInput');\n\t\t\t\tconst tokenInput = document.getElementById('tokenInput');\n\t\t\tconst insecureSkipVerifyCheckbox = document.getElementById('insecureSkipVerify');\n\t\t\tconst loginButton = document.getElementById('loginButton');\n\t\t\tconst loginError = document.getElementById('loginError');\n\t\t\tconst loginErrorMessage = document.getElementById('loginErrorMessage');\n\t\t\tconst loginSuccess = document.getElementById('loginSuccess');\n\t\t\tconst loginSuccessMessage = document.getElementById('loginSuccessMessage');\n\n\t\t\tloginError.classList.add('hidden');\n\t\t\tloginSuccess.classList.add('hidden');\n\n\t\t\tconst apiServer = apiServerInput.value.trim();\n\t\t\tconst token = tokenInput.value.trim();\n\t\t\tconst insecureSkipVerify = insecureSkipVerifyCheckbox.checked;\t\t\t\n\t\t\tif (!apiServer) {\n\t\t\t\t\tloginErrorMessage.textContent = 'Please provide the Kubernetes API server URL';\n\t\t\t\t\tloginError.classList.remove('hidden');\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tif (!token) {\n\t\t\t\t\tloginErrorMessage.textContent = 'Please provide a service account token';\n\t\t\t\t\tloginError.classList.remove('hidden');\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\n\t\t\t\tloginButton.disabled = true;\n\t\t\t\tloginButton.textContent = 'Signing in...';\n\n\t\t\t\tconst baseURL = document.body.dataset.baseUrl || '';\n\t\t\t\tfetch(baseURL + '/api/auth/login', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: {\n\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t},\n\t\t\t\t\tcredentials: 'same-origin',\n\t\t\t\t\tbody: new URLSearchParams({ token, apiServer, insecureSkipVerify: insecureSkipVerify.toString() }),\n\t\t\t\t})\n\t\t\t\t.then(response => {\n\t\t\t\t\treturn response.json().then(data => ({ status: response.status, data }));\n\t\t\t\t})\n\t\t\t\t.then(({ status, data }) => {\n\t\t\t\t\tif (status !== 200) {\n\t\t\t\t\t\tconst error = new Error(data.error || 'Login failed');\n\t\t\t\t\t\terror.details = data.details;\n\t\t\t\t\t\tthrow error;\n\t\t\t\t\t}\n\n\t\t\t\t\t// Show success message\n\t\t\t\t\tloginSuccessMessage.textContent = 'Login successful! Redirecting...';\n\t\t\t\t\tloginSuccess.classList.remove('hidden');\n\n\t\t\t\t\t// Redirect to home page\n\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\twindow.location.href = baseURL + '/';\n\t\t\t\t\t}, 500);\n\t\t\t\t})\n\t\t\t\t.catch(error => {\n\t\t\t\t\tconsole.error('Login error:', error);\n\t\t\t\t\tloginErrorMessage.textContent = error.message || 'An error occurred during login';\n\t\t\t\t\t\n\t\t\t\t\t// Show technical details if available\n\t\t\t\t\tconst detailsSection = document.getElementById('loginErrorDetailsSection');\n\t\t\t\t\tconst detailsCode = document.querySelector('#loginErrorDetails code');\n\t\t\t\t\tif (error.details) {\n\t\t\t\t\t\tdetailsCode.textContent = error.details;\n\t\t\t\t\t\tdetailsSection.classList.remove('hidden');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdetailsSection.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tloginError.classList.remove('hidden');\n\t\t\t\t\tloginButton.disabled = false;\n\t\t\t\t\tloginButton.textContent = 'Sign in';\n\t\t\t\t});\n\n\t\t\t\treturn false;\n\t\t\t}\n\t\t</script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "</div><!-- Inline script for form submission --> <script>\n\t\t\tfunction toggleErrorDetails() {\n\t\t\t\tconst details = document.getElementById('loginErrorDetails');\n\t\t\t\tconst arrow = document.getElementById('errorDetailsArrow');\n\t\t\t\tconst isCollapsed = details.classList.contains('max-h-0');\n\t\t\t\t\n\t\t\t\tif (isCollapsed) {\n\t\t\t\t\tdetails.classList.remove('max-h-0');\n\t\t\t\t\tdetails.classList.add('max-h-96');\n\t\t\t\t\tarrow.classList.add('rotate-180');\n\t\t\t\t} else {\n\t\t\t\t\tdetails.classList.add('max-h-0');\n\t\t\t\t\tdetails.classList.remove('max-h-96');\n\t\t\t\t\tarrow.classList.remove('rotate-180');\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction toggleTokenInstructions() {\n\t\t\t\tconst instructions = document.getElementById('tokenInstructions');\n\t\t\t\tconst arrow = document.getElementById('tokenInstructionsArrow');\n\t\t\t\tconst button = arrow.closest('button');\n\t\t\t\tconst isCollapsed = instructions.classList.contains('max-h-0');\n\t\t\t\t\n\t\t\t\tif (isCollapsed) {\n\t\t\t\t\t// Expand\n\t\t\t\t\tinstructions.classList.remove('max-h-0', 'opacity-0');\n\t\t\t\t\tinstructions.classList.add('max-h-[2000px]', 'opacity-100');\n\t\t\t\t\tarrow.classList.add('rotate-180');\n\t\t\t\t\tbutton.setAttribute('aria-expanded', 'true');\n\t\t\t\t} else {\n\t\t\t\t\t// Collapse\n\t\t\t\t\tinstructions.classList.add('max-h-0', 'opacity-0');\n\t\t\t\t\tinstructions.classList.remove('max-h-[2000px]', 'opacity-100');\n\t\t\t\t\tarrow.classList.remove('rotate-180');\n\t\t\t\t\tbutton.setAttribute('aria-expanded', 'false');\n\t\t\t\t}\n\t\t\t}\n\n\t\t\tfunction copyToClipboard(elementId, button, directText) {\n\t\t\t\tconst text = directText || document.getElementById(elementId).textContent;\n\t\t\t\t\n\t\t\t\t// Show success feedback function\n\t\t\t\tfunction showSuccess() {\n\t\t\t\t\tconst copyIcon = button.querySelector('.copy-icon');\n\t\t\t\t\tconst checkIcon = button.querySelector('.check-icon');\n\t\t\t\t\tif (copyIcon && checkIcon) {\n\t\t\t\t\t\tcopyIcon.classList.add('hidden');\n\t\t\t\t\t\tcheckIcon.classList.remove('hidden');\n\t\t\t\t\t\t\n\t\t\t\t\t\t// Reset after 2 seconds\n\t\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\t\tcopyIcon.classList.remove('hidden');\n\t\t\t\t\t\t\tcheckIcon.classList.add('hidden');\n\t\t\t\t\t\t}, 2000);\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\t// Try modern clipboard API first (requires HTTPS)\n\t\t\t\tif (navigator.clipboard && window.isSecureContext) {\n\t\t\t\t\tnavigator.clipboard.writeText(text).then(showSuccess).catch(err => {\n\t\t\t\t\t\tconsole.error('Clipboard API failed:', err);\n\t\t\t\t\t\tfallbackCopy(text, showSuccess);\n\t\t\t\t\t});\n\t\t\t\t} else {\n\t\t\t\t\t// Fallback for HTTP contexts\n\t\t\t\t\tfallbackCopy(text, showSuccess);\n\t\t\t\t}\n\t\t\t}\n\t\t\t\n\t\t\tfunction fallbackCopy(text, onSuccess) {\n\t\t\t\tconst textarea = document.createElement('textarea');\n\t\t\t\ttextarea.value = text;\n\t\t\t\ttextarea.style.position = 'fixed';\n\t\t\t\ttextarea.style.left = '-9999px';\n\t\t\t\ttextarea.style.top = '-9999px';\n\t\t\t\tdocument.body.appendChild(textarea);\n\t\t\t\ttextarea.focus();\n\t\t\t\ttextarea.select();\n\t\t\t\t\n\t\t\t\ttry {\n\t\t\t\t\tdocument.execCommand('copy');\n\t\t\t\t\tonSuccess();\n\t\t\t\t} catch (err) {\n\t\t\t\t\tconsole.error('Fallback copy failed:', err);\n\t\t\t\t\talert('Copy failed. Please select and copy manually.');\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tdocument.body.removeChild(textarea);\n\t\t\t}\n\n\t\t\tfunction handleLoginFormSubmit(event) {\n\t\t\t\tevent.preventDefault();\n\t\t\t\t\n\t\t\t\tconst apiServerInput = document.getElementById('apiServerInput');\n\t\t\t\tconst tokenInput = document.getElementById('tokenInput');\n\t\t\tconst insecureSkipVerifyCheckbox = document.getElementById('insecureSkipVerify');\n\t\t\tconst loginButton = document.getElementById('loginButton');\n\t\t\tconst loginError = document.getElementById('loginError');\n\t\t\tconst loginErrorMessage = document.getElementById('loginErrorMessage');\n\t\t\tconst loginSuccess = document.getElementById('loginSuccess');\n\t\t\tconst loginSuccessMessage = document.getElementById('loginSuccessMessage');\n\n\t\t\tloginError.classList.add('hidden');\n\t\t\tloginSuccess.classList.add('hidden');\n\n\t\t\tconst apiServer = apiServerInput.value.trim();\n\t\t\tconst token = tokenInput.value.trim();\n\t\t\tconst insecureSkipVerify = insecureSkipVerifyCheckbox.checked;\t\t\t\n\t\t\tif (!apiServer) {\n\t\t\t\t\tloginErrorMessage.textContent = 'Please provide the Kubernetes API server URL';\n\t\t\t\t\tloginError.classList.remove('hidden');\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\t\t\t\t\n\t\t\t\tif (!token) {\n\t\t\t\t\tloginErrorMessage.textContent = 'Please provide a service account token';\n\t\t\t\t\tloginError.classList.remove('hidden');\n\t\t\t\t\treturn false;\n\t\t\t\t}\n\n\t\t\t\tloginButton.disabled = true;\n\t\t\t\tloginButton.textContent = 'Signing in...';\n\n\t\t\t\tconst baseURL = document.body.dataset.baseUrl || '';\n\t\t\t\tfetch(baseURL + '/api/auth/login', {\n\t\t\t\t\tmethod: 'POST',\n\t\t\t\t\theaders: {\n\t\t\t\t\t\t'Content-Type': 'application/x-www-form-urlencoded',\n\t\t\t\t\t},\n\t\t\t\t\tcredentials: 'same-origin',\n\t\t\t\t\tbody: new URLSearchParams({ token, apiServer, insecureSkipVerify: insecureSkipVerify.toString() }),\n\t\t\t\t})\n\t\t\t\t.then(response => {\n\t\t\t\t\treturn response.json().then(data => ({ status: response.status, data }));\n\t\t\t\t})\n\t\t\t\t.then(({ status, data }) => {\n\t\t\t\t\tif (status !== 200) {\n\t\t\t\t\t\tconst error = new Error(data.error || 'Login failed');\n\t\t\t\t\t\terror.details = data.details;\n\t\t\t\t\t\tthrow error;\n\t\t\t\t\t}\n\n\t\t\t\t\t// Show success message\n\t\t\t\t\tloginSuccessMessage.textContent = 'Login successful! Redirecting...';\n\t\t\t\t\tloginSuccess.classList.remove('hidden');\n\n\t\t\t\t\t// Redirect to home page\n\t\t\t\t\tsetTimeout(() => {\n\t\t\t\t\t\twindow.location.href = baseURL + '/';\n\t\t\t\t\t}, 500);\n\t\t\t\t})\n\t\t\t\t.catch(error => {\n\t\t\t\t\tconsole.error('Login error:', error);\n\t\t\t\t\tloginErrorMessage.textContent = error.message || 'An error occurred during login';\n\t\t\t\t\t\n\t\t\t\t\t// Show technical details if available\n\t\t\t\t\tconst detailsSection = document.getElementById('loginErrorDetailsSection');\n\t\t\t\t\tconst detailsCode = document.querySelector('#loginErrorDetails code');\n\t\t\t\t\tif (error.details) {\n\t\t\t\t\t\tdetailsCode.textContent = error.details;\n\t\t\t\t\t\tdetailsSection.classList.remove('hidden');\n\t\t\t\t\t} else {\n\t\t\t\t\t\tdetailsSection.classList.add('hidden');\n\t\t\t\t\t}\n\t\t\t\t\t\n\t\t\t\t\tloginError.classList.remove('hidden');\n\t\t\t\t\tloginButton.disabled = false;\n\t\t\t\t\tloginButton.textContent = 'Sign in';\n\t\t\t\t});\n\n\t\t\t\treturn false;\n\t\t\t}\n\t\t</script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Tinkerbell - Login", baseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var41), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Tinkerbell - Login", baseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var52), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1257,12 +1570,12 @@ func PermissionsPage(cfg PageConfig, resources []ResourceInfo) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var44 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var44 == nil {
-			templ_7745c5c3_Var44 = templ.NopComponent
+		templ_7745c5c3_Var55 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var55 == nil {
+			templ_7745c5c3_Var55 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var45 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var56 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -1274,7 +1587,7 @@ func PermissionsPage(cfg PageConfig, resources []ResourceInfo) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<div class=\"flex h-screen bg-white dark:bg-darkBg\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1286,7 +1599,7 @@ func PermissionsPage(cfg PageConfig, resources []ResourceInfo) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "<div class=\"flex-1 flex flex-col overflow-hidden\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<div class=\"flex-1 flex flex-col overflow-hidden\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1294,7 +1607,7 @@ func PermissionsPage(cfg PageConfig, resources []ResourceInfo) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<main class=\"flex-1 overflow-y-auto p-6\"><div class=\"max-w-7xl mx-auto\"><div class=\"mb-6\"><h1 class=\"text-2xl font-light text-gray-900 dark:text-white\">Tinkerbell Permissions</h1><p class=\"mt-1 text-sm text-gray-600 dark:text-gray-400\">View your service account's access to Tinkerbell resources</p></div><!-- Token Expiry Info --><div id=\"tokenExpiryCard\" class=\"mb-6 hidden\"><div class=\"bg-white dark:bg-darkNav rounded-lg shadow-sm border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-center gap-3\"><div id=\"tokenExpiryIcon\" class=\"flex-shrink-0\"><!-- Icon will be set by JS --></div><div class=\"flex-1\"><h3 class=\"text-sm font-medium text-gray-900 dark:text-white\">Token Status</h3><p id=\"tokenExpiryText\" class=\"text-sm text-gray-600 dark:text-gray-400\"><!-- Duration will be set by JS --></p></div><div id=\"tokenExpiryBadge\" class=\"flex-shrink-0\"><!-- Badge will be set by JS --></div></div></div></div><script>\n\t\t\t\t\t\t\t(function() {\n\t\t\t\t\t\t\t\tfunction getCookie(name) {\n\t\t\t\t\t\t\t\t\tconst value = `; ${document.cookie}`;\n\t\t\t\t\t\t\t\t\tconst parts = value.split(`; ${name}=`);\n\t\t\t\t\t\t\t\t\tif (parts.length === 2) return parts.pop().split(';').shift();\n\t\t\t\t\t\t\t\t\treturn null;\n\t\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\t\tfunction formatDuration(ms) {\n\t\t\t\t\t\t\t\t\tconst totalSeconds = Math.floor(ms / 1000);\n\t\t\t\t\t\t\t\t\tconst days = Math.floor(totalSeconds / 86400);\n\t\t\t\t\t\t\t\t\tconst hours = Math.floor((totalSeconds % 86400) / 3600);\n\t\t\t\t\t\t\t\t\tconst minutes = Math.floor((totalSeconds % 3600) / 60);\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tconst parts = [];\n\t\t\t\t\t\t\t\t\tif (days > 0) parts.push(`${days}d`);\n\t\t\t\t\t\t\t\t\tif (hours > 0) parts.push(`${hours}h`);\n\t\t\t\t\t\t\t\t\tif (minutes > 0 && days === 0) parts.push(`${minutes}m`);\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\treturn parts.length > 0 ? parts.join(' ') : 'less than a minute';\n\t\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\t\tfunction updateTokenExpiry() {\n\t\t\t\t\t\t\t\t\tconst card = document.getElementById('tokenExpiryCard');\n\t\t\t\t\t\t\t\t\tconst iconDiv = document.getElementById('tokenExpiryIcon');\n\t\t\t\t\t\t\t\t\tconst textP = document.getElementById('tokenExpiryText');\n\t\t\t\t\t\t\t\t\tconst badgeDiv = document.getElementById('tokenExpiryBadge');\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t// Read expiry timestamp from token_expiry cookie (Unix timestamp in seconds)\n\t\t\t\t\t\t\t\t\tconst expiryStr = getCookie('token_expiry');\n\t\t\t\t\t\t\t\t\tif (!expiryStr) {\n\t\t\t\t\t\t\t\t\t\tcard.classList.add('hidden');\n\t\t\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tconst expirySec = parseInt(expiryStr, 10);\n\t\t\t\t\t\t\t\t\tif (isNaN(expirySec)) {\n\t\t\t\t\t\t\t\t\t\tcard.classList.add('hidden');\n\t\t\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tconst expiryDate = new Date(expirySec * 1000);\n\t\t\t\t\t\t\t\t\tconst now = new Date();\n\t\t\t\t\t\t\t\t\tconst diffMs = expiryDate - now;\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tcard.classList.remove('hidden');\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tif (diffMs <= 0) {\n\t\t\t\t\t\t\t\t\t\t// Expired\n\t\t\t\t\t\t\t\t\t\ticonDiv.innerHTML = '<svg class=\"w-8 h-8 text-red-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z\"></path></svg>';\n\t\t\t\t\t\t\t\t\t\ttextP.textContent = 'Your token has expired. Please log in again.';\n\t\t\t\t\t\t\t\t\t\ttextP.className = 'text-sm text-red-600 dark:text-red-400';\n\t\t\t\t\t\t\t\t\t\tbadgeDiv.innerHTML = '<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200\">Expired</span>';\n\t\t\t\t\t\t\t\t\t} else if (diffMs < 3600000) {\n\t\t\t\t\t\t\t\t\t\t// Less than 1 hour - warning\n\t\t\t\t\t\t\t\t\t\ticonDiv.innerHTML = '<svg class=\"w-8 h-8 text-amber-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg>';\n\t\t\t\t\t\t\t\t\t\ttextP.textContent = `Expires in ${formatDuration(diffMs)} (${expiryDate.toLocaleString()})`;\n\t\t\t\t\t\t\t\t\t\ttextP.className = 'text-sm text-amber-600 dark:text-amber-400';\n\t\t\t\t\t\t\t\t\t\tbadgeDiv.innerHTML = '<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200\">Expiring Soon</span>';\n\t\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\t\t// Valid\n\t\t\t\t\t\t\t\t\t\ticonDiv.innerHTML = '<svg class=\"w-8 h-8 text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg>';\n\t\t\t\t\t\t\t\t\t\ttextP.textContent = `Expires in ${formatDuration(diffMs)} (${expiryDate.toLocaleString()})`;\n\t\t\t\t\t\t\t\t\t\ttextP.className = 'text-sm text-gray-600 dark:text-gray-400';\n\t\t\t\t\t\t\t\t\t\tbadgeDiv.innerHTML = '<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200\">Valid</span>';\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Update on page load\n\t\t\t\t\t\t\t\tupdateTokenExpiry();\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Update every minute\n\t\t\t\t\t\t\t\tsetInterval(updateTokenExpiry, 60000);\n\t\t\t\t\t\t\t})();\n\t\t\t\t\t\t</script><div class=\"bg-white dark:bg-darkNav rounded-lg shadow-sm border border-gray-200 dark:border-darkBorder overflow-hidden\"><div class=\"overflow-x-auto\"><table class=\"min-w-full divide-y divide-gray-200 dark:divide-darkBorder\"><thead class=\"bg-gray-50 dark:bg-darkBg\"><tr><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">Resource</th><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">API Group</th><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">Scope</th><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">Allowed Verbs</th></tr></thead> <tbody class=\"bg-white dark:bg-darkNav divide-y divide-gray-100 dark:divide-darkBorder\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<main class=\"flex-1 overflow-y-auto p-6\"><div class=\"max-w-7xl mx-auto\"><div class=\"mb-6\"><h1 class=\"text-2xl font-light text-gray-900 dark:text-white\">Tinkerbell Permissions</h1><p class=\"mt-1 text-sm text-gray-600 dark:text-gray-400\">View your service account's access to Tinkerbell resources</p></div><!-- Token Expiry Info --><div id=\"tokenExpiryCard\" class=\"mb-6 hidden\"><div class=\"bg-white dark:bg-darkNav rounded-lg shadow-sm border border-gray-200 dark:border-darkBorder p-4\"><div class=\"flex items-center gap-3\"><div id=\"tokenExpiryIcon\" class=\"flex-shrink-0\"><!-- Icon will be set by JS --></div><div class=\"flex-1\"><h3 class=\"text-sm font-medium text-gray-900 dark:text-white\">Token Status</h3><p id=\"tokenExpiryText\" class=\"text-sm text-gray-600 dark:text-gray-400\"><!-- Duration will be set by JS --></p></div><div id=\"tokenExpiryBadge\" class=\"flex-shrink-0\"><!-- Badge will be set by JS --></div></div></div></div><script>\n\t\t\t\t\t\t\t(function() {\n\t\t\t\t\t\t\t\tfunction getCookie(name) {\n\t\t\t\t\t\t\t\t\tconst value = `; ${document.cookie}`;\n\t\t\t\t\t\t\t\t\tconst parts = value.split(`; ${name}=`);\n\t\t\t\t\t\t\t\t\tif (parts.length === 2) return parts.pop().split(';').shift();\n\t\t\t\t\t\t\t\t\treturn null;\n\t\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\t\tfunction formatDuration(ms) {\n\t\t\t\t\t\t\t\t\tconst totalSeconds = Math.floor(ms / 1000);\n\t\t\t\t\t\t\t\t\tconst days = Math.floor(totalSeconds / 86400);\n\t\t\t\t\t\t\t\t\tconst hours = Math.floor((totalSeconds % 86400) / 3600);\n\t\t\t\t\t\t\t\t\tconst minutes = Math.floor((totalSeconds % 3600) / 60);\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tconst parts = [];\n\t\t\t\t\t\t\t\t\tif (days > 0) parts.push(`${days}d`);\n\t\t\t\t\t\t\t\t\tif (hours > 0) parts.push(`${hours}h`);\n\t\t\t\t\t\t\t\t\tif (minutes > 0 && days === 0) parts.push(`${minutes}m`);\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\treturn parts.length > 0 ? parts.join(' ') : 'less than a minute';\n\t\t\t\t\t\t\t\t}\n\n\t\t\t\t\t\t\t\tfunction updateTokenExpiry() {\n\t\t\t\t\t\t\t\t\tconst card = document.getElementById('tokenExpiryCard');\n\t\t\t\t\t\t\t\t\tconst iconDiv = document.getElementById('tokenExpiryIcon');\n\t\t\t\t\t\t\t\t\tconst textP = document.getElementById('tokenExpiryText');\n\t\t\t\t\t\t\t\t\tconst badgeDiv = document.getElementById('tokenExpiryBadge');\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\t// Read expiry timestamp from token_expiry cookie (Unix timestamp in seconds)\n\t\t\t\t\t\t\t\t\tconst expiryStr = getCookie('token_expiry');\n\t\t\t\t\t\t\t\t\tif (!expiryStr) {\n\t\t\t\t\t\t\t\t\t\tcard.classList.add('hidden');\n\t\t\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tconst expirySec = parseInt(expiryStr, 10);\n\t\t\t\t\t\t\t\t\tif (isNaN(expirySec)) {\n\t\t\t\t\t\t\t\t\t\tcard.classList.add('hidden');\n\t\t\t\t\t\t\t\t\t\treturn;\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tconst expiryDate = new Date(expirySec * 1000);\n\t\t\t\t\t\t\t\t\tconst now = new Date();\n\t\t\t\t\t\t\t\t\tconst diffMs = expiryDate - now;\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tcard.classList.remove('hidden');\n\t\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t\tif (diffMs <= 0) {\n\t\t\t\t\t\t\t\t\t\t// Expired\n\t\t\t\t\t\t\t\t\t\ticonDiv.innerHTML = '<svg class=\"w-8 h-8 text-red-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z\"></path></svg>';\n\t\t\t\t\t\t\t\t\t\ttextP.textContent = 'Your token has expired. Please log in again.';\n\t\t\t\t\t\t\t\t\t\ttextP.className = 'text-sm text-red-600 dark:text-red-400';\n\t\t\t\t\t\t\t\t\t\tbadgeDiv.innerHTML = '<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200\">Expired</span>';\n\t\t\t\t\t\t\t\t\t} else if (diffMs < 3600000) {\n\t\t\t\t\t\t\t\t\t\t// Less than 1 hour - warning\n\t\t\t\t\t\t\t\t\t\ticonDiv.innerHTML = '<svg class=\"w-8 h-8 text-amber-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg>';\n\t\t\t\t\t\t\t\t\t\ttextP.textContent = `Expires in ${formatDuration(diffMs)} (${expiryDate.toLocaleString()})`;\n\t\t\t\t\t\t\t\t\t\ttextP.className = 'text-sm text-amber-600 dark:text-amber-400';\n\t\t\t\t\t\t\t\t\t\tbadgeDiv.innerHTML = '<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200\">Expiring Soon</span>';\n\t\t\t\t\t\t\t\t\t} else {\n\t\t\t\t\t\t\t\t\t\t// Valid\n\t\t\t\t\t\t\t\t\t\ticonDiv.innerHTML = '<svg class=\"w-8 h-8 text-green-500\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg>';\n\t\t\t\t\t\t\t\t\t\ttextP.textContent = `Expires in ${formatDuration(diffMs)} (${expiryDate.toLocaleString()})`;\n\t\t\t\t\t\t\t\t\t\ttextP.className = 'text-sm text-gray-600 dark:text-gray-400';\n\t\t\t\t\t\t\t\t\t\tbadgeDiv.innerHTML = '<span class=\"inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200\">Valid</span>';\n\t\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t}\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Update on page load\n\t\t\t\t\t\t\t\tupdateTokenExpiry();\n\t\t\t\t\t\t\t\t\n\t\t\t\t\t\t\t\t// Update every minute\n\t\t\t\t\t\t\t\tsetInterval(updateTokenExpiry, 60000);\n\t\t\t\t\t\t\t})();\n\t\t\t\t\t\t</script><div class=\"bg-white dark:bg-darkNav rounded-lg shadow-sm border border-gray-200 dark:border-darkBorder overflow-hidden\"><div class=\"overflow-x-auto\"><table class=\"min-w-full divide-y divide-gray-200 dark:divide-darkBorder\"><thead class=\"bg-gray-50 dark:bg-darkBg\"><tr><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">Resource</th><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">API Group</th><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">Scope</th><th scope=\"col\" class=\"px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider\">Allowed Verbs</th></tr></thead> <tbody class=\"bg-white dark:bg-darkNav divide-y divide-gray-100 dark:divide-darkBorder\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1304,13 +1617,13 @@ func PermissionsPage(cfg PageConfig, resources []ResourceInfo) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</tbody></table></div></div></div></main></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</tbody></table></div></div></div></main></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = Layout("Tinkerbell - Permissions", cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var45), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = Layout("Tinkerbell - Permissions", cfg.BaseURL).Render(templ.WithChildren(ctx, templ_7745c5c3_Var56), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1335,51 +1648,51 @@ func PermissionRowLoading(resource, apiGroup, baseURL string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var46 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var46 == nil {
-			templ_7745c5c3_Var46 = templ.NopComponent
+		templ_7745c5c3_Var57 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var57 == nil {
+			templ_7745c5c3_Var57 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "<tr class=\"hover:bg-gray-50 dark:hover:bg-darkBorder transition-colors duration-150\" hx-get=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<tr class=\"hover:bg-gray-50 dark:hover:bg-darkBorder transition-colors duration-150\" hx-get=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var47 string
-		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue(baseURL + "/permissions/check/" + resource + "?group=" + apiGroup)
+		var templ_7745c5c3_Var58 string
+		templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.ResolveAttributeValue(baseURL + "/permissions/check/" + resource + "?group=" + apiGroup)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 826, Col: 76}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 885, Col: 76}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "\" hx-trigger=\"load\" hx-swap=\"outerHTML\"><td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white\">")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var58)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var48 string
-		templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(resource)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 831, Col: 13}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "\" hx-trigger=\"load\" hx-swap=\"outerHTML\"><td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 55, "</td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono\">")
+		var templ_7745c5c3_Var59 string
+		templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(resource)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 890, Col: 13}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var49 string
-		templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(apiGroup)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 835, Col: 14}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "</span></td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><div class=\"animate-pulse flex space-x-2\"><div class=\"h-5 w-24 bg-gray-200 dark:bg-gray-600 rounded\"></div></div></td><td class=\"px-6 py-4 text-sm text-gray-700 dark:text-gray-300\"><div class=\"animate-pulse flex space-x-1\"><div class=\"h-5 w-10 bg-gray-200 dark:bg-gray-600 rounded\"></div><div class=\"h-5 w-10 bg-gray-200 dark:bg-gray-600 rounded\"></div><div class=\"h-5 w-12 bg-gray-200 dark:bg-gray-600 rounded\"></div></div></td></tr>")
+		var templ_7745c5c3_Var60 string
+		templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(apiGroup)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 894, Col: 14}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "</span></td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><div class=\"animate-pulse flex space-x-2\"><div class=\"h-5 w-24 bg-gray-200 dark:bg-gray-600 rounded\"></div></div></td><td class=\"px-6 py-4 text-sm text-gray-700 dark:text-gray-300\"><div class=\"animate-pulse flex space-x-1\"><div class=\"h-5 w-10 bg-gray-200 dark:bg-gray-600 rounded\"></div><div class=\"h-5 w-10 bg-gray-200 dark:bg-gray-600 rounded\"></div><div class=\"h-5 w-12 bg-gray-200 dark:bg-gray-600 rounded\"></div></div></td></tr>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1404,83 +1717,83 @@ func PermissionRow(perm Permission) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var50 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var50 == nil {
-			templ_7745c5c3_Var50 = templ.NopComponent
+		templ_7745c5c3_Var61 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var61 == nil {
+			templ_7745c5c3_Var61 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 57, "<tr class=\"hover:bg-gray-50 dark:hover:bg-darkBorder transition-colors duration-150\"><td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<tr class=\"hover:bg-gray-50 dark:hover:bg-darkBorder transition-colors duration-150\"><td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var51 string
-		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(perm.Resource)
+		var templ_7745c5c3_Var62 string
+		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(perm.Resource)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 857, Col: 18}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 916, Col: 18}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 58, "</td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono\">")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var52 string
-		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(perm.APIGroup)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 861, Col: 19}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "</td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "</span></td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\">")
+		var templ_7745c5c3_Var63 string
+		templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.JoinStringErrs(perm.APIGroup)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 920, Col: 19}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var63))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "</span></td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if perm.Namespace == "" {
 			if len(perm.Verbs) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 60, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200\">All Namespaces</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200\">All Namespaces</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 61, "<span class=\"text-gray-400 dark:text-gray-500\">—</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "<span class=\"text-gray-400 dark:text-gray-500\">—</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 62, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var53 string
-			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(perm.Namespace)
+			var templ_7745c5c3_Var64 string
+			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(perm.Namespace)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 875, Col: 21}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 934, Col: 21}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "</td><td class=\"px-6 py-4 text-sm text-gray-700 dark:text-gray-300\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "</td><td class=\"px-6 py-4 text-sm text-gray-700 dark:text-gray-300\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(perm.Verbs) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 65, "<span class=\"text-gray-400 dark:text-gray-500 italic\">No access</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "<span class=\"text-gray-400 dark:text-gray-500 italic\">No access</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<div class=\"flex flex-wrap gap-1\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "<div class=\"flex flex-wrap gap-1\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -1490,12 +1803,12 @@ func PermissionRow(perm Permission) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 67, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "</td></tr>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "</td></tr>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1520,38 +1833,38 @@ func PermissionRowError(resource, apiGroup string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var54 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var54 == nil {
-			templ_7745c5c3_Var54 = templ.NopComponent
+		templ_7745c5c3_Var65 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var65 == nil {
+			templ_7745c5c3_Var65 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 69, "<tr class=\"hover:bg-gray-50 dark:hover:bg-darkBorder transition-colors duration-150 bg-red-50 dark:bg-red-900/20\"><td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "<tr class=\"hover:bg-gray-50 dark:hover:bg-darkBorder transition-colors duration-150 bg-red-50 dark:bg-red-900/20\"><td class=\"px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var55 string
-		templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(resource)
+		var templ_7745c5c3_Var66 string
+		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(resource)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 897, Col: 13}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 956, Col: 13}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "</td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono\">")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var56 string
-		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(apiGroup)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 901, Col: 14}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "</td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded font-mono\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 71, "</span></td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-gray-400 dark:text-gray-500\">—</span></td><td class=\"px-6 py-4 text-sm text-red-600 dark:text-red-400\"><span class=\"italic\">Error checking permissions</span></td></tr>")
+		var templ_7745c5c3_Var67 string
+		templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(apiGroup)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 960, Col: 14}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "</span></td><td class=\"px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300\"><span class=\"text-gray-400 dark:text-gray-500\">—</span></td><td class=\"px-6 py-4 text-sm text-red-600 dark:text-red-400\"><span class=\"italic\">Error checking permissions</span></td></tr>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1576,99 +1889,99 @@ func VerbBadge(verb string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var57 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var57 == nil {
-			templ_7745c5c3_Var57 = templ.NopComponent
+		templ_7745c5c3_Var68 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var68 == nil {
+			templ_7745c5c3_Var68 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		switch verb {
 		case "get", "list", "watch":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var58 string
-			templ_7745c5c3_Var58, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
+			var templ_7745c5c3_Var69 string
+			templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 918, Col: 10}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 977, Col: 10}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var58))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 73, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "create":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 74, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var59 string
-			templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
+			var templ_7745c5c3_Var70 string
+			templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 922, Col: 10}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 981, Col: 10}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 75, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "update", "patch":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 76, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-100\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 88, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800 dark:bg-amber-800 dark:text-amber-100\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var60 string
-			templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
+			var templ_7745c5c3_Var71 string
+			templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 926, Col: 10}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 985, Col: 10}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 77, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 89, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		case "delete":
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 78, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 90, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var61 string
-			templ_7745c5c3_Var61, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
+			var templ_7745c5c3_Var72 string
+			templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 930, Col: 10}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 989, Col: 10}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var61))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 79, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 91, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		default:
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 92, "<span class=\"inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var62 string
-			templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
+			var templ_7745c5c3_Var73 string
+			templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(verb)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 934, Col: 10}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `pages.templ`, Line: 993, Col: 10}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 93, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

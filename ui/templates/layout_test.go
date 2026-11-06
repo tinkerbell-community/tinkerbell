@@ -39,7 +39,7 @@ func TestHomepageRender(t *testing.T) {
 	}
 
 	// Check for navigation items
-	expectedNavItems := []string{"Hardware", "Templates", "Workflows", "BMC"}
+	expectedNavItems := []string{"Hardware", "Tasks", "Templates", "Workflows", "Policies", "BMC"}
 	for _, item := range expectedNavItems {
 		if !strings.Contains(html, item) {
 			t.Errorf("Expected navigation item '%s'", item)

@@ -476,6 +476,131 @@ templ BMCTaskTableContent(taskData BMCTaskPageData) {
 	}
 }
 
+// TableHeader renders a column header of a list table.
+templ TableHeader(name string) {
+	<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">{ name }</th>
+}
+
+// TableEmptyRow renders the row of a list table that has no items.
+templ TableEmptyRow(columns int, icon, message string) {
+	<tr>
+		<td colspan={ strconv.Itoa(columns) } class="px-6 py-12 text-center">
+			<div class="flex flex-col items-center">
+				<div class="h-12 w-12 rounded-full bg-gray-100 dark:bg-darkBorderSoft flex items-center justify-center mb-4">
+					@templ.Raw(icon)
+				</div>
+				<p class="text-sm font-medium text-gray-900 dark:text-white">{ message }</p>
+			</div>
+		</td>
+	</tr>
+}
+
+// TableNameCell renders the first cell of a list table row: the icon and name.
+templ TableNameCell(icon, name string) {
+	<td class="px-6 py-4 whitespace-nowrap">
+		<div class="flex items-center">
+			<div class="flex-shrink-0 h-8 w-8 rounded-md bg-tink-teal-50 dark:bg-tink-teal-900/30 flex items-center justify-center">
+				@templ.Raw(icon)
+			</div>
+			<span class="ml-3 text-sm font-medium text-gray-900 dark:text-white">{ name }</span>
+		</div>
+	</td>
+}
+
+// TableNamespaceCell renders the namespace cell of a list table row.
+templ TableNamespaceCell(namespace string) {
+	<td class="px-6 py-4 whitespace-nowrap">
+		<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-darkBorderSoft dark:text-gray-300">{ namespace }</span>
+	</td>
+}
+
+// TableLinkCell renders a list table cell linking to href, or a dash without text.
+templ TableLinkCell(text, href string) {
+	<td class="px-6 py-4 whitespace-nowrap text-sm">
+		if text != "" {
+			<a href={ templ.SafeURL(href) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline" onclick="event.stopPropagation()">{ text }</a>
+		} else {
+			<span class="text-gray-400 dark:text-gray-500">&mdash;</span>
+		}
+	</td>
+}
+
+templ TaskTableContent(data TaskPageData) {
+	@TableCard() {
+		@TableCardHeader(data.Pagination.TotalItems, "Tasks")
+		<div class="overflow-x-auto">
+			<table class="min-w-full divide-y divide-gray-200 dark:divide-darkBorder">
+				<thead class="bg-gray-50 dark:bg-darkBg/50">
+					<tr>
+						@TableHeader("Name")
+						@TableHeader("Namespace")
+						@TableHeader("Actions")
+						@TableHeader("Translated From")
+						@TableHeader("Age")
+					</tr>
+				</thead>
+				<tbody class="bg-white dark:bg-darkNav divide-y divide-gray-100 dark:divide-darkBorder">
+					for _, task := range data.Tasks {
+						<tr class="hover:bg-gray-50 dark:hover:bg-darkBorder/50 cursor-pointer transition-colors clickable-row" data-href={ "/tasks/" + task.Namespace + "/" + task.Name }>
+							@TableNameCell(tasksIcon(), task.Name)
+							@TableNamespaceCell(task.Namespace)
+							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{ strconv.Itoa(task.Actions) }</td>
+							@TableLinkCell(task.Template, "/templates/"+task.Namespace+"/"+task.Template)
+							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{ task.CreatedAt }</td>
+						</tr>
+					}
+					if len(data.Tasks) == 0 {
+						@TableEmptyRow(5, tasksIcon(), "No Tasks found")
+					}
+				</tbody>
+			</table>
+		</div>
+		@TableCardFooter(data.Pagination)
+	}
+}
+
+templ PolicyTableContent(data PolicyPageData) {
+	@TableCard() {
+		@TableCardHeader(data.Pagination.TotalItems, "Policies")
+		<div class="overflow-x-auto">
+			<table class="min-w-full divide-y divide-gray-200 dark:divide-darkBorder">
+				<thead class="bg-gray-50 dark:bg-darkBg/50">
+					<tr>
+						@TableHeader("Name")
+						@TableHeader("Namespace")
+						@TableHeader("Workflow Rules")
+						@TableHeader("Reference Access")
+						@TableHeader("Translated From")
+						@TableHeader("Age")
+					</tr>
+				</thead>
+				<tbody class="bg-white dark:bg-darkNav divide-y divide-gray-100 dark:divide-darkBorder">
+					for _, p := range data.Policies {
+						<tr class="hover:bg-gray-50 dark:hover:bg-darkBorder/50 cursor-pointer transition-colors clickable-row" data-href={ "/policies/" + p.Namespace + "/" + p.Name }>
+							@TableNameCell(policiesIcon(), p.Name)
+							@TableNamespaceCell(p.Namespace)
+							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">{ strconv.Itoa(p.WorkflowRules) }</td>
+							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+								if p.ReferenceAccess {
+									Yes
+								} else {
+									No
+								}
+							</td>
+							@TableLinkCell(p.RuleSet, "/workflows/rulesets/"+p.Namespace+"/"+p.RuleSet)
+							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{ p.CreatedAt }</td>
+						</tr>
+					}
+					if len(data.Policies) == 0 {
+						@TableEmptyRow(6, policiesIcon(), "No Policies found")
+					}
+				</tbody>
+			</table>
+		</div>
+		@TableCardFooter(data.Pagination)
+	}
+}
+
 templ WorkflowRuleSetContentArea(rulesetData WorkflowRuleSetPageData) {
 	<div class="p-6 bg-gray-50 dark:bg-darkBg">
 		<!-- Page Header -->

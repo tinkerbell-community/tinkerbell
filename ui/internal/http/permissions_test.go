@@ -114,15 +114,18 @@ func TestPermissionNamespaceScope(t *testing.T) {
 }
 
 func TestTinkerbellResources(t *testing.T) {
-	// Verify all expected Tinkerbell resources are defined
-	expectedResources := map[string]string{
-		"hardware":         "tinkerbell.org",
-		"templates":        "tinkerbell.org",
-		"workflows":        "tinkerbell.org",
-		"workflowrulesets": "tinkerbell.org",
-		"machines":         "bmc.tinkerbell.org",
-		"jobs":             "bmc.tinkerbell.org",
-		"tasks":            "bmc.tinkerbell.org",
+	// Verify all expected Tinkerbell resources are defined, as resource.group:
+	// tasks exist in both groups (v1alpha2 Tasks and the deprecated bmc Tasks).
+	expectedResources := map[string]bool{
+		"hardware.tinkerbell.org":         true,
+		"workflows.tinkerbell.org":        true,
+		"tasks.tinkerbell.org":            true,
+		"policies.tinkerbell.org":         true,
+		"jobs.bmc.tinkerbell.org":         true,
+		"templates.tinkerbell.org":        true,
+		"workflowrulesets.tinkerbell.org": true,
+		"machines.bmc.tinkerbell.org":     true,
+		"tasks.bmc.tinkerbell.org":        true,
 	}
 
 	if len(TinkerbellResources) != len(expectedResources) {
@@ -130,13 +133,8 @@ func TestTinkerbellResources(t *testing.T) {
 	}
 
 	for _, res := range TinkerbellResources {
-		expectedGroup, ok := expectedResources[res.Resource]
-		if !ok {
-			t.Errorf("Unexpected resource %q in TinkerbellResources", res.Resource)
-			continue
-		}
-		if res.Group != expectedGroup {
-			t.Errorf("Resource %q has group %q, want %q", res.Resource, res.Group, expectedGroup)
+		if !expectedResources[res.Resource+"."+res.Group] {
+			t.Errorf("Unexpected resource %s.%s in TinkerbellResources", res.Resource, res.Group)
 		}
 	}
 }

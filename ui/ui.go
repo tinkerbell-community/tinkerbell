@@ -277,6 +277,28 @@ func (c *Config) Handler(log logr.Logger) (http.Handler, error) {
 			webhttp.HandleWorkflowEnable(c, log)
 		})
 
+		// Task routes
+		protected.GET("/tasks", func(c *gin.Context) {
+			webhttp.HandleTaskList(c, log)
+		})
+		protected.GET("/tasks-data", func(c *gin.Context) {
+			webhttp.HandleTaskData(c, log)
+		})
+		protected.GET("/tasks/:namespace/:name", func(c *gin.Context) {
+			webhttp.HandleTaskDetail(c, log)
+		})
+
+		// Policy routes
+		protected.GET("/policies", func(c *gin.Context) {
+			webhttp.HandlePolicyList(c, log)
+		})
+		protected.GET("/policies-data", func(c *gin.Context) {
+			webhttp.HandlePolicyData(c, log)
+		})
+		protected.GET("/policies/:namespace/:name", func(c *gin.Context) {
+			webhttp.HandlePolicyDetail(c, log)
+		})
+
 		// Template routes
 		protected.GET("/templates", func(c *gin.Context) {
 			webhttp.HandleTemplateList(c, log)

@@ -1,5 +1,7 @@
 package templates
 
+import "strconv"
+
 // Reusable detail components - UI
 templ DetailMainContent(resourceType, name, namespace, backLink string, content templ.Component) {
 	<div class="flex flex-col flex-1 min-h-0 min-w-0">
@@ -109,6 +111,46 @@ templ HardwareInterfaceCard(iface HardwareInterface) {
 			@SubsectionRows("DHCP", iface.DHCP)
 			@SubsectionRows("Netboot", iface.Netboot)
 		</div>
+	</div>
+}
+
+// TaskRefsTable - the Tasks a Workflow or Policy runs, with the Agent and Hardware of each
+templ TaskRefsTable(refs []TaskRef, baseURL string) {
+	<div class="overflow-x-auto">
+		<table class="min-w-full">
+			<thead>
+				<tr class="border-b border-gray-200 dark:border-darkBorder">
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">#</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Task</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Agent</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Hardware</th>
+					<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Timeout</th>
+					<th class="py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Boot Options</th>
+				</tr>
+			</thead>
+			<tbody>
+				for i, ref := range refs {
+					<tr class="border-b border-gray-100 dark:border-darkBorder last:border-b-0">
+						<td class="py-2 pr-4 text-sm text-gray-500 dark:text-gray-400">{ strconv.Itoa(i + 1) }</td>
+						<td class="py-2 pr-4 text-sm whitespace-nowrap">
+							if ref.Name != "" {
+								<a href={ templ.SafeURL(baseURL + "/tasks/" + ref.Namespace + "/" + ref.Name) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ ref.Name }</a>
+							} else {
+								<span class="text-gray-400 dark:text-gray-500">&mdash;</span>
+							}
+						</td>
+						<td class="py-2 pr-4 text-sm font-mono text-gray-700 dark:text-gray-300 whitespace-nowrap">{ ref.AgentID }</td>
+						<td class="py-2 pr-4 text-sm whitespace-nowrap">
+							if ref.Hardware != "" {
+								<a href={ templ.SafeURL(baseURL + "/hardware/" + ref.Hardware) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ ref.Hardware }</a>
+							}
+						</td>
+						<td class="py-2 pr-4 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{ ref.Timeout }</td>
+						<td class="py-2 text-sm text-gray-700 dark:text-gray-300">{ ref.BootOptions }</td>
+					</tr>
+				}
+			</tbody>
+		</table>
 	</div>
 }
 
@@ -676,6 +718,9 @@ templ CRDKindIcon(kind string) {
 		case "Task":
 			// Tasks icon - matches navigation
 			@templ.Raw(tasksIconSmall())
+		case "Policy":
+			// Policies icon - matches navigation
+			@templ.Raw(policiesIconSmall())
 		default:
 			// Default cube icon
 			<svg class="w-5 h-5 text-tink-teal-600 dark:text-tink-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">

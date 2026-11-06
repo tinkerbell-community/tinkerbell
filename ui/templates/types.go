@@ -99,6 +99,105 @@ type BMCTask struct {
 	CreatedAt   string
 }
 
+// Task represents a v1alpha2 Task in the list view.
+type Task struct {
+	Name      string
+	Namespace string
+	Actions   int
+	// Template is the deprecated v1alpha1 Template the Task was translated
+	// from, empty for other Tasks.
+	Template  string
+	CreatedAt string
+}
+
+// TaskPageData is the data for the Task list page.
+type TaskPageData struct {
+	Tasks      []Task
+	Pagination PaginationData
+}
+
+// TaskAction is an Action of a Task, as shown on the Task detail page.
+type TaskAction struct {
+	Name    string
+	Image   string
+	Command string // the command followed by its arguments
+	Timeout string
+	// Details lists the Action's other settings (environment, volumes, ...), one per line.
+	Details []string
+}
+
+// TaskDetail is the data for the Task detail page.
+type TaskDetail struct {
+	Name        string
+	Namespace   string
+	CreatedAt   string
+	Labels      map[string]string
+	Annotations map[string]string
+	// Details describes the Task as a whole, including the Template it was translated from.
+	Details    []InfoRow
+	Actions    []TaskAction
+	Env        []InfoRow
+	Vars       []InfoRow
+	References []InfoRow
+	SpecYAML   string
+	YAML       string
+}
+
+// Policy represents a v1alpha2 Policy in the list view.
+type Policy struct {
+	Name      string
+	Namespace string
+	// WorkflowRules is the number of workflowAutoCreation rules.
+	WorkflowRules   int
+	ReferenceAccess bool
+	// RuleSet is the deprecated WorkflowRuleSet the Policy was translated
+	// from, empty for other Policies.
+	RuleSet   string
+	CreatedAt string
+}
+
+// PolicyPageData is the data for the Policy list page.
+type PolicyPageData struct {
+	Policies   []Policy
+	Pagination PaginationData
+}
+
+// TaskRef references a Task, as listed in a Workflow or Policy.
+type TaskRef struct {
+	Name      string
+	Namespace string
+	AgentID   string
+	Timeout   string
+	// Hardware is the Hardware the Task runs against, as "namespace/name".
+	Hardware string
+	// BootOptions describes the Task's boot options.
+	BootOptions string
+}
+
+// PolicyWorkflowRule is a workflowAutoCreation rule of a Policy.
+type PolicyWorkflowRule struct {
+	// Patterns are the Agent attribute patterns, as JSON, any of which matches.
+	Patterns []string
+	// Config describes the Workflow the rule creates.
+	Config []InfoRow
+	Tasks  []TaskRef
+}
+
+// PolicyDetail is the data for the Policy detail page.
+type PolicyDetail struct {
+	Name        string
+	Namespace   string
+	CreatedAt   string
+	Labels      map[string]string
+	Annotations map[string]string
+	Details     []InfoRow
+	Rules       []PolicyWorkflowRule
+	// ReferenceAccessYAML is spec.rules.referenceAccess as YAML.
+	ReferenceAccessYAML string
+	SpecYAML            string
+	YAML                string
+}
+
 // Permission represents a Kubernetes RBAC permission for a Tinkerbell resource.
 type Permission struct {
 	Resource  string

@@ -1393,3 +1393,132 @@ templ WorkflowRuleSetDetailContent(rs WorkflowRuleSetDetail, baseURL string) {
 		@CodeBlockYAMLWithCopy(rs.YAMLData, "ruleset-yaml")
 	}
 }
+
+templ TaskDetailContent(task TaskDetail, baseURL string) {
+	@MainInfoHeader(task.Name, "")
+
+	<!-- Main Info Section -->
+	@SectionBox("Info") {
+		@MetadataTable(task.Name, task.Namespace, task.CreatedAt, task.Labels, task.Annotations)
+	}
+
+	<!-- Task Details -->
+	@SectionBox("Task Details") {
+		@NameValueTable(task.Details)
+	}
+
+	<!-- Actions -->
+	@SectionBox("Actions") {
+		if len(task.Actions) == 0 {
+			<span class="text-sm text-gray-500 dark:text-gray-400 italic">No Actions</span>
+		} else {
+			<div class="overflow-x-auto">
+				<table class="min-w-full">
+					<thead>
+						<tr class="border-b border-gray-200 dark:border-darkBorder">
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">#</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Name</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Image</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Command</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Timeout</th>
+							<th class="py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Details</th>
+						</tr>
+					</thead>
+					<tbody>
+						for i, a := range task.Actions {
+							<tr class="border-b border-gray-100 dark:border-darkBorder last:border-b-0 align-top">
+								<td class="py-2 pr-4 text-sm text-gray-500 dark:text-gray-400">{ strconv.Itoa(i + 1) }</td>
+								<td class="py-2 pr-4 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{ a.Name }</td>
+								<td class="py-2 pr-4 text-sm font-mono text-gray-700 dark:text-gray-300 break-all">{ a.Image }</td>
+								<td class="py-2 pr-4 text-sm font-mono text-gray-700 dark:text-gray-300 break-all">{ a.Command }</td>
+								<td class="py-2 pr-4 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{ a.Timeout }</td>
+								<td class="py-2 text-xs font-mono text-gray-600 dark:text-gray-400 break-all">
+									for _, line := range a.Details {
+										<div>{ line }</div>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+
+	if HasValues(task.Env) || HasValues(task.Vars) || HasValues(task.References) {
+		@SectionBox("Environment and Variables") {
+			<div class="grid gap-x-6 md:grid-cols-2">
+				@SubsectionRows("Environment", task.Env)
+				@SubsectionRows("Vars", task.Vars)
+				@SubsectionRows("References", task.References)
+			</div>
+		}
+	}
+
+	<!-- Spec Section -->
+	@SectionBoxCollapsible("Spec", false) {
+		@CodeBlockYAML(task.SpecYAML)
+	}
+
+	<!-- Raw YAML -->
+	@SectionBoxCollapsible("Full YAML", false) {
+		@CodeBlockYAMLWithCopy(task.YAML, "task-yaml")
+	}
+}
+
+templ PolicyDetailContent(policy PolicyDetail, baseURL string) {
+	@MainInfoHeader(policy.Name, "")
+
+	<!-- Main Info Section -->
+	@SectionBox("Info") {
+		@MetadataTable(policy.Name, policy.Namespace, policy.CreatedAt, policy.Labels, policy.Annotations)
+	}
+
+	<!-- Policy Details -->
+	@SectionBox("Policy Details") {
+		@NameValueTable(policy.Details)
+	}
+
+	<!-- Workflow Auto-Creation Rules -->
+	for i, rule := range policy.Rules {
+		@SectionBox("Workflow Auto-Creation Rule " + strconv.Itoa(i+1)) {
+			<div class="space-y-4">
+				<div>
+					<h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Matches any of</h4>
+					if len(rule.Patterns) == 0 {
+						<span class="text-sm text-gray-500 dark:text-gray-400 italic">No patterns</span>
+					}
+					<div class="space-y-2">
+						for _, pattern := range rule.Patterns {
+							<pre class="p-3 bg-gray-50 dark:bg-darkBg rounded-md border border-gray-200 dark:border-darkBorder text-sm font-mono text-gray-900 dark:text-white whitespace-pre-wrap break-all">{ pattern }</pre>
+						}
+					</div>
+				</div>
+				@SubsectionRows("Workflow", rule.Config)
+				if len(rule.Tasks) > 0 {
+					<div>
+						<h4 class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">Tasks</h4>
+						@TaskRefsTable(rule.Tasks, baseURL)
+					</div>
+				}
+			</div>
+		}
+	}
+
+	<!-- Reference Access -->
+	if policy.ReferenceAccessYAML != "" {
+		@SectionBoxCollapsible("Reference Access", true) {
+			@CodeBlockYAML(policy.ReferenceAccessYAML)
+		}
+	}
+
+	<!-- Spec Section -->
+	@SectionBoxCollapsible("Spec", false) {
+		@CodeBlockYAML(policy.SpecYAML)
+	}
+
+	<!-- Raw YAML -->
+	@SectionBoxCollapsible("Full YAML", false) {
+		@CodeBlockYAMLWithCopy(policy.YAML, "policy-yaml")
+	}
+}

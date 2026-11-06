@@ -88,7 +88,66 @@ templ WorkflowRuleSetPage(cfg PageConfig, rulesetData WorkflowRuleSetPageData) {
 	}
 }
 
+// ResourceListPage is a resource list page: a heading, then the children (such
+// as notices), then the table in a container with id contentID, which the
+// table's pagination swaps.
+templ ResourceListPage(cfg PageConfig, title, description, contentID string, table templ.Component) {
+	@Layout("Tinkerbell - "+title, cfg.BaseURL) {
+		<div class="flex h-screen bg-white dark:bg-darkBg">
+			@MobileMenuOverlay()
+			@Sidebar(cfg.Namespaces, cfg.BaseURL)
+			<div class="flex flex-col flex-1 min-h-0 min-w-0">
+				@Header()
+				<div class="flex-1 overflow-y-auto overflow-x-hidden">
+					<div class="p-6 bg-gray-50 dark:bg-darkBg">
+						<div class="mb-6">
+							<h1 class="text-2xl font-light text-gray-900 dark:text-white">{ title }</h1>
+							<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{ description }</p>
+						</div>
+						{ children... }
+						<div id={ contentID }>
+							@table
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// TaskPage is the v1alpha2 Task listing page.
+templ TaskPage(cfg PageConfig, data TaskPageData) {
+	@ResourceListPage(cfg, "Tasks", "Reusable Actions that Workflows run on Hardware", "tasks-content", TaskTableContent(data))
+}
+
+// PolicyPage is the Policy listing page.
+templ PolicyPage(cfg PageConfig, data PolicyPageData) {
+	@ResourceListPage(cfg, "Policies", "Rules for automatic Workflow creation and reference access", "policies-content", PolicyTableContent(data))
+}
+
 // Detail Pages
+
+// TaskDetailPage shows details for a specific v1alpha2 Task.
+templ TaskDetailPage(cfg PageConfig, task TaskDetail) {
+	@Layout("Task - "+task.Name, cfg.BaseURL) {
+		<div class="flex h-screen bg-white dark:bg-darkBg">
+			@MobileMenuOverlay()
+			@Sidebar(cfg.Namespaces, cfg.BaseURL)
+			@DetailMainContent("Tasks", task.Name, task.Namespace, cfg.BaseURL+"/tasks", TaskDetailContent(task, cfg.BaseURL))
+		</div>
+	}
+}
+
+// PolicyDetailPage shows details for a specific Policy.
+templ PolicyDetailPage(cfg PageConfig, policy PolicyDetail) {
+	@Layout("Policy - "+policy.Name, cfg.BaseURL) {
+		<div class="flex h-screen bg-white dark:bg-darkBg">
+			@MobileMenuOverlay()
+			@Sidebar(cfg.Namespaces, cfg.BaseURL)
+			@DetailMainContent("Policies", policy.Name, policy.Namespace, cfg.BaseURL+"/policies", PolicyDetailContent(policy, cfg.BaseURL))
+		</div>
+	}
+}
 
 // HardwareDetailPage shows details for a specific hardware resource.
 templ HardwareDetailPage(cfg PageConfig, hw HardwareDetail) {
@@ -426,7 +485,7 @@ templ LoginPage(baseURL string) {
 									</svg>
 								</button>
 							</div>
-							<code id="step2-namespace-code" class="block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono whitespace-pre-wrap break-words">kubectl create role tinkerbell-admin --verb=get,list --resource=hardware.tinkerbell.org,templates.tinkerbell.org,workflows.tinkerbell.org,workflowrulesets.tinkerbell.org --resource=jobs.bmc.tinkerbell.org,machines.bmc.tinkerbell.org,tasks.bmc.tinkerbell.org --namespace=tinkerbell && kubectl create rolebinding my-admin-sa-binding --role=tinkerbell-admin --serviceaccount=tinkerbell:my-admin-sa --namespace=tinkerbell</code>
+							<code id="step2-namespace-code" class="block text-xs bg-gray-100 dark:bg-darkBg text-gray-800 dark:text-gray-200 p-2 rounded-md font-mono whitespace-pre-wrap break-words">kubectl create role tinkerbell-admin --verb=get,list --resource=hardware.tinkerbell.org,workflows.tinkerbell.org,tasks.tinkerbell.org,policies.tinkerbell.org,templates.tinkerbell.org,workflowrulesets.tinkerbell.org --resource=jobs.bmc.tinkerbell.org,machines.bmc.tinkerbell.org,tasks.bmc.tinkerbell.org --namespace=tinkerbell && kubectl create rolebinding my-admin-sa-binding --role=tinkerbell-admin --serviceaccount=tinkerbell:my-admin-sa --namespace=tinkerbell</code>
 							<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Note: Creates a custom role with Tinkerbell resource permissions.</p>
 						</div>
 					</div>

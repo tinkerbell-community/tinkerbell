@@ -135,6 +135,7 @@ templ Navigation(baseURL string) {
 		<nav class="flex-1 px-2 py-4">
 			for _, item := range []NavItem{
 				{Name: "Hardware", Icon: hardwareIcon(), Href: baseURL + "/hardware"},
+				{Name: "Tasks", Icon: tasksIcon(), Href: baseURL + "/tasks"},
 				{Name: "Templates", Icon: templatesIcon(), Href: baseURL + "/templates"},
 			} {
 				@NavLink(item)
@@ -182,6 +183,18 @@ templ WorkflowsDropdown(baseURL string) {
 			</button>
 		</div>
 		<ul id="workflows-dropdown" class="hidden">
+			<li>
+				<a
+					href={ templ.SafeURL(baseURL + "/policies") }
+					class="flex items-center px-4 py-2 text-gray-700 dark:text-gray-300 transition duration-200 rounded-lg pl-11 hover:bg-tink-teal-50 dark:hover:bg-darkBorder hover:text-tink-teal-600 dark:hover:text-tink-teal-400 workflows-nav-item"
+					data-href={ baseURL + "/policies" }
+				>
+					<span class="mr-2">
+						@templ.Raw(policiesIcon())
+					</span>
+					Policies
+				</a>
+			</li>
 			<li>
 				<a 
 					href={ templ.SafeURL(baseURL + "/workflows/rulesets") }

@@ -385,6 +385,42 @@ func (k *KubeClient) GetHardware(ctx context.Context, namespace, name string) (*
 	return &hw, nil
 }
 
+// ListTasks returns all v1alpha2 Tasks, optionally filtered by namespace.
+func (k *KubeClient) ListTasks(ctx context.Context, namespace string) (*tinkv1alpha2.TaskList, error) {
+	var list tinkv1alpha2.TaskList
+	if err := k.List(ctx, &list, inNamespace(namespace)...); err != nil {
+		return nil, fmt.Errorf("failed to list tasks: %w", err)
+	}
+	return &list, nil
+}
+
+// GetTask returns a v1alpha2 Task.
+func (k *KubeClient) GetTask(ctx context.Context, namespace, name string) (*tinkv1alpha2.Task, error) {
+	var task tinkv1alpha2.Task
+	if err := k.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &task); err != nil {
+		return nil, fmt.Errorf("failed to get task: %w", err)
+	}
+	return &task, nil
+}
+
+// ListPolicies returns all Policies, optionally filtered by namespace.
+func (k *KubeClient) ListPolicies(ctx context.Context, namespace string) (*tinkv1alpha2.PolicyList, error) {
+	var list tinkv1alpha2.PolicyList
+	if err := k.List(ctx, &list, inNamespace(namespace)...); err != nil {
+		return nil, fmt.Errorf("failed to list policies: %w", err)
+	}
+	return &list, nil
+}
+
+// GetPolicy returns a Policy.
+func (k *KubeClient) GetPolicy(ctx context.Context, namespace, name string) (*tinkv1alpha2.Policy, error) {
+	var policy tinkv1alpha2.Policy
+	if err := k.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &policy); err != nil {
+		return nil, fmt.Errorf("failed to get policy: %w", err)
+	}
+	return &policy, nil
+}
+
 // ListWorkflows returns all workflow resources, optionally filtered by namespace.
 func (k *KubeClient) ListWorkflows(ctx context.Context, namespace string) (*tinkv1alpha1.WorkflowList, error) {
 	var wfList tinkv1alpha1.WorkflowList

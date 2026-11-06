@@ -6,6 +6,7 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/gin-gonic/gin"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const (
@@ -65,6 +66,8 @@ func HandleGlobalSearch(c *gin.Context, log logr.Logger) {
 
 	results = append(results, searchHardware(c, kubeClient, query, namespace, log)...)
 	results = append(results, searchWorkflows(c, kubeClient, query, namespace, log)...)
+	results = append(results, searchTasks(c, kubeClient, query, namespace, log)...)
+	results = append(results, searchPolicies(c, kubeClient, query, namespace, log)...)
 	results = append(results, searchTemplates(c, kubeClient, query, namespace, log)...)
 	results = append(results, searchBMCMachines(c, kubeClient, query, namespace, log)...)
 	results = append(results, searchBMCJobs(c, kubeClient, query, namespace, log)...)
@@ -161,6 +164,56 @@ func searchWorkflows(c *gin.Context, kubeClient *KubeClient, query, namespace st
 	}
 
 	return results
+}
+
+// matchNamed returns, as results, the objects whose name or namespace
+// contains query, up to MaxSearchResultsPerType. result builds the result of
+// a matching object.
+func matchNamed[T metav1.Object](objs []T, query string, result func(namespace, name string) SearchResult) []SearchResult {
+	var results []SearchResult
+	for _, obj := range objs {
+		if !strings.Contains(strings.ToLower(obj.GetName()), query) && !strings.Contains(strings.ToLower(obj.GetNamespace()), query) {
+			continue
+		}
+		results = append(results, result(obj.GetNamespace(), obj.GetName()))
+		if len(results) >= MaxSearchResultsPerType {
+			break
+		}
+	}
+	return results
+}
+
+// pointers returns pointers to the elements of items.
+func pointers[T any](items []T) []*T {
+	out := make([]*T, len(items))
+	for i := range items {
+		out[i] = &items[i]
+	}
+	return out
+}
+
+func searchTasks(c *gin.Context, kubeClient *KubeClient, query, namespace string, log logr.Logger) []SearchResult {
+	list, err := kubeClient.ListTasks(c.Request.Context(), namespace)
+	if err != nil {
+		log.Error(err, "Failed to list tasks for search", "namespace", namespace, "query", query)
+		HandleAuthError(c, err, log)
+		return nil
+	}
+	return matchNamed(pointers(list.Items), query, func(ns, name string) SearchResult {
+		return SearchResult{Name: name, Namespace: ns, Type: "task", TypeLabel: nameSingularTinkTask, URL: pathTasks + "/" + ns + "/" + name, Icon: "task"}
+	})
+}
+
+func searchPolicies(c *gin.Context, kubeClient *KubeClient, query, namespace string, log logr.Logger) []SearchResult {
+	list, err := kubeClient.ListPolicies(c.Request.Context(), namespace)
+	if err != nil {
+		log.Error(err, "Failed to list policies for search", "namespace", namespace, "query", query)
+		HandleAuthError(c, err, log)
+		return nil
+	}
+	return matchNamed(pointers(list.Items), query, func(ns, name string) SearchResult {
+		return SearchResult{Name: name, Namespace: ns, Type: "policy", TypeLabel: nameSingularPolicy, URL: pathPolicies + "/" + ns + "/" + name, Icon: "policy"}
+	})
 }
 
 func searchTemplates(c *gin.Context, kubeClient *KubeClient, query, namespace string, log logr.Logger) []SearchResult {

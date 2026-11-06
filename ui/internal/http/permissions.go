@@ -20,11 +20,14 @@ type TinkerbellResource struct {
 // Exported so templates can access the list.
 var TinkerbellResources = []TinkerbellResource{
 	{resourceHardware, groupTinkerbell},
-	{"templates", groupTinkerbell},
 	{resourceWorkflows, groupTinkerbell},
+	{resourceTasks, groupTinkerbell},
+	{"policies", groupTinkerbell},
+	{"jobs", groupBMC},
+	// Deprecated, v1alpha1 only.
+	{"templates", groupTinkerbell},
 	{"workflowrulesets", groupTinkerbell},
 	{"machines", groupBMC},
-	{"jobs", groupBMC},
 	{resourceTasks, groupBMC},
 }
 
