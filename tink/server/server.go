@@ -51,6 +51,7 @@ type AutoCapabilities struct {
 
 type Enrollment struct {
 	Enabled               bool
+	PolicyLister          grpcinternal.PolicyLister
 	WorkflowRuleSetLister grpcinternal.WorkflowRuleSetLister
 	WorkflowCreator       grpcinternal.WorkflowCreator
 }
@@ -128,6 +129,7 @@ func (c *Config) Start(ctx context.Context, log logr.Logger) error {
 		AutoCapabilities: grpcinternal.AutoCapabilities{
 			Enrollment: grpcinternal.AutoEnrollment{
 				Enabled:               c.Auto.Enrollment.Enabled,
+				PolicyLister:          c.Auto.Enrollment.PolicyLister,
 				WorkflowRuleSetLister: c.Auto.Enrollment.WorkflowRuleSetLister,
 				WorkflowCreator:       c.Auto.Enrollment.WorkflowCreator,
 			},
@@ -227,6 +229,7 @@ type allInterfaces interface {
 	grpcinternal.Backend
 	grpcinternal.HardwareCreator
 	grpcinternal.HardwareFilterer
+	grpcinternal.PolicyLister
 	grpcinternal.WorkflowRuleSetLister
 	grpcinternal.WorkflowCreator
 }
@@ -237,6 +240,7 @@ func (c *Config) SetBackends(b allInterfaces) {
 	c.Backend = b
 	c.Auto.Discovery.HardwareCreator = b
 	c.Auto.Discovery.HardwareFilterer = b
+	c.Auto.Enrollment.PolicyLister = b
 	c.Auto.Enrollment.WorkflowRuleSetLister = b
 	c.Auto.Enrollment.WorkflowCreator = b
 }
