@@ -9,7 +9,6 @@ import (
 	"github.com/go-logr/logr"
 
 	"github.com/gin-gonic/gin"
-	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/ui/templates"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/yaml"
@@ -19,36 +18,6 @@ const (
 	nameSingularWorkflow = "Workflow"
 	namePluralWorkflow   = "Workflows"
 )
-
-// isWorkflowDisabled reports whether spec.disabled is set and true.
-func isWorkflowDisabled(wf *tinkv1alpha1.Workflow) bool {
-	return wf.Spec.Disabled != nil && *wf.Spec.Disabled
-}
-
-// toWorkflowRow converts a Workflow resource into its list-view representation.
-// CanUpdate is left false; call setCanUpdatePermissions afterwards to fill it
-// in for disabled rows.
-func toWorkflowRow(wf tinkv1alpha1.Workflow) templates.Workflow {
-	task := ""
-	action := ""
-	agent := ""
-	if wf.Status.CurrentState != nil {
-		task = wf.Status.CurrentState.TaskName
-		action = wf.Status.CurrentState.ActionName
-		agent = wf.Status.CurrentState.AgentID
-	}
-	return templates.Workflow{
-		Name:        wf.Name,
-		Namespace:   wf.Namespace,
-		TemplateRef: wf.Spec.TemplateRef,
-		State:       string(wf.Status.State),
-		Disabled:    isWorkflowDisabled(&wf),
-		Task:        task,
-		Action:      action,
-		Agent:       agent,
-		CreatedAt:   wf.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-	}
-}
 
 // setCanUpdatePermissions fills in CanUpdate for each disabled row in rows,
 // checking patch permission on workflows.tinkerbell.org once per distinct
@@ -213,34 +182,11 @@ func HandleWorkflowDetail(c *gin.Context, log logr.Logger) {
 	specYAML, _ := yaml.Marshal(&wf.Spec)
 	statusYAML, _ := yaml.Marshal(&wf.Status)
 
-	task := ""
-	action := ""
-	agent := ""
-	if wf.Status.CurrentState != nil {
-		task = wf.Status.CurrentState.TaskName
-		action = wf.Status.CurrentState.ActionName
-		agent = wf.Status.CurrentState.AgentID
-	}
-
-	wfDetail := templates.WorkflowDetail{
-		Name:              wf.Name,
-		Namespace:         wf.Namespace,
-		TemplateRef:       wf.Spec.TemplateRef,
-		HardwareRef:       wf.Spec.HardwareRef,
-		State:             string(wf.Status.State),
-		Disabled:          isWorkflowDisabled(wf),
-		CanUpdate:         canPatchWorkflows(ctx, client, log, namespace),
-		Task:              task,
-		Action:            action,
-		Agent:             agent,
-		TemplateRendering: string(wf.Status.TemplateRendering),
-		CreatedAt:         wf.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-		Labels:            wf.Labels,
-		Annotations:       wf.Annotations,
-		SpecYAML:          string(specYAML),
-		StatusYAML:        string(statusYAML),
-		YAML:              string(yamlBytes),
-	}
+	wfDetail := workflowDetail(wf)
+	wfDetail.CanUpdate = canPatchWorkflows(ctx, client, log, namespace)
+	wfDetail.SpecYAML = string(specYAML)
+	wfDetail.StatusYAML = string(statusYAML)
+	wfDetail.YAML = string(yamlBytes)
 
 	cfg := templates.PageConfig{
 		BaseURL:    GetBaseURL(c),

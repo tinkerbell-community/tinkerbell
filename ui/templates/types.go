@@ -36,9 +36,12 @@ type Hardware struct {
 
 // Workflow represents a workflow resource in the list view.
 type Workflow struct {
-	Name        string
-	Namespace   string
+	Name      string
+	Namespace string
+	// TemplateRef is the deprecated v1alpha1 Template of a Workflow created
+	// through v1alpha1. Tasks are the Tasks the Workflow runs.
 	TemplateRef string
+	Tasks       []TaskRef
 	State       string
 	Disabled    bool
 	// CanUpdate reports whether the current user has permission to enable
@@ -634,12 +637,17 @@ type OutOfBandAttributes struct {
 
 // WorkflowDetail is the data for the workflow detail page.
 type WorkflowDetail struct {
-	Name        string
-	Namespace   string
-	TemplateRef string
-	HardwareRef string
-	State       string
-	Disabled    bool
+	Name      string
+	Namespace string
+	// TemplateRef is the deprecated v1alpha1 Template of a Workflow created
+	// through v1alpha1. CompatibilityMode reports that the Workflow runs it in
+	// v1alpha1 compatibility mode rather than running Tasks.
+	TemplateRef       string
+	CompatibilityMode bool
+	// Hardware lists the Hardware the Workflow's Tasks run against, as "namespace/name".
+	Hardware []string
+	State    string
+	Disabled bool
 	// CanUpdate reports whether the current user has permission to enable
 	// this Workflow.
 	CanUpdate         bool
@@ -650,9 +658,32 @@ type WorkflowDetail struct {
 	CreatedAt         string
 	Labels            map[string]string
 	Annotations       map[string]string
-	SpecYAML          string
-	StatusYAML        string
-	YAML              string
+	// Details describes the rest of the spec: timeout, template map, vars and references.
+	Details       []InfoRow
+	Tasks         []TaskRef
+	RenderedTasks []RenderedTask
+	Conditions    []Condition
+	SpecYAML      string
+	StatusYAML    string
+	YAML          string
+}
+
+// RenderedTask is a Task as a Workflow runs it, from the Workflow's status.
+type RenderedTask struct {
+	Name    string
+	AgentID string
+	State   string
+	Actions []RenderedAction
+}
+
+// RenderedAction is an Action of a RenderedTask, with its progress.
+type RenderedAction struct {
+	Name     string
+	Image    string
+	State    string
+	Started  string
+	Duration string
+	Message  string
 }
 
 // TemplateDetail is the data for the template detail page.

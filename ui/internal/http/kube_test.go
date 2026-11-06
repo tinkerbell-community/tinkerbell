@@ -418,7 +418,6 @@ func TestKubeClientInNamespace(t *testing.T) {
 	ctx := context.Background()
 	mapper := meta.NewDefaultRESTMapper(nil)
 	for _, kind := range []string{"Hardware", "HardwareList", "Workflow", "WorkflowList"} {
-		mapper.Add(tinkv1alpha1.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
 		mapper.Add(tinkv1alpha2.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
 	}
 	c := fake.NewClientBuilder().WithScheme(newTestScheme()).WithRESTMapper(mapper).WithRuntimeObjects(
@@ -456,7 +455,6 @@ func TestKubeClientInSeveralNamespaces(t *testing.T) {
 	ctx := context.Background()
 	mapper := meta.NewDefaultRESTMapper(nil)
 	for _, kind := range []string{"Hardware", "HardwareList", "Workflow", "WorkflowList"} {
-		mapper.Add(tinkv1alpha1.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
 		mapper.Add(tinkv1alpha2.GroupVersion.WithKind(kind), meta.RESTScopeNamespace)
 	}
 	var listed []string
@@ -519,7 +517,7 @@ func TestKubeClientInSeveralNamespaces(t *testing.T) {
 	if _, err := k.EnableWorkflow(ctx, "tink-b", "wf"); err != nil {
 		t.Fatalf("EnableWorkflow in a listed namespace: %v", err)
 	}
-	stored := &tinkv1alpha1.Workflow{}
+	stored := &tinkv1alpha2.Workflow{}
 	if err := c.Get(ctx, client.ObjectKey{Namespace: "tink-b", Name: "wf"}, stored); err != nil || stored.Spec.Disabled == nil || *stored.Spec.Disabled {
 		t.Fatalf("stored workflow disabled = %v, %v; want enabled", stored.Spec.Disabled, err)
 	}
@@ -532,7 +530,7 @@ func TestKubeClientInSeveralNamespaces(t *testing.T) {
 	if _, err := k.EnableWorkflow(ctx, "other", "wf"); err == nil {
 		t.Fatal("EnableWorkflow in another namespace must fail")
 	}
-	if err := k.Status().Update(ctx, &tinkv1alpha1.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "other"}}); err == nil {
+	if err := k.Status().Update(ctx, &tinkv1alpha2.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "other"}}); err == nil {
 		t.Fatal("status Update in another namespace must fail")
 	}
 }

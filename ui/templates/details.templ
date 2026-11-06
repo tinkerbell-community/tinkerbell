@@ -1061,12 +1061,16 @@ templ HardwareDetailContent(hw HardwareDetail, baseURL string) {
 
 templ WorkflowDetailContent(wf WorkflowDetail, baseURL string) {
 	@MainInfoHeader(wf.Name, wf.State)
-	
+
+	if wf.CompatibilityMode {
+		@Notice("v1alpha1 compatibility mode", "This Workflow was created through v1alpha1 and runs its Template, "+wf.TemplateRef+", as v1alpha1 did, instead of running Tasks.", false)
+	}
+
 	<!-- Main Info Section -->
 	@SectionBox("Info") {
 		@MetadataTable(wf.Name, wf.Namespace, wf.CreatedAt, wf.Labels, wf.Annotations)
 	}
-	
+
 	<!-- Workflow Details -->
 	@SectionBox("Workflow Details") {
 		<div class="overflow-x-auto">
@@ -1075,7 +1079,10 @@ templ WorkflowDetailContent(wf WorkflowDetail, baseURL string) {
 				if wf.TemplateRef != "" {
 					<tr class="border-b border-gray-100 dark:border-darkBorder">
 						<td class="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4 align-top">Template</td>
-						<td class="py-3 text-sm"><a href={ templ.SafeURL(baseURL + "/templates/" + wf.Namespace + "/" + wf.TemplateRef) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ wf.TemplateRef }</a></td>
+						<td class="py-3 text-sm">
+							<a href={ templ.SafeURL(baseURL + "/templates/" + wf.Namespace + "/" + wf.TemplateRef) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ wf.TemplateRef }</a>
+							@DeprecatedBadge()
+						</td>
 					</tr>
 				}
 				if wf.State != "" {
@@ -1108,10 +1115,10 @@ templ WorkflowDetailContent(wf WorkflowDetail, baseURL string) {
 						<td class="py-3 text-sm text-gray-900 dark:text-white">{ wf.Agent }</td>
 					</tr>
 				}
-				if wf.HardwareRef != "" {
+				for _, hw := range wf.Hardware {
 					<tr class="border-b border-gray-100 dark:border-darkBorder">
 						<td class="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4 align-top">Hardware</td>
-						<td class="py-3 text-sm"><a href={ templ.SafeURL(baseURL + "/hardware/" + wf.Namespace + "/" + wf.HardwareRef) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ wf.HardwareRef }</a></td>
+						<td class="py-3 text-sm"><a href={ templ.SafeURL(baseURL + "/hardware/" + hw) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline">{ hw }</a></td>
 					</tr>
 				}
 				if wf.TemplateRendering != "" {
@@ -1119,22 +1126,48 @@ templ WorkflowDetailContent(wf WorkflowDetail, baseURL string) {
 						<td class="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4 align-top">Template Rendering</td>
 						<td class="py-3 text-sm text-gray-900 dark:text-white">{ wf.TemplateRendering }</td>
 					</tr>
-					}
+				}
 				</tbody>
 			</table>
 		</div>
+		@NameValueTable(wf.Details)
 	}
-	
+
+	<!-- Tasks -->
+	if len(wf.Tasks) > 0 {
+		@SectionBox("Tasks") {
+			@TaskRefsTable(wf.Tasks, baseURL)
+		}
+	}
+
+	<!-- Rendered Tasks -->
+	if len(wf.RenderedTasks) > 0 {
+		@SectionBox("Rendered Tasks") {
+			<div class="space-y-4">
+				for _, task := range wf.RenderedTasks {
+					@RenderedTaskCard(task)
+				}
+			</div>
+		}
+	}
+
+	<!-- Conditions -->
+	if len(wf.Conditions) > 0 {
+		@SectionBox("Conditions") {
+			@ConditionsTable(wf.Conditions)
+		}
+	}
+
 	<!-- Status Section -->
 	@SectionBoxCollapsible("Status", true) {
 		@CodeBlockYAML(wf.StatusYAML)
 	}
-	
+
 	<!-- Spec Section -->
 	@SectionBoxCollapsible("Spec", false) {
 		@CodeBlockYAML(wf.SpecYAML)
 	}
-	
+
 	<!-- Raw YAML -->
 	@SectionBoxCollapsible("Full YAML", false) {
 		@CodeBlockYAMLWithCopy(wf.YAML, "wf-yaml")

@@ -214,7 +214,7 @@ templ WorkflowTableContent(workflowData WorkflowPageData) {
 					<tr>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Name</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Namespace</th>
-						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Template</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Runs</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">State</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Age</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Manage</th>
@@ -260,8 +260,14 @@ templ WorkflowTableRow(wf Workflow) {
 			<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-darkBorderSoft dark:text-gray-300">{ wf.Namespace }</span>
 		</td>
 		<td class="px-6 py-4 whitespace-nowrap text-sm">
-			if wf.TemplateRef != "" {
+			for _, t := range wf.Tasks {
+				<div>
+					<a href={ templ.SafeURL("/tasks/" + t.Namespace + "/" + t.Name) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline" onclick="event.stopPropagation()">{ t.Name }</a>
+				</div>
+			}
+			if wf.TemplateRef != "" && len(wf.Tasks) == 0 {
 				<a href={ templ.SafeURL("/templates/" + wf.Namespace + "/" + wf.TemplateRef) } class="text-tink-teal-600 hover:text-tink-teal-700 dark:text-tink-teal-400 dark:hover:text-tink-teal-300 hover:underline" onclick="event.stopPropagation()">{ wf.TemplateRef }</a>
+				<span class="ml-1 text-xs text-gray-500 dark:text-gray-400">(Template)</span>
 			}
 		</td>
 		<td class="px-6 py-4 whitespace-nowrap">

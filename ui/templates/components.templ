@@ -114,6 +114,71 @@ templ HardwareInterfaceCard(iface HardwareInterface) {
 	</div>
 }
 
+// Notice - a callout: a warning (such as a deprecation) or information
+templ Notice(title, message string, warning bool) {
+	if warning {
+		<div class="mb-6 rounded-lg border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 px-4 py-3">
+			<p class="text-sm font-medium text-yellow-800 dark:text-yellow-200">{ title }</p>
+			<p class="mt-1 text-sm text-yellow-700 dark:text-yellow-300">{ message }</p>
+		</div>
+	} else {
+		<div class="mb-6 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 px-4 py-3">
+			<p class="text-sm font-medium text-blue-800 dark:text-blue-200">{ title }</p>
+			<p class="mt-1 text-sm text-blue-700 dark:text-blue-300">{ message }</p>
+		</div>
+	}
+}
+
+// DeprecatedBadge - marks a deprecated, v1alpha1-only kind
+templ DeprecatedBadge() {
+	<span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300">deprecated</span>
+}
+
+// RenderedTaskCard - a Task as a Workflow runs it, with the progress of its Actions
+templ RenderedTaskCard(task RenderedTask) {
+	<div class="rounded-md border border-gray-200 dark:border-darkBorder">
+		<div class="flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-darkBorder bg-gray-50 dark:bg-darkBg rounded-t-md">
+			<span class="text-sm font-medium text-gray-900 dark:text-white">{ task.Name }</span>
+			if task.AgentID != "" {
+				<span class="text-xs font-mono text-gray-600 dark:text-gray-300">{ task.AgentID }</span>
+			}
+			if task.State != "" {
+				@StatusBadge(task.State)
+			}
+		</div>
+		<div class="overflow-x-auto px-4">
+			<table class="min-w-full">
+				<thead>
+					<tr class="border-b border-gray-200 dark:border-darkBorder">
+						<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Action</th>
+						<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Image</th>
+						<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">State</th>
+						<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Started</th>
+						<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Duration</th>
+						<th class="py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Message</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, a := range task.Actions {
+						<tr class="border-b border-gray-100 dark:border-darkBorder last:border-b-0">
+							<td class="py-2 pr-4 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{ a.Name }</td>
+							<td class="py-2 pr-4 text-sm font-mono text-gray-700 dark:text-gray-300 break-all">{ a.Image }</td>
+							<td class="py-2 pr-4 text-sm whitespace-nowrap">
+								if a.State != "" {
+									@StatusBadge(a.State)
+								}
+							</td>
+							<td class="py-2 pr-4 text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">{ a.Started }</td>
+							<td class="py-2 pr-4 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{ a.Duration }</td>
+							<td class="py-2 text-sm text-gray-700 dark:text-gray-300 break-words">{ a.Message }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	</div>
+}
+
 // TaskRefsTable - the Tasks a Workflow or Policy runs, with the Agent and Hardware of each
 templ TaskRefsTable(refs []TaskRef, baseURL string) {
 	<div class="overflow-x-auto">
@@ -303,14 +368,14 @@ templ CodeBlockYAMLWithCopy(code, id string) {
 }
 
 templ StatusBadge(status string) {
-	if status == "Online" || status == "SUCCESS" || status == "Completed" || status == "Ready" || status == "on" || status == "True" || status == "OK" {
+	if status == "Online" || status == "SUCCESS" || status == "Success" || status == "Completed" || status == "Ready" || status == "on" || status == "True" || status == "OK" {
 		<span class="inline-flex items-center px-3 py-1 text-sm font-medium rounded-md bg-tink-teal-100 text-tink-teal-800 dark:bg-tink-teal-800 dark:text-tink-teal-100">
 			<svg class="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
 				<circle cx="4" cy="4" r="3"/>
 			</svg>
 			{ status }
 		</span>
-	} else if status == "Provisioning" || status == "RUNNING" || status == "Running" || status == "Pending" || status == "Warning" {
+	} else if status == "Provisioning" || status == "RUNNING" || status == "Running" || status == "Pending" || status == "Preparing" || status == "Post" || status == "Warning" {
 		<span class="inline-flex items-center px-3 py-1 text-sm font-medium rounded-md bg-tink-yellow-100 text-tink-yellow-800 dark:bg-tink-yellow-700 dark:text-tink-yellow-100">
 			<svg class="w-3 h-3 mr-1.5 animate-pulse" fill="currentColor" viewBox="0 0 8 8">
 				<circle cx="4" cy="4" r="3"/>
@@ -324,7 +389,7 @@ templ StatusBadge(status string) {
 			</svg>
 			{ status }
 		</span>
-	} else if status == "Offline" || status == "FAILED" || status == "Failed" || status == "off" || status == "False" || status == "Error" || status == "Critical" {
+	} else if status == "Offline" || status == "FAILED" || status == "Failed" || status == "Timeout" || status == "off" || status == "False" || status == "Error" || status == "Critical" {
 		<span class="inline-flex items-center px-3 py-1 text-sm font-medium rounded-md bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100">
 			<svg class="w-3 h-3 mr-1.5" fill="currentColor" viewBox="0 0 8 8">
 				<circle cx="4" cy="4" r="3"/>

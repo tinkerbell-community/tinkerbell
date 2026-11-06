@@ -422,22 +422,17 @@ func (k *KubeClient) GetPolicy(ctx context.Context, namespace, name string) (*ti
 }
 
 // ListWorkflows returns all workflow resources, optionally filtered by namespace.
-func (k *KubeClient) ListWorkflows(ctx context.Context, namespace string) (*tinkv1alpha1.WorkflowList, error) {
-	var wfList tinkv1alpha1.WorkflowList
-	opts := []client.ListOption{}
-	if namespace != "" && namespace != templates.AllNamespace {
-		opts = append(opts, client.InNamespace(namespace))
-	}
-
-	if err := k.List(ctx, &wfList, opts...); err != nil {
+func (k *KubeClient) ListWorkflows(ctx context.Context, namespace string) (*tinkv1alpha2.WorkflowList, error) {
+	var wfList tinkv1alpha2.WorkflowList
+	if err := k.List(ctx, &wfList, inNamespace(namespace)...); err != nil {
 		return nil, fmt.Errorf("failed to list workflows: %w", err)
 	}
 	return &wfList, nil
 }
 
 // GetWorkflow returns a specific workflow resource.
-func (k *KubeClient) GetWorkflow(ctx context.Context, namespace, name string) (*tinkv1alpha1.Workflow, error) {
-	var wf tinkv1alpha1.Workflow
+func (k *KubeClient) GetWorkflow(ctx context.Context, namespace, name string) (*tinkv1alpha2.Workflow, error) {
+	var wf tinkv1alpha2.Workflow
 	if err := k.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &wf); err != nil {
 		return nil, fmt.Errorf("failed to get workflow: %w", err)
 	}
@@ -445,7 +440,7 @@ func (k *KubeClient) GetWorkflow(ctx context.Context, namespace, name string) (*
 }
 
 // EnableWorkflow sets spec.disabled to false on a workflow resource and returns the updated object.
-func (k *KubeClient) EnableWorkflow(ctx context.Context, namespace, name string) (*tinkv1alpha1.Workflow, error) {
+func (k *KubeClient) EnableWorkflow(ctx context.Context, namespace, name string) (*tinkv1alpha2.Workflow, error) {
 	wf, err := k.GetWorkflow(ctx, namespace, name)
 	if err != nil {
 		return nil, err

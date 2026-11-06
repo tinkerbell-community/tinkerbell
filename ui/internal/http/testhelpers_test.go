@@ -101,7 +101,24 @@ func newTestHardwareV1Alpha1(name, namespace, mac, ip string) *tinkv1alpha1.Hard
 	return hw
 }
 
-func newTestWorkflow(name, templateRef string, state tinkv1alpha1.WorkflowState) *tinkv1alpha1.Workflow {
+// newTestWorkflow returns a Workflow created through v1alpha1, as the API
+// server stores it: converted to v1alpha2.
+func newTestWorkflow(name, templateRef string, state tinkv1alpha1.WorkflowState) *tinkv1alpha2.Workflow {
+	return workflowV1Alpha2(newTestWorkflowV1Alpha1(name, templateRef, state))
+}
+
+// workflowV1Alpha2 converts a Workflow created through v1alpha1 as the
+// conversion webhook does.
+func workflowV1Alpha2(wf *tinkv1alpha1.Workflow) *tinkv1alpha2.Workflow {
+	var out tinkv1alpha2.Workflow
+	if err := conversion.WorkflowToV1Alpha2(wf, &out); err != nil {
+		panic(err)
+	}
+	return &out
+}
+
+// newTestWorkflowV1Alpha1 returns a Workflow as a v1alpha1 client creates it.
+func newTestWorkflowV1Alpha1(name, templateRef string, state tinkv1alpha1.WorkflowState) *tinkv1alpha1.Workflow {
 	return &tinkv1alpha1.Workflow{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              name,
