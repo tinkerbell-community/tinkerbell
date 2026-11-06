@@ -482,3 +482,47 @@ func TestDiscoverV1Alpha1View(t *testing.T) {
 		t.Errorf("hardware = %+v", v1.ObjectMeta)
 	}
 }
+
+// TestStaleReports verifies a retried report of a finished action, or one for a task the Workflow has moved
+// on from, does not hand the Workflow over again.
+func TestStaleReports(t *testing.T) {
+	wf := twoAgentWorkflow()
+	wf.Status.State = tinkerbell.WorkflowStateRunning
+	for i := range wf.Status.Tasks[0].Actions {
+		wf.Status.Tasks[0].Actions[i].State = tinkerbell.WorkflowStateSuccess
+	}
+	// The second task runs.
+	wf.Status.AgentID = "agent-2"
+	wf.Status.Tasks[1].Actions[0].State = tinkerbell.WorkflowStateRunning
+	wf.Status.CurrentState = &tinkerbell.CurrentState{AgentID: "agent-2", TaskID: "t1", TaskName: "second", ActionID: "b0", ActionName: "b0", State: tinkerbell.WorkflowStateRunning}
+
+	for name, tc := range map[string]struct {
+		req      *proto.ActionStatusRequest
+		wantCode codes.Code
+	}{
+		"retried success of the first task's last action": {req: report("agent-1", "t0", "a1", "a1", proto.ActionStatusRequest_SUCCESS, ""), wantCode: codes.OK},
+		"late running report for the first task":          {req: report("agent-1", "t0", "a0", "a0", proto.ActionStatusRequest_RUNNING, ""), wantCode: codes.FailedPrecondition},
+		"late failure for the first task":                 {req: report("agent-1", "t0", "a0", "a0", proto.ActionStatusRequest_FAILED, ""), wantCode: codes.OK},
+	} {
+		t.Run(name, func(t *testing.T) {
+			backend := &mockBackendReadWriter{workflowV2: toV2Workflow(wf)}
+			h := &Handler{Logger: logr.Discard(), Backend: backend}
+			if _, err := h.ReportActionStatus(context.Background(), tc.req); status.Code(err) != tc.wantCode {
+				t.Fatalf("err = %v, want %s", err, tc.wantCode)
+			}
+			if backend.workflowUpdates != 0 {
+				t.Errorf("updates = %d, want none", backend.workflowUpdates)
+			}
+		})
+	}
+
+	// The current task's reports are recorded.
+	backend := &mockBackendReadWriter{workflowV2: toV2Workflow(wf)}
+	h := &Handler{Logger: logr.Discard(), Backend: backend}
+	if _, err := h.ReportActionStatus(context.Background(), report("agent-2", "t1", "b0", "b0", proto.ActionStatusRequest_SUCCESS, "")); err != nil {
+		t.Fatal(err)
+	}
+	if got := toV1Workflow(backend.workflowV2).Status.State; got != tinkerbell.WorkflowStatePost {
+		t.Errorf("state = %s, want POST", got)
+	}
+}

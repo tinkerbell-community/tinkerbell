@@ -513,6 +513,16 @@ func (h *Handler) ReportActionStatus(ctx context.Context, req *proto.ActionStatu
 			if actionState == 0 {
 				return nil, status.Errorf(codes.InvalidArgument, "invalid action state %s", req.GetActionState())
 			}
+			// A retried report of a finished action, or a report for a task the Workflow has moved on
+			// from, is stale: recording it again would hand the Workflow over a second time.
+			if stale(wf, ti, action, actionState) {
+				switch req.GetActionState() {
+				case proto.ActionStatusRequest_SUCCESS, proto.ActionStatusRequest_FAILED, proto.ActionStatusRequest_TIMEOUT:
+					return &proto.ActionStatusResponse{}, nil
+				default:
+					return nil, status.Errorf(codes.FailedPrecondition, "task %s is finished", task.Name)
+				}
+			}
 
 			action.Metadata.State = actionState
 			action.Metadata.StartTime = &metav1.Time{Time: req.GetExecutionStart().AsTime()}
@@ -577,6 +587,17 @@ func (h *Handler) ReportActionStatus(ctx context.Context, req *proto.ActionStatu
 	}
 
 	return nil, status.Error(codes.NotFound, "action not found")
+}
+
+// stale reports whether a report of state for action, of rendered task ti, comes after the fact: the
+// action already finished in that state, or the Workflow's current task is a later one.
+func stale(wf *v1alpha2.Workflow, ti int, action *v1alpha2.ActionWithMetadata, state v1alpha2.State) bool {
+	finished := state == v1alpha2.StateSuccess || state == v1alpha2.StateFailed || state == v1alpha2.StateTimeout
+	if finished && action.Metadata.State == state {
+		return true
+	}
+	cur := engine.TaskIndex(wf, wf.Status.Metadata.Task.ID)
+	return cur >= 0 && ti < cur
 }
 
 // resolveAndAnnotateHardware resolves the Hardware object for a Workflow and persists agent attributes
