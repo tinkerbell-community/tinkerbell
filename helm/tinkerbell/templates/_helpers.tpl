@@ -119,30 +119,6 @@ Usage: {{ include "tinkerbell.generateEnvVars" (dict "values" .Values.deployment
 {{- end }}
 
 {{/*
-Generate all Tinkerbell environment variables from deployment.envs structure.
-This generates env vars for all sections: globals, smee, tinkServer, tinkController, rufio, secondstar, tootles
-*/}}
-{{- define "tinkerbell.allEnvVars" -}}
-{{- $root := . }}
-{{- $publicIP := .Values.publicIP }}
-{{- $trustedProxies := .Values.trustedProxies }}
-{{- if .Values.deployment.hostNetwork }}
-- name: HOST_IP
-  valueFrom:
-    fieldRef:
-      fieldPath: status.hostIP
-{{- end }}
-{{- include "tinkerbell.generateEnvVars" .Values.deployment.envs }}
-- name: TINKERBELL_TRUSTED_PROXIES
-  value: {{ join "," $trustedProxies | quote }}
-- name: TINKERBELL_PUBLIC_IPV4
-  value: {{ coalesce .Values.deployment.envs.globals.PUBLIC_IPV4 $publicIP | quote }}
-{{- with .Values.deployment.additionalEnvs }}
-{{- toYaml . | nindent 0 }}
-{{- end }}
-{{- end }}
-
-{{/*
 Service account name for leader election RBAC
 */}}
 {{- define "tinkerbell.leaderElection.serviceAccountName" -}}
