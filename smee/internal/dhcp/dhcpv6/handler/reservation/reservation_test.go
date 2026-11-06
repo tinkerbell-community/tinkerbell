@@ -1715,9 +1715,9 @@ func hardwareForMAC(mac net.HardwareAddr, ip, netmask string, allowNetboot bool)
 	}
 }
 
-// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// FilterHardware serves the v1alpha1 fixture as the API server serves
 // it to a v1alpha2 reader.
-func (m *mockBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (m *mockBackend) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	hw, err := m.filterV1Alpha1(ctx, opts)
 	if err != nil {
 		return nil, err

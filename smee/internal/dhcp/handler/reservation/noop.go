@@ -12,7 +12,7 @@ import (
 // Handler is a noop backend.
 type noop struct{}
 
-// FilterHardwareV1Alpha2 returns an error.
-func (h noop) FilterHardwareV1Alpha2(_ context.Context, _ data.HardwareFilter) (*v1alpha2.Hardware, error) {
+// FilterHardware returns an error.
+func (h noop) FilterHardware(_ context.Context, _ data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	return nil, errors.New("no backend specified, please specify a backend")
 }

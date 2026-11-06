@@ -56,11 +56,11 @@ func hardwareWithBMCRef(machine string, sshKeys ...string) *v1alpha1.Hardware {
 	return hw
 }
 
-// TestFilterBMCMachineV1Alpha2Machine reads the BMC of Hardware created
+// TestFilterBMCMachineFromMachine reads the BMC of Hardware created
 // through v1alpha1 as SecondStar read it from v1alpha1: from the bmc Machine its
 // v1alpha1 bmcRef names, in the Hardware's namespace, with the IPMI port and
 // cipher suite of the Machine's IPMI provider options.
-func TestFilterBMCMachineV1Alpha2Machine(t *testing.T) {
+func TestFilterBMCMachineFromMachine(t *testing.T) {
 	key1, key2 := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAa1 a@example.org", "ssh-rsa AAAAB3 b@example.org"
 	machineBMC := func(port int, cipherSuite string, sshKeys ...string) *data.BMCMachine {
 		return &data.BMCMachine{
@@ -126,7 +126,7 @@ func TestFilterBMCMachineV1Alpha2Machine(t *testing.T) {
 			objs := append([]client.Object{createdAsV1Alpha1(t, tt.hw), bmcCredentials("machine-creds")}, tt.objs...)
 			b := newFakeBackend(t, Backend{}, objs...)
 
-			got, err := b.FilterBMCMachineV1Alpha2(context.Background(), data.HardwareFilter{ByName: tt.hw.Name})
+			got, err := b.FilterBMCMachine(context.Background(), data.HardwareFilter{ByName: tt.hw.Name})
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -147,7 +147,7 @@ func hardwareWithBMCConnection(conn *bmcv1alpha2.Connection, sshKeys ...string) 
 	}
 }
 
-func TestFilterBMCMachineV1Alpha2(t *testing.T) {
+func TestFilterBMCMachine(t *testing.T) {
 	credentials := bmcv1alpha2.SimpleReference{Name: "hw-creds", Namespace: "tink"}
 	createdThroughV1Alpha1 := func(conn *bmcv1alpha2.Connection) *v1alpha2.Hardware {
 		hw := createdAsV1Alpha1(t, hardwareWithBMCRef("bmc1", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAa1 a@example.org"))
@@ -218,7 +218,7 @@ func TestFilterBMCMachineV1Alpha2(t *testing.T) {
 				bmcCredentials("machine-creds"),
 				bmcMachineV1Alpha1("bmc1", &bmc.ProviderOptions{IPMI: &bmc.IPMITOOLOptions{Port: 6230}}),
 			)
-			got, err := b.FilterBMCMachineV1Alpha2(context.Background(), data.HardwareFilter{ByName: tt.hw.Name})
+			got, err := b.FilterBMCMachine(context.Background(), data.HardwareFilter{ByName: tt.hw.Name})
 			if (err != nil) != tt.wantErr {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
@@ -229,10 +229,10 @@ func TestFilterBMCMachineV1Alpha2(t *testing.T) {
 	}
 }
 
-// TestFilterBMCMachineV1Alpha2Rendered reads the BMC of rendered Hardware: a
+// TestFilterBMCMachineRendered reads the BMC of rendered Hardware: a
 // templated bmcRef of Hardware created through v1alpha1 names the Machine its
 // rendering names, and the SSH keys are the rendered ones.
-func TestFilterBMCMachineV1Alpha2Rendered(t *testing.T) {
+func TestFilterBMCMachineRendered(t *testing.T) {
 	ctx := context.Background()
 	hw := templatedV1Alpha1()
 	hw.Spec.UserData = nil
@@ -249,31 +249,31 @@ func TestFilterBMCMachineV1Alpha2Rendered(t *testing.T) {
 	hws.set(stored)
 	b.store.render(ctx, client.ObjectKeyFromObject(hw))
 
-	got, err := b.FilterBMCMachineV1Alpha2(ctx, data.HardwareFilter{ByName: hw.Name, InNamespace: hw.Namespace})
+	got, err := b.FilterBMCMachine(ctx, data.HardwareFilter{ByName: hw.Name, InNamespace: hw.Namespace})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Host != "host" || len(got.SSHPublicKeys) != 1 || got.SSHPublicKeys[0] != "k" {
-		t.Fatalf("FilterBMCMachineV1Alpha2 = %+v, want the rendered Machine name and SSH key", got)
+		t.Fatalf("FilterBMCMachine = %+v, want the rendered Machine name and SSH key", got)
 	}
 }
 
-// TestFilterBMCMachineV1Alpha2Lookup keeps the SSH user to Hardware lookup:
+// TestFilterBMCMachineLookup keeps the SSH user to Hardware lookup:
 // the user names the Hardware, in any namespace, and must name exactly one.
-func TestFilterBMCMachineV1Alpha2Lookup(t *testing.T) {
+func TestFilterBMCMachineLookup(t *testing.T) {
 	conn := &bmcv1alpha2.Connection{Host: "10.0.0.20", CredentialsRef: bmcv1alpha2.SimpleReference{Name: "hw-creds", Namespace: "tink"}}
 	other := hardwareWithBMCConnection(conn)
 	other.Namespace = "other"
 	b := newFakeBackend(t, Backend{}, hardwareWithBMCConnection(conn), other, bmcCredentials("hw-creds"),
 		&v1alpha2.Hardware{ObjectMeta: metav1.ObjectMeta{Name: "single", Namespace: "other"}, Spec: v1alpha2.HardwareSpec{BMC: &v1alpha2.BMC{Connection: conn}}})
 
-	if got, err := b.FilterBMCMachineV1Alpha2(context.Background(), data.HardwareFilter{ByName: "single"}); err != nil || got.Host != conn.Host {
+	if got, err := b.FilterBMCMachine(context.Background(), data.HardwareFilter{ByName: "single"}); err != nil || got.Host != conn.Host {
 		t.Fatalf("got %v, %v; want the BMC of the Hardware named single", got, err)
 	}
-	if _, err := b.FilterBMCMachineV1Alpha2(context.Background(), data.HardwareFilter{ByName: "sol2"}); err == nil {
+	if _, err := b.FilterBMCMachine(context.Background(), data.HardwareFilter{ByName: "sol2"}); err == nil {
 		t.Fatal("a name shared by Hardware in two namespaces must not resolve")
 	}
-	if _, err := b.FilterBMCMachineV1Alpha2(context.Background(), data.HardwareFilter{ByName: "missing"}); err == nil {
+	if _, err := b.FilterBMCMachine(context.Background(), data.HardwareFilter{ByName: "missing"}); err == nil {
 		t.Fatal("an unknown name must not resolve")
 	}
 }

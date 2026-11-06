@@ -435,7 +435,7 @@ func (c *captureCreator) ListWorkflowRuleSets(context.Context, data.WorkflowFilt
 	return c.rs, nil
 }
 
-func (c *captureCreator) CreateWorkflowV1Alpha2(_ context.Context, wf *v1alpha2.Workflow) error {
+func (c *captureCreator) CreateWorkflow(_ context.Context, wf *v1alpha2.Workflow) error {
 	*c.created = wf.DeepCopy()
 	return nil
 }

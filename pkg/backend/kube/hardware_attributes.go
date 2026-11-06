@@ -14,10 +14,10 @@ import (
 // manager for the sibling status.attributes.outOfBand subtree.
 const inBandFieldOwner = "tink-server"
 
-// ApplyHardwareInBandAttributesV1Alpha2 issues a Server-Side Apply patch for
+// ApplyHardwareInBandAttributes issues a Server-Side Apply patch for
 // status.attributes.inBand, scoped to only that path so it never conflicts
 // with Rufio's writes to the sibling status.attributes.outOfBand subtree.
-func (b *Backend) ApplyHardwareInBandAttributesV1Alpha2(ctx context.Context, name, namespace string, attrs *inventory.Attributes) error {
+func (b *Backend) ApplyHardwareInBandAttributes(ctx context.Context, name, namespace string, attrs *inventory.Attributes) error {
 	apiVersion := v1alpha2.GroupVersion.String()
 	kind := "Hardware"
 	applyConfig := &v1alpha2.HardwareApplyConfiguration{

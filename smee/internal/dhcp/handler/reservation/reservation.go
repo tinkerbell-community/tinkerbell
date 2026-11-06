@@ -18,7 +18,7 @@ import (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Handler holds the configuration details for the running the DHCP server.

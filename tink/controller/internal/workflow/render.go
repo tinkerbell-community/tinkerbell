@@ -97,7 +97,7 @@ func (r *Reconciler) renderCompat(ctx context.Context, logger logr.Logger, store
 		}
 	}
 
-	rendered, err := r.references.RenderedHardware(ctx, &hardware)
+	rendered, err := r.references.RenderedHardwareV1Alpha1(ctx, &hardware)
 	if err != nil {
 		journal.Log(ctx, "error getting rendered hardware")
 		renderFailed(stored, fmt.Sprintf("error getting rendered hardware: %v", err))
@@ -237,7 +237,7 @@ func (rc *renderContext) hardwareData(ctx context.Context, i int) (map[string]an
 	if err := rc.r.client.Get(ctx, key, hw); err != nil {
 		return nil, nil, fmt.Errorf("getting hardware %s: %w", key, err)
 	}
-	rendered, err := rc.r.references.RenderedHardwareV1Alpha2(ctx, hw)
+	rendered, err := rc.r.references.RenderedHardware(ctx, hw)
 	if err != nil {
 		return nil, nil, fmt.Errorf("getting rendered hardware %s: %w", key, err)
 	}

@@ -24,11 +24,11 @@ import (
 // Reader finds the BMC of a Hardware. An SSH user names the Hardware whose
 // serial console it reaches.
 type Reader interface {
-	// FilterBMCMachineV1Alpha2 returns the BMC connection and credentials of the
+	// FilterBMCMachine returns the BMC connection and credentials of the
 	// v1alpha2 Hardware opts matches, and the SSH keys allowed to use it: those in
 	// spec.instance.sshKeys. The connection is spec.bmc.connection or, for Hardware
 	// created through v1alpha1 without one, that of the bmc Machine its bmcRef names.
-	FilterBMCMachineV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error)
+	FilterBMCMachine(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error)
 }
 
 type Config struct {

@@ -44,10 +44,10 @@ type Config struct {
 // referenceResolver renders Hardware and resolves the references of the objects the Workflow engine
 // renders, as the kube backend does.
 type referenceResolver interface {
-	// RenderedHardware is for Workflows run in v1alpha1 compatibility mode, which render
+	// RenderedHardwareV1Alpha1 is for Workflows run in v1alpha1 compatibility mode, which render
 	// Templates with the v1alpha1 Hardware.
-	RenderedHardware(ctx context.Context, hw *tinkerbell.Hardware) (*tinkerbell.Hardware, error)
-	RenderedHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error)
+	RenderedHardwareV1Alpha1(ctx context.Context, hw *tinkerbell.Hardware) (*tinkerbell.Hardware, error)
+	RenderedHardware(ctx context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error)
 	ResolveReferencesFor(ctx context.Context, src types.NamespacedName, refs map[string]v1alpha2.Reference) (map[string]any, error)
 }
 

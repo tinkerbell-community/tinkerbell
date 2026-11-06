@@ -16,11 +16,25 @@ const renderWorkers = 4
 
 // RenderedHardware returns the rendering of hw to serve. Without rendering, it
 // returns hw. A Hardware with no rendering to serve is not found.
+func (b *Backend) RenderedHardware(_ context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error) {
+	if b.store == nil {
+		return hw, nil
+	}
+	rendered, ok := b.store.rendered(hw)
+	if !ok {
+		return nil, hardwareNotRenderedError{hardwareNotFoundError{name: hw.Name, namespace: hw.Namespace}}
+	}
+	return rendered, nil
+}
+
+// RenderedHardwareV1Alpha1 is RenderedHardware for a v1alpha1 reader, the Tink
+// Controller running a Workflow in v1alpha1 compatibility mode: hw is the
+// v1alpha1 form of a Hardware, and the rendering is served as v1alpha1.
 //
 // Hardware is rendered as v1alpha2; hw gets that rendering converted to
 // v1alpha1. Hardware created through v1alpha1 is rendered as v1alpha1, so its
 // templates render as they did before v1alpha2 was stored.
-func (b *Backend) RenderedHardware(_ context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error) {
+func (b *Backend) RenderedHardwareV1Alpha1(_ context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error) {
 	if b.store == nil {
 		return hw, nil
 	}
@@ -28,18 +42,6 @@ func (b *Backend) RenderedHardware(_ context.Context, hw *v1alpha1.Hardware) (*v
 	if err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, hardwareNotRenderedError{hardwareNotFoundError{name: hw.Name, namespace: hw.Namespace}}
-	}
-	return rendered, nil
-}
-
-// RenderedHardwareV1Alpha2 is RenderedHardware for v1alpha2 Hardware.
-func (b *Backend) RenderedHardwareV1Alpha2(_ context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error) {
-	if b.store == nil {
-		return hw, nil
-	}
-	rendered, ok := b.store.rendered(hw)
 	if !ok {
 		return nil, hardwareNotRenderedError{hardwareNotFoundError{name: hw.Name, namespace: hw.Namespace}}
 	}
@@ -57,14 +59,13 @@ func (b *Backend) RenderedReader() *RenderedReader {
 	return &RenderedReader{backend: b}
 }
 
-// FilterHardwareV1Alpha2 is Backend.FilterHardwareV1Alpha2, returning the
-// rendered Hardware.
-func (r *RenderedReader) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
-	hw, err := r.backend.FilterHardwareV1Alpha2(ctx, opts)
+// FilterHardware is Backend.FilterHardware, returning the rendered Hardware.
+func (r *RenderedReader) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	hw, err := r.backend.FilterHardware(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
-	return r.backend.RenderedHardwareV1Alpha2(ctx, hw)
+	return r.backend.RenderedHardware(ctx, hw)
 }
 
 // hardwareNotRenderedError is not found to consumers, which cannot use a Hardware

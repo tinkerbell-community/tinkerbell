@@ -25,7 +25,7 @@ type mockReader struct {
 	opts data.HardwareFilter
 }
 
-func (m *mockReader) FilterHardwareV1Alpha2(_ context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (m *mockReader) FilterHardware(_ context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	m.opts = opts
 	return m.hw, m.err
 }

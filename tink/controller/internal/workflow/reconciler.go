@@ -50,10 +50,10 @@ const (
 
 // backend renders Hardware and resolves references, as the kube backend does.
 type backend interface {
-	// RenderedHardware returns the v1alpha1 rendering of a Hardware, for
+	// RenderedHardwareV1Alpha1 returns the v1alpha1 rendering of a Hardware, for
 	// Workflows run in v1alpha1 compatibility mode.
-	RenderedHardware(ctx context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error)
-	RenderedHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error)
+	RenderedHardwareV1Alpha1(ctx context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error)
+	RenderedHardware(ctx context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error)
 	ResolveReferencesFor(ctx context.Context, src types.NamespacedName, refs map[string]v1alpha2.Reference) (map[string]any, error)
 }
 

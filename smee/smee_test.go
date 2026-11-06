@@ -1101,9 +1101,9 @@ func TestScriptHandlerPreservesIPv4AutoProxyFallbackWhenDHCPDisabled(t *testing.
 	}
 }
 
-// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// FilterHardware serves the v1alpha1 fixture as the API server serves
 // it to a v1alpha2 reader.
-func (b dhcpv6TestBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (b dhcpv6TestBackend) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	hw, err := b.filterV1Alpha1(ctx, opts)
 	if err != nil {
 		return nil, err

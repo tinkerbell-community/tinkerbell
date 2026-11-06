@@ -32,9 +32,9 @@ const tracerName = "github.com/tinkerbell/tinkerbell"
 
 // HardwareFilterer is the interface required to filter Hardware objects.
 type HardwareFilterer interface {
-	// FilterHardwareV1Alpha2 returns the one Hardware opts matches. ByIPAddress matches the
+	// FilterHardware returns the one Hardware opts matches. ByIPAddress matches the
 	// addresses of its network interfaces and ByInstanceID its spec.instance.lookupID.
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Backend provides tootles instance metadata by filtering Hardware via a HardwareFilterer.
@@ -53,7 +53,7 @@ func (b *Backend) GetHackInstance(ctx context.Context, ip string) (data.HackInst
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetHackInstance")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip})
+	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return data.HackInstance{}, err
@@ -75,7 +75,7 @@ func (b *Backend) GetEC2Instance(ctx context.Context, ip string) (data.Ec2Instan
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetEC2Instance")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip})
+	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return data.Ec2Instance{}, toInstanceNotFoundErr(err, ec2.ErrInstanceNotFound)
@@ -98,7 +98,7 @@ func (b *Backend) GetEC2InstanceByInstanceID(ctx context.Context, instanceID str
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetEC2InstanceByInstanceID")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByInstanceID: instanceID})
+	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByInstanceID: instanceID})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return data.Ec2Instance{}, toInstanceNotFoundErr(err, ec2.ErrInstanceNotFound)
@@ -120,7 +120,7 @@ func (b *Backend) GetNoCloudInstance(ctx context.Context, ip string) (nocloud.In
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetNoCloudInstance")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip})
+	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nocloud.Instance{}, toInstanceNotFoundErr(err, nocloud.ErrInstanceNotFound)
@@ -143,7 +143,7 @@ func (b *Backend) GetNoCloudInstanceByLookupID(ctx context.Context, lookupID str
 	ctx, span := tracer.Start(ctx, "tootles.backend.GetNoCloudInstanceByLookupID")
 	defer span.End()
 
-	hw, err := b.filterer.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByInstanceID: lookupID})
+	hw, err := b.filterer.FilterHardware(ctx, data.HardwareFilter{ByInstanceID: lookupID})
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 		return nocloud.Instance{}, toInstanceNotFoundErr(err, nocloud.ErrInstanceNotFound)

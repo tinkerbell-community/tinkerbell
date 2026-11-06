@@ -32,7 +32,7 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 
 	// Check if Hardware object already exists
 	// name and namespace are empty because we want to check for existing Hardware objects with the agent ID across all namespaces.
-	existing, err := h.AutoCapabilities.Discovery.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByAgentID: agentID})
+	existing, err := h.AutoCapabilities.Discovery.FilterHardware(ctx, data.HardwareFilter{ByAgentID: agentID})
 	if err == nil {
 		// Hardware object already exists, do not modify
 		journal.Log(ctx, "Hardware object already exists, skipping creation")
@@ -90,7 +90,7 @@ func (h *Handler) Discover(ctx context.Context, agentID string, attrs *data.Agen
 	journal.Log(ctx, "Populated hardware object with discovered attributes", "hardware", hw)
 
 	// Create the Hardware object in the cluster
-	if err := h.AutoCapabilities.Discovery.CreateHardwareV1Alpha2(ctx, hw); err != nil {
+	if err := h.AutoCapabilities.Discovery.CreateHardware(ctx, hw); err != nil {
 		journal.Log(ctx, "Error creating hardware object", "error", err)
 		return nil, fmt.Errorf("failed to create hardware object %s/%s: %w", ns, hwName, err)
 	}

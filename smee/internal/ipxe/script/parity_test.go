@@ -23,7 +23,7 @@ import (
 // v2Backend serves one v1alpha2 Hardware, whatever the filter.
 type v2Backend struct{ hw *v1alpha2.Hardware }
 
-func (b v2Backend) FilterHardwareV1Alpha2(context.Context, data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (b v2Backend) FilterHardware(context.Context, data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	return b.hw, nil
 }
 

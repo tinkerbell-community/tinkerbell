@@ -345,12 +345,12 @@ func TestRenderStoreV1Alpha1ConversionError(t *testing.T) {
 		return nil, errors.New("conversion failed")
 	}}
 	b := &Backend{store: s}
-	if _, err := b.RenderedHardware(context.Background(), servedAsV1Alpha1(t, stored)); err == nil || apierrors.IsNotFound(err) {
+	if _, err := b.RenderedHardwareV1Alpha1(context.Background(), servedAsV1Alpha1(t, stored)); err == nil || apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want the conversion error", err)
 	}
 	// Entries made without a v1alpha1 form convert on each read.
 	s.entries[key] = &renderEntry{resourceVersion: "1", good: stored}
-	if got, err := b.RenderedHardware(context.Background(), servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *stored.Spec.Instance.Userdata {
+	if got, err := b.RenderedHardwareV1Alpha1(context.Background(), servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *stored.Spec.Instance.Userdata {
 		t.Fatalf("got %v, %v; want the entry converted", got, err)
 	}
 }

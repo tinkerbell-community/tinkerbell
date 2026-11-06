@@ -32,7 +32,7 @@ const (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // BootURLSource supplies DHCPv6 request parsing options and boot URLs.
@@ -193,7 +193,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.PacketConn, peer net.Addr
 }
 
 func (h *Handler) resolveHardware(ctx context.Context, i v6.Info, log logr.Logger, span trace.Span) (dhcp.Hardware, bool) {
-	spec, lookupErr := h.backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: i.Mac.String()})
+	spec, lookupErr := h.backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: i.Mac.String()})
 	if lookupErr != nil {
 		if v6.HardwareNotFound(lookupErr) {
 			if h.autoStatelessEnabled {

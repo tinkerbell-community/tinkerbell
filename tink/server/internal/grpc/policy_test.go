@@ -68,7 +68,7 @@ func (e *enrollmentSources) ListWorkflowRuleSets(context.Context, data.WorkflowF
 	return e.ruleSets, nil
 }
 
-func (e *enrollmentSources) CreateWorkflowV1Alpha2(_ context.Context, wf *v1alpha2.Workflow) error {
+func (e *enrollmentSources) CreateWorkflow(_ context.Context, wf *v1alpha2.Workflow) error {
 	e.created = wf.DeepCopy()
 	return nil
 }

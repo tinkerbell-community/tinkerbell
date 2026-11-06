@@ -155,21 +155,21 @@ type fakeReferences struct {
 	gotHW     *string
 	rendered  *v1alpha1.Hardware
 	renderErr error
-	// rendered2 and render2Err are what RenderedHardwareV1Alpha2 returns, when set.
+	// rendered2 and render2Err are what RenderedHardware returns, when set.
 	rendered2  *v1alpha2.Hardware
 	render2Err error
 	// refsFor are the references ResolveReferencesFor returns per source name, when set.
 	refsFor map[string]map[string]any
 }
 
-func (f fakeReferences) RenderedHardware(_ context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error) {
+func (f fakeReferences) RenderedHardwareV1Alpha1(_ context.Context, hw *v1alpha1.Hardware) (*v1alpha1.Hardware, error) {
 	if f.rendered != nil || f.renderErr != nil {
 		return f.rendered, f.renderErr
 	}
 	return hw, nil
 }
 
-func (f fakeReferences) RenderedHardwareV1Alpha2(_ context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error) {
+func (f fakeReferences) RenderedHardware(_ context.Context, hw *v1alpha2.Hardware) (*v1alpha2.Hardware, error) {
 	if f.rendered2 != nil || f.render2Err != nil {
 		return f.rendered2, f.render2Err
 	}

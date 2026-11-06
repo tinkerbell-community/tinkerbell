@@ -226,7 +226,7 @@ type testAgent struct {
 func startEngine(ctx context.Context, t *testing.T, cfg *rest.Config) *testAgent {
 	t.Helper()
 	indexes := map[kube.IndexType]kube.Index{}
-	for _, it := range []kube.IndexType{kube.IndexTypeWorkflowAgentIDV1Alpha2, kube.IndexTypeWorkflowTaskAgentIDV1Alpha2, kube.IndexTypeHardwareAgentIDV1Alpha2} {
+	for _, it := range []kube.IndexType{kube.IndexTypeWorkflowAgentID, kube.IndexTypeWorkflowTaskAgentID, kube.IndexTypeHardwareAgentID} {
 		indexes[it] = kube.Indexes[it]
 	}
 	b, err := kube.NewBackend(kube.Backend{ClientConfig: cfg, Indexes: indexes})

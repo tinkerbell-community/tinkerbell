@@ -23,7 +23,7 @@ var errNetbootNotAllowed = errors.New("netboot is not allowed for this hardware:
 
 // BackendReader is the interface for getting hardware data from a backend.
 type BackendReader interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Handler serves a Hardware's archive over HTTP, looked up by MAC address.
@@ -91,7 +91,7 @@ func (h *Handler) archiveFor(ctx context.Context, mac net.HardwareAddr) ([]byte,
 	if h.Backend == nil {
 		return nil, fmt.Errorf("no backend configured")
 	}
-	spec, err := h.Backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := h.Backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return nil, err
 	}

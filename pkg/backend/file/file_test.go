@@ -277,14 +277,14 @@ func TestFilterHardwareByMac(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hw, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByMACAddress: tt.mac})
+			hw, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByMACAddress: tt.mac})
 			if tt.wantNotFound {
 				var nf hardwareNotFoundError
 				if !errors.As(err, &nf) {
-					t.Fatalf("FilterHardwareV1Alpha2() error = %v, want NotFound error", err)
+					t.Fatalf("FilterHardware() error = %v, want NotFound error", err)
 				}
 			} else if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("FilterHardwareV1Alpha2() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("FilterHardware() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr == nil && !tt.wantNotFound && (hw == nil || hw.Name != "pxe-virtualbox") {
 				t.Fatalf("got %v, want pxe-virtualbox", hw)
@@ -320,14 +320,14 @@ func TestFilterHardwareByIP(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hw, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByIPAddress: tt.ip})
+			hw, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByIPAddress: tt.ip})
 			if tt.wantNotFound {
 				var nf hardwareNotFoundError
 				if !errors.As(err, &nf) {
-					t.Fatalf("FilterHardwareV1Alpha2() error = %v, want NotFound error", err)
+					t.Fatalf("FilterHardware() error = %v, want NotFound error", err)
 				}
 			} else if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("FilterHardwareV1Alpha2() error = %v, wantErr %v", err, tt.wantErr)
+				t.Fatalf("FilterHardware() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if tt.wantErr == nil && !tt.wantNotFound && (hw == nil || hw.Name != "pxe-virtualbox") {
 				t.Fatalf("got %v, want pxe-virtualbox", hw)
@@ -351,7 +351,7 @@ func TestFilterHardwareByName(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			hw, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByName: tt.name})
+			hw, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByName: tt.name})
 			if tt.notFound {
 				type nf interface{ NotFound() bool }
 				var nfe nf
@@ -361,7 +361,7 @@ func TestFilterHardwareByName(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("FilterHardwareV1Alpha2() unexpected error = %v", err)
+				t.Fatalf("FilterHardware() unexpected error = %v", err)
 			}
 			if hw == nil || hw.Name != tt.name {
 				t.Fatalf("got %v, want %s", hw, tt.name)

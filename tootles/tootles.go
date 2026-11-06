@@ -31,7 +31,7 @@ type Config struct {
 // HardwareFilterer is the interface required to filter Hardware objects.
 // It is implemented by the kube backend's rendered reader and the noop backend.
 type HardwareFilterer interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // SetBackendFromFilterer configures BackendEc2, BackendHack and BackendNoCloud from a

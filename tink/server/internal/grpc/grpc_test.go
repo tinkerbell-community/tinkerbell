@@ -535,7 +535,7 @@ type mockBackendReadWriter struct {
 	hardwareFilter    data.HardwareFilter
 }
 
-func (m *mockBackendReadWriter) ReadWorkflowV1Alpha2(_ context.Context, _ string, _ string) (*v1alpha2.Workflow, error) {
+func (m *mockBackendReadWriter) ReadWorkflow(_ context.Context, _ string, _ string) (*v1alpha2.Workflow, error) {
 	m.workflowReads++
 	if m.workflowV2 != nil {
 		return m.workflowV2.DeepCopy(), nil
@@ -550,7 +550,7 @@ func (m *mockBackendReadWriter) ReadWorkflowV1Alpha2(_ context.Context, _ string
 	return toV2Workflow(m.workflow), nil
 }
 
-func (m *mockBackendReadWriter) ListWorkflowsV1Alpha2(_ context.Context, f data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
+func (m *mockBackendReadWriter) ListWorkflows(_ context.Context, f data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
 	if f.ByTaskAgentID != "" {
 		m.taskAgentLists++
 		return m.taskAgentWorkflows, nil
@@ -576,7 +576,7 @@ func (m *mockBackendReadWriter) ListWorkflowsV1Alpha2(_ context.Context, f data.
 	return out, nil
 }
 
-func (m *mockBackendReadWriter) UpdateWorkflowV1Alpha2(_ context.Context, wf *v1alpha2.Workflow, _ data.UpdateOptions) error {
+func (m *mockBackendReadWriter) UpdateWorkflow(_ context.Context, wf *v1alpha2.Workflow, _ data.UpdateOptions) error {
 	m.workflowUpdates++
 	if m.workflowV2 != nil {
 		if m.writeErr == nil {
@@ -594,7 +594,7 @@ func (m *mockBackendReadWriter) UpdateWorkflowV1Alpha2(_ context.Context, wf *v1
 	return m.writeErr
 }
 
-func (m *mockBackendReadWriter) ReadHardwareV1Alpha2(_ context.Context, _ string, _ string) (*v1alpha2.Hardware, error) {
+func (m *mockBackendReadWriter) ReadHardware(_ context.Context, _ string, _ string) (*v1alpha2.Hardware, error) {
 	m.readHardwareCalls++
 	if m.hardware != nil {
 		return toV2Hardware(m.hardware), nil
@@ -605,7 +605,7 @@ func (m *mockBackendReadWriter) ReadHardwareV1Alpha2(_ context.Context, _ string
 	return nil, errors.New("hardware not found")
 }
 
-func (m *mockBackendReadWriter) FilterHardwareV1Alpha2(_ context.Context, f data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (m *mockBackendReadWriter) FilterHardware(_ context.Context, f data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	m.hardwareFilter = f
 	if m.hardware != nil {
 		return toV2Hardware(m.hardware), nil
@@ -616,13 +616,13 @@ func (m *mockBackendReadWriter) FilterHardwareV1Alpha2(_ context.Context, f data
 	return nil, errors.New("hardware not found")
 }
 
-func (m *mockBackendReadWriter) UpdateHardwareV1Alpha2(_ context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error {
+func (m *mockBackendReadWriter) UpdateHardware(_ context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error {
 	m.updatedHardware = hw
 	m.updateOpts = opts
 	return nil
 }
 
-func (m *mockBackendReadWriter) ApplyHardwareInBandAttributesV1Alpha2(_ context.Context, _, _ string, attrs *inventory.Attributes) error {
+func (m *mockBackendReadWriter) ApplyHardwareInBandAttributes(_ context.Context, _, _ string, attrs *inventory.Attributes) error {
 	m.appliedInBand = attrs
 	return nil
 }
@@ -1532,7 +1532,7 @@ type countingLister struct {
 	lists atomic.Int32
 }
 
-func (c *countingLister) ListWorkflowsV1Alpha2(context.Context, data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
+func (c *countingLister) ListWorkflows(context.Context, data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
 	c.lists.Add(1)
 	return nil, nil
 }

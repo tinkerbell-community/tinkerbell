@@ -18,7 +18,7 @@ import (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Info holds the unified hardware data used by iPXE script and TFTP serving paths.
@@ -76,7 +76,7 @@ func GetByMac(ctx context.Context, mac net.HardwareAddr, br BackendReader) (Info
 	if br == nil {
 		return Info{}, errors.New("backend is nil")
 	}
-	spec, err := br.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := br.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return Info{}, err
 	}
@@ -94,7 +94,7 @@ func GetByIP(ctx context.Context, ip net.IP, br BackendReader) (Info, error) {
 	if br == nil {
 		return Info{}, errors.New("backend is nil")
 	}
-	spec, err := br.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByIPAddress: ip.String()})
+	spec, err := br.FilterHardware(ctx, data.HardwareFilter{ByIPAddress: ip.String()})
 	if err != nil {
 		return Info{}, err
 	}

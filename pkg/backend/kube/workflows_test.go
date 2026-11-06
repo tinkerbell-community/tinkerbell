@@ -24,9 +24,9 @@ type readers struct {
 func (r readers) GetClient() client.Client    { return r.cached }
 func (r readers) GetAPIReader() client.Reader { return r.live }
 
-// TestReadWorkflowV1Alpha2 verifies reads come from the API server, not a cache
+// TestReadWorkflow verifies reads come from the API server, not a cache
 // that hasn't caught up, and stay within the backend namespace.
-func TestReadWorkflowV1Alpha2(t *testing.T) {
+func TestReadWorkflow(t *testing.T) {
 	rs := runtime.NewScheme()
 	if err := v1alpha2.AddToScheme(rs); err != nil {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func TestReadWorkflowV1Alpha2(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			b := &Backend{Namespaces: tt.backendNamespaces, cluster: readers{cached: tt.cached, live: tt.live}}
-			got, err := b.ReadWorkflowV1Alpha2(context.Background(), "wf", "tink")
+			got, err := b.ReadWorkflow(context.Background(), "wf", "tink")
 			if tt.wantNotFound {
 				if !apierrors.IsNotFound(err) {
 					t.Fatalf("expected a not found error, got %v", err)
@@ -94,7 +94,7 @@ func TestReadWorkflowV1Alpha2(t *testing.T) {
 	}
 }
 
-func TestListWorkflowsV1Alpha2(t *testing.T) {
+func TestListWorkflows(t *testing.T) {
 	workflow := func(name, namespace, agent string, taskAgents ...string) *v1alpha2.Workflow {
 		wf := &v1alpha2.Workflow{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 		wf.Status.Metadata.Task.AgentID = agent
@@ -124,7 +124,7 @@ func TestListWorkflowsV1Alpha2(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := b.ListWorkflowsV1Alpha2(context.Background(), tt.filter)
+			got, err := b.ListWorkflows(context.Background(), tt.filter)
 			if err != nil || len(got) != tt.want {
 				t.Fatalf("listed %d Workflows, %v; want %d", len(got), err, tt.want)
 			}
@@ -132,17 +132,17 @@ func TestListWorkflowsV1Alpha2(t *testing.T) {
 	}
 }
 
-func TestCreateAndUpdateWorkflowV1Alpha2(t *testing.T) {
+func TestCreateAndUpdateWorkflow(t *testing.T) {
 	ctx := context.Background()
 	b := newFakeBackend(t, Backend{})
 	wf := &v1alpha2.Workflow{
 		ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "tink"},
 		Spec:       v1alpha2.WorkflowSpec{Tasks: []v1alpha2.WorkflowTask{{AgentID: "agent1"}}},
 	}
-	if err := b.CreateWorkflowV1Alpha2(ctx, wf); err != nil {
+	if err := b.CreateWorkflow(ctx, wf); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.CreateWorkflowV1Alpha2(ctx, &v1alpha2.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "tink"}}); !apierrors.IsAlreadyExists(err) {
+	if err := b.CreateWorkflow(ctx, &v1alpha2.Workflow{ObjectMeta: metav1.ObjectMeta{Name: "wf", Namespace: "tink"}}); !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("err = %v, want already exists", err)
 	}
 	read := func() *v1alpha2.Workflow {
@@ -156,31 +156,31 @@ func TestCreateAndUpdateWorkflowV1Alpha2(t *testing.T) {
 
 	updated := read()
 	updated.Spec.Vars = map[string]string{"a": "b"}
-	if err := b.UpdateWorkflowV1Alpha2(ctx, updated, data.UpdateOptions{}); err != nil {
+	if err := b.UpdateWorkflow(ctx, updated, data.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	status := read()
 	status.Status.Metadata.Task.AgentID = "agent1"
-	if err := b.UpdateWorkflowV1Alpha2(ctx, status, data.UpdateOptions{StatusOnly: true}); err != nil {
+	if err := b.UpdateWorkflow(ctx, status, data.UpdateOptions{StatusOnly: true}); err != nil {
 		t.Fatal(err)
 	}
 	original := read()
 	patched := original.DeepCopy()
 	patched.Status.Metadata.Task.Name = "task-1"
-	if err := b.UpdateWorkflowV1Alpha2(ctx, patched, data.UpdateOptions{StatusOnly: true, PatchFrom: original}); err != nil {
+	if err := b.UpdateWorkflow(ctx, patched, data.UpdateOptions{StatusOnly: true, PatchFrom: original}); err != nil {
 		t.Fatal(err)
 	}
 	original = read()
 	patched = original.DeepCopy()
 	patched.Spec.Vars["c"] = "d"
-	if err := b.UpdateWorkflowV1Alpha2(ctx, patched, data.UpdateOptions{PatchFrom: original}); err != nil {
+	if err := b.UpdateWorkflow(ctx, patched, data.UpdateOptions{PatchFrom: original}); err != nil {
 		t.Fatal(err)
 	}
 	got := read()
 	if got.Spec.Vars["a"] != "b" || got.Spec.Vars["c"] != "d" || got.Status.Metadata.Task.AgentID != "agent1" || got.Status.Metadata.Task.Name != "task-1" {
 		t.Fatalf("got spec %+v status %+v; want every update and patch", got.Spec, got.Status.Metadata)
 	}
-	if listed, err := b.ListWorkflowsV1Alpha2(ctx, data.WorkflowFilter{ByAgentID: "agent1"}); err != nil || len(listed) != 1 {
+	if listed, err := b.ListWorkflows(ctx, data.WorkflowFilter{ByAgentID: "agent1"}); err != nil || len(listed) != 1 {
 		t.Fatalf("listed %v, %v; want the Workflow by its current agent", listed, err)
 	}
 
@@ -191,11 +191,11 @@ func TestCreateAndUpdateWorkflowV1Alpha2(t *testing.T) {
 		"patch":        {PatchFrom: missing.DeepCopy()},
 		"status patch": {StatusOnly: true, PatchFrom: missing.DeepCopy()},
 	} {
-		if err := b.UpdateWorkflowV1Alpha2(ctx, missing, opts); !apierrors.IsNotFound(err) {
+		if err := b.UpdateWorkflow(ctx, missing, opts); !apierrors.IsNotFound(err) {
 			t.Errorf("%s: err = %v, want not found", name, err)
 		}
 	}
-	if err := b.UpdateWorkflowV1Alpha2(ctx, missing, data.UpdateOptions{RawPatch: []byte("{}")}); err == nil {
+	if err := b.UpdateWorkflow(ctx, missing, data.UpdateOptions{RawPatch: []byte("{}")}); err == nil {
 		t.Fatal("want an error for a raw patch without a type")
 	}
 }

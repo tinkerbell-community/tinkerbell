@@ -177,7 +177,7 @@ func (h *Handler) enroll(ctx context.Context, agentID string, attr *data.AgentAt
 	}
 
 	// TODO: without Hardware, query for a Hardware object with some corresponding value from the attributes.
-	if err := h.AutoCapabilities.Enrollment.CreateWorkflowV1Alpha2(ctx, wf); err != nil {
+	if err := h.AutoCapabilities.Enrollment.CreateWorkflow(ctx, wf); err != nil {
 		if apierrors.IsAlreadyExists(err) {
 			journal.Log(ctx, "workflow already exists", "workflow", name, "namespace", wf.Namespace)
 			// The Workflow exists but isn't cached yet. That resolves itself, so it isn't an error.

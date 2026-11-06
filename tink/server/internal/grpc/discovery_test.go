@@ -335,7 +335,7 @@ type mockAutoDiscoveryClient struct {
 	client client.Client
 }
 
-func (m *mockAutoDiscoveryClient) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (m *mockAutoDiscoveryClient) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	hwList := &v1alpha2.HardwareList{}
 	if err := m.client.List(ctx, hwList); err != nil {
 		return nil, err
@@ -348,6 +348,6 @@ func (m *mockAutoDiscoveryClient) FilterHardwareV1Alpha2(ctx context.Context, op
 	return nil, apierrors.NewNotFound(schema.GroupResource{Group: "tinkerbell.org", Resource: "hardware"}, opts.ByAgentID)
 }
 
-func (m *mockAutoDiscoveryClient) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error {
+func (m *mockAutoDiscoveryClient) CreateHardware(ctx context.Context, hw *v1alpha2.Hardware) error {
 	return m.client.Create(ctx, hw)
 }

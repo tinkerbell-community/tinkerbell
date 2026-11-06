@@ -11,8 +11,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// CreateWorkflowV1Alpha2 creates w.
-func (b *Backend) CreateWorkflowV1Alpha2(ctx context.Context, w *v1alpha2.Workflow) error {
+// CreateWorkflow creates w.
+func (b *Backend) CreateWorkflow(ctx context.Context, w *v1alpha2.Workflow) error {
 	if err := b.cluster.GetClient().Create(ctx, w); err != nil {
 		return fmt.Errorf("failed to create workflow %s: %w", w.Name, err)
 	}
@@ -20,10 +20,10 @@ func (b *Backend) CreateWorkflowV1Alpha2(ctx context.Context, w *v1alpha2.Workfl
 	return nil
 }
 
-// ReadWorkflowV1Alpha2 returns the Workflow as currently stored by the API
+// ReadWorkflow returns the Workflow as currently stored by the API
 // server, not as cached, so the result is never stale. A Workflow outside
 // b.Namespaces is reported as not found.
-func (b *Backend) ReadWorkflowV1Alpha2(ctx context.Context, name, namespace string) (*v1alpha2.Workflow, error) {
+func (b *Backend) ReadWorkflow(ctx context.Context, name, namespace string) (*v1alpha2.Workflow, error) {
 	if !b.Watches(namespace) {
 		return nil, apierrors.NewNotFound(v1alpha2.GroupVersion.WithResource("workflows").GroupResource(), name)
 	}
@@ -34,10 +34,10 @@ func (b *Backend) ReadWorkflowV1Alpha2(ctx context.Context, name, namespace stri
 	return wflw, nil
 }
 
-// ListWorkflowsV1Alpha2 returns the Workflows matching opts. ByAgentID matches
+// ListWorkflows returns the Workflows matching opts. ByAgentID matches
 // the Agent running the current Task (status.metadata.task.agentID),
 // ByTaskAgentID any Agent a Task is assigned to (spec.tasks[].agentID).
-func (b *Backend) ListWorkflowsV1Alpha2(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
+func (b *Backend) ListWorkflows(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
 	los := []client.ListOption{}
 	if opts.InNamespace != "" {
 		los = append(los, client.InNamespace(opts.InNamespace))
@@ -45,10 +45,10 @@ func (b *Backend) ListWorkflowsV1Alpha2(ctx context.Context, opts data.WorkflowF
 	// A single MatchingFields: each one replaces the field selector of the one before.
 	fields := client.MatchingFields{}
 	if opts.ByAgentID != "" {
-		fields[WorkflowAgentIDIndexV1Alpha2] = opts.ByAgentID
+		fields[WorkflowAgentIDIndex] = opts.ByAgentID
 	}
 	if opts.ByTaskAgentID != "" {
-		fields[WorkflowTaskAgentIDIndexV1Alpha2] = opts.ByTaskAgentID
+		fields[WorkflowTaskAgentIDIndex] = opts.ByTaskAgentID
 	}
 	if len(fields) > 0 {
 		los = append(los, fields)
@@ -61,7 +61,7 @@ func (b *Backend) ListWorkflowsV1Alpha2(ctx context.Context, opts data.WorkflowF
 	return stored.Items, nil
 }
 
-// UpdateWorkflowV1Alpha2 writes wf as opts asks, see Backend.update.
-func (b *Backend) UpdateWorkflowV1Alpha2(ctx context.Context, wf *v1alpha2.Workflow, opts data.UpdateOptions) error {
+// UpdateWorkflow writes wf as opts asks, see Backend.update.
+func (b *Backend) UpdateWorkflow(ctx context.Context, wf *v1alpha2.Workflow, opts data.UpdateOptions) error {
 	return b.update(ctx, wf, "workflow", wf.Name, opts)
 }

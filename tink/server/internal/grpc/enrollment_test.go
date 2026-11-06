@@ -203,8 +203,8 @@ func (m *mockAutoCapabilities) ListWorkflowRuleSets(ctx context.Context, opts da
 	return m.ListWorkflowRuleSetsFunc(ctx, opts)
 }
 
-// CreateWorkflowV1Alpha2 hands CreateWorkflowFunc the Workflow as v1alpha1 clients read it.
-func (m *mockAutoCapabilities) CreateWorkflowV1Alpha2(ctx context.Context, wf *v1alpha2.Workflow) error {
+// CreateWorkflow hands CreateWorkflowFunc the Workflow as v1alpha1 clients read it.
+func (m *mockAutoCapabilities) CreateWorkflow(ctx context.Context, wf *v1alpha2.Workflow) error {
 	return m.CreateWorkflowFunc(ctx, toV1Workflow(wf))
 }
 
@@ -288,7 +288,7 @@ func (multipleFoundError) MultipleFound() bool { return true }
 
 type createHardwareFunc func(context.Context, *v1alpha2.Hardware) error
 
-func (f createHardwareFunc) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error {
+func (f createHardwareFunc) CreateHardware(ctx context.Context, hw *v1alpha2.Hardware) error {
 	return f(ctx, hw)
 }
 

@@ -60,7 +60,7 @@ func newAttributesTestBackend(t *testing.T, objs ...client.Object) *Backend {
 	return b
 }
 
-func TestApplyHardwareInBandAttributesV1Alpha2(t *testing.T) {
+func TestApplyHardwareInBandAttributes(t *testing.T) {
 	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "hw-1", Namespace: "default"},
 	}
@@ -76,11 +76,11 @@ func TestApplyHardwareInBandAttributesV1Alpha2(t *testing.T) {
 	}
 
 	attrs := &inventory.Attributes{CollectionMethod: "agent", BIOS: &inventory.BIOS{Vendor: "American Megatrends"}}
-	if err := b.ApplyHardwareInBandAttributesV1Alpha2(context.Background(), hw.Name, hw.Namespace, attrs); err != nil {
+	if err := b.ApplyHardwareInBandAttributes(context.Background(), hw.Name, hw.Namespace, attrs); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := b.ReadHardwareV1Alpha2(context.Background(), hw.Name, hw.Namespace)
+	got, err := b.ReadHardware(context.Background(), hw.Name, hw.Namespace)
 	if err != nil {
 		t.Fatal(err)
 	}

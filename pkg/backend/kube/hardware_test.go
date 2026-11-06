@@ -27,7 +27,7 @@ func hardwareV1Alpha2(name, mac, ipv4, ipv6 string) *v1alpha2.Hardware {
 	}
 }
 
-func TestFilterHardwareV1Alpha2(t *testing.T) {
+func TestFilterHardware(t *testing.T) {
 	b := newFakeBackend(t, Backend{},
 		hardwareV1Alpha2("machine1", "3c:ec:ef:4c:4f:54", "172.16.10.100", "2001:db8::100"),
 		hardwareV1Alpha2("machine2", "3c:ec:ef:4c:4f:55", "172.16.10.101", "2001:db8::101"),
@@ -54,7 +54,7 @@ func TestFilterHardwareV1Alpha2(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got, err := b.FilterHardwareV1Alpha2(context.Background(), tt.filter)
+			got, err := b.FilterHardware(context.Background(), tt.filter)
 			switch {
 			case tt.wantNotFound:
 				if !apierrors.IsNotFound(err) {
@@ -74,22 +74,22 @@ func TestFilterHardwareV1Alpha2(t *testing.T) {
 	}
 }
 
-func TestListHardwareV1Alpha2(t *testing.T) {
+func TestListHardware(t *testing.T) {
 	b := newFakeBackend(t, Backend{},
 		hardwareV1Alpha2("machine1", "3c:ec:ef:4c:4f:54", "172.16.10.100", ""),
 		hardwareV1Alpha2("machine2", "3c:ec:ef:4c:4f:55", "172.16.10.101", ""),
 	)
-	all, err := b.ListHardwareV1Alpha2(context.Background(), data.HardwareFilter{InNamespace: "tink"})
+	all, err := b.ListHardware(context.Background(), data.HardwareFilter{InNamespace: "tink"})
 	if err != nil || len(all) != 2 {
 		t.Fatalf("listed %d Hardware, %v; want 2", len(all), err)
 	}
-	one, err := b.ListHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByIPAddress: "172.16.10.101"})
+	one, err := b.ListHardware(context.Background(), data.HardwareFilter{ByIPAddress: "172.16.10.101"})
 	if err != nil || len(one) != 1 || one[0].Name != "machine2" {
 		t.Fatalf("listed %v, %v; want machine2", one, err)
 	}
 }
 
-func TestReadHardwareV1Alpha2(t *testing.T) {
+func TestReadHardware(t *testing.T) {
 	hw := hardwareV1Alpha2("machine1", "3c:ec:ef:4c:4f:54", "172.16.10.100", "")
 	tests := map[string]struct {
 		namespaces   []string
@@ -105,7 +105,7 @@ func TestReadHardwareV1Alpha2(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			b := newFakeBackend(t, Backend{}, hw.DeepCopy())
 			b.Namespaces = tt.namespaces
-			got, err := b.ReadHardwareV1Alpha2(context.Background(), tt.name, "tink")
+			got, err := b.ReadHardware(context.Background(), tt.name, "tink")
 			if tt.wantNotFound {
 				if !apierrors.IsNotFound(err) {
 					t.Fatalf("err = %v, want not found", err)
@@ -119,19 +119,19 @@ func TestReadHardwareV1Alpha2(t *testing.T) {
 	}
 }
 
-func TestCreateAndUpdateHardwareV1Alpha2(t *testing.T) {
+func TestCreateAndUpdateHardware(t *testing.T) {
 	ctx := context.Background()
 	b := newFakeBackend(t, Backend{})
 	hw := hardwareV1Alpha2("machine1", "3c:ec:ef:4c:4f:54", "172.16.10.100", "")
-	if err := b.CreateHardwareV1Alpha2(ctx, hw); err != nil {
+	if err := b.CreateHardware(ctx, hw); err != nil {
 		t.Fatal(err)
 	}
-	if err := b.CreateHardwareV1Alpha2(ctx, hardwareV1Alpha2("machine1", "", "", "")); !apierrors.IsAlreadyExists(err) {
+	if err := b.CreateHardware(ctx, hardwareV1Alpha2("machine1", "", "", "")); !apierrors.IsAlreadyExists(err) {
 		t.Fatalf("err = %v, want already exists", err)
 	}
 	read := func() *v1alpha2.Hardware {
 		t.Helper()
-		got, err := b.ReadHardwareV1Alpha2(ctx, "machine1", "tink")
+		got, err := b.ReadHardware(ctx, "machine1", "tink")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,13 +140,13 @@ func TestCreateAndUpdateHardwareV1Alpha2(t *testing.T) {
 
 	updated := read()
 	updated.Spec.Arch = "arm64"
-	if err := b.UpdateHardwareV1Alpha2(ctx, updated, data.UpdateOptions{}); err != nil {
+	if err := b.UpdateHardware(ctx, updated, data.UpdateOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	original := read()
 	patched := original.DeepCopy()
 	patched.Spec.AgentID = "patched"
-	if err := b.UpdateHardwareV1Alpha2(ctx, patched, data.UpdateOptions{PatchFrom: original}); err != nil {
+	if err := b.UpdateHardware(ctx, patched, data.UpdateOptions{PatchFrom: original}); err != nil {
 		t.Fatal(err)
 	}
 	if got := read(); got.Spec.Arch != "arm64" || got.Spec.AgentID != "patched" {
@@ -156,34 +156,34 @@ func TestCreateAndUpdateHardwareV1Alpha2(t *testing.T) {
 	status := read()
 	status.Status.Conditions = append(status.Status.Conditions, bmcv1alpha2.Condition{Type: "Ready", Status: "True"})
 	status.Spec.Arch = "ignored"
-	if err := b.UpdateHardwareV1Alpha2(ctx, status, data.UpdateOptions{StatusOnly: true}); err != nil {
+	if err := b.UpdateHardware(ctx, status, data.UpdateOptions{StatusOnly: true}); err != nil {
 		t.Fatal(err)
 	}
 	raw := []byte(`{"spec":{"arch":"x86_64"}}`)
-	if err := b.UpdateHardwareV1Alpha2(ctx, read(), data.UpdateOptions{RawPatch: raw, RawPatchType: string(types.MergePatchType)}); err != nil {
+	if err := b.UpdateHardware(ctx, read(), data.UpdateOptions{RawPatch: raw, RawPatchType: string(types.MergePatchType)}); err != nil {
 		t.Fatal(err)
 	}
 	got := read()
 	if got.Spec.Arch != "x86_64" || !slices.ContainsFunc(got.Status.Conditions, func(c bmcv1alpha2.Condition) bool { return c.Type == "Ready" }) {
 		t.Fatalf("got spec %+v status %+v; want the status update without its spec change, then the raw patch", got.Spec, got.Status)
 	}
-	if err := b.UpdateHardwareV1Alpha2(ctx, got, data.UpdateOptions{RawPatch: raw}); err == nil {
+	if err := b.UpdateHardware(ctx, got, data.UpdateOptions{RawPatch: raw}); err == nil {
 		t.Fatal("want an error for a raw patch without a type")
 	}
 	missing := hardwareV1Alpha2("missing", "", "", "")
-	if err := b.UpdateHardwareV1Alpha2(ctx, missing, data.UpdateOptions{}); !apierrors.IsNotFound(err) {
+	if err := b.UpdateHardware(ctx, missing, data.UpdateOptions{}); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found", err)
 	}
-	if err := b.UpdateHardwareV1Alpha2(ctx, missing, data.UpdateOptions{StatusOnly: true}); !apierrors.IsNotFound(err) {
+	if err := b.UpdateHardware(ctx, missing, data.UpdateOptions{StatusOnly: true}); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found", err)
 	}
-	if err := b.UpdateHardwareV1Alpha2(ctx, missing, data.UpdateOptions{StatusOnly: true, PatchFrom: missing.DeepCopy()}); !apierrors.IsNotFound(err) {
+	if err := b.UpdateHardware(ctx, missing, data.UpdateOptions{StatusOnly: true, PatchFrom: missing.DeepCopy()}); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found", err)
 	}
-	if err := b.UpdateHardwareV1Alpha2(ctx, missing, data.UpdateOptions{PatchFrom: missing.DeepCopy()}); !apierrors.IsNotFound(err) {
+	if err := b.UpdateHardware(ctx, missing, data.UpdateOptions{PatchFrom: missing.DeepCopy()}); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found", err)
 	}
-	if err := b.UpdateHardwareV1Alpha2(ctx, missing, data.UpdateOptions{PatchFrom: "not an object"}); err == nil {
+	if err := b.UpdateHardware(ctx, missing, data.UpdateOptions{PatchFrom: "not an object"}); err == nil {
 		t.Fatal("want an error for invalid patch options")
 	}
 }

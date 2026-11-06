@@ -18,7 +18,7 @@ type mockReader struct {
 	filterBMCMachineFunc func(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error)
 }
 
-func (m *mockReader) FilterBMCMachineV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error) {
+func (m *mockReader) FilterBMCMachine(ctx context.Context, opts data.HardwareFilter) (*data.BMCMachine, error) {
 	return m.filterBMCMachineFunc(ctx, opts)
 }
 

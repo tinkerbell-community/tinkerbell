@@ -51,19 +51,19 @@ type Backend interface {
 }
 
 type WorkflowCreator interface {
-	CreateWorkflowV1Alpha2(ctx context.Context, wf *v1alpha2.Workflow) error
+	CreateWorkflow(ctx context.Context, wf *v1alpha2.Workflow) error
 }
 
 type WorkflowReader interface {
-	ReadWorkflowV1Alpha2(ctx context.Context, name, namespace string) (*v1alpha2.Workflow, error)
+	ReadWorkflow(ctx context.Context, name, namespace string) (*v1alpha2.Workflow, error)
 }
 
 type WorkflowLister interface {
-	ListWorkflowsV1Alpha2(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha2.Workflow, error)
+	ListWorkflows(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha2.Workflow, error)
 }
 
 type WorkflowUpdater interface {
-	UpdateWorkflowV1Alpha2(ctx context.Context, wf *v1alpha2.Workflow, opts data.UpdateOptions) error
+	UpdateWorkflow(ctx context.Context, wf *v1alpha2.Workflow, opts data.UpdateOptions) error
 }
 
 // WorkflowRuleSetLister lists the deprecated v1alpha1 WorkflowRuleSets, which only exist in v1alpha1.
@@ -72,23 +72,23 @@ type WorkflowRuleSetLister interface {
 }
 
 type HardwareReader interface {
-	ReadHardwareV1Alpha2(ctx context.Context, name, namespace string) (*v1alpha2.Hardware, error)
+	ReadHardware(ctx context.Context, name, namespace string) (*v1alpha2.Hardware, error)
 }
 
 type HardwareFilterer interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 type HardwareUpdater interface {
-	UpdateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error
+	UpdateHardware(ctx context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error
 }
 
 type HardwareInBandAttributesApplier interface {
-	ApplyHardwareInBandAttributesV1Alpha2(ctx context.Context, name, namespace string, attrs *inventory.Attributes) error
+	ApplyHardwareInBandAttributes(ctx context.Context, name, namespace string, attrs *inventory.Attributes) error
 }
 
 type HardwareCreator interface {
-	CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error
+	CreateHardware(ctx context.Context, hw *v1alpha2.Hardware) error
 }
 
 // Handler is a server that implements a workflow API.
@@ -156,7 +156,7 @@ func (h *Handler) GetAction(ctx context.Context, req *proto.ActionRequest) (*pro
 		hwRef = hw
 	}
 
-	wfs, err := h.Backend.ListWorkflowsV1Alpha2(ctx, data.WorkflowFilter{ByAgentID: req.GetAgentId()})
+	wfs, err := h.Backend.ListWorkflows(ctx, data.WorkflowFilter{ByAgentID: req.GetAgentId()})
 	if err != nil {
 		// TODO: This is where we handle auto capabilities
 		journal.Log(ctx, "error getting Workflows", "error", err)
@@ -289,7 +289,7 @@ func (h *Handler) GetAction(ctx context.Context, req *proto.ActionRequest) (*pro
 		State: action.Metadata.State,
 	}
 
-	if err := h.Backend.UpdateWorkflowV1Alpha2(ctx, &wf, data.UpdateOptions{StatusOnly: true}); err != nil {
+	if err := h.Backend.UpdateWorkflow(ctx, &wf, data.UpdateOptions{StatusOnly: true}); err != nil {
 		if apierrors.IsConflict(err) {
 			return nil, status.Errorf(codes.Aborted, "error writing current state: %v", err)
 		}
@@ -340,7 +340,7 @@ func (h *Handler) GetAction(ctx context.Context, req *proto.ActionRequest) (*pro
 // agentID that it is not running yet: it has not been rendered, or another task is current. Enrolling such
 // an Agent would give it a second Workflow.
 func (h *Handler) workflowAwaitsAgent(ctx context.Context, agentID string) error {
-	wfs, err := h.Backend.ListWorkflowsV1Alpha2(ctx, data.WorkflowFilter{ByTaskAgentID: agentID})
+	wfs, err := h.Backend.ListWorkflows(ctx, data.WorkflowFilter{ByTaskAgentID: agentID})
 	if err != nil {
 		journal.Log(ctx, "error getting Workflows by task Agent", "error", err)
 		return errors.Join(ErrBackendRead, status.Errorf(codes.Internal, "error getting workflows: %v", err))
@@ -486,7 +486,7 @@ func (h *Handler) ReportActionStatus(ctx context.Context, req *proto.ActionStatu
 		return nil, status.Errorf(codes.InvalidArgument, errInvalidActionName)
 	}
 	// 2. Get the workflow
-	wf, err := h.Backend.ReadWorkflowV1Alpha2(ctx, name, namespace)
+	wf, err := h.Backend.ReadWorkflow(ctx, name, namespace)
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return nil, status.Errorf(codes.NotFound, "workflow %s not found", req.GetWorkflowId())
@@ -575,7 +575,7 @@ func (h *Handler) ReportActionStatus(ctx context.Context, req *proto.ActionStatu
 				State:   actionState,
 				Message: req.GetMessage().GetMessage(),
 			}
-			if err := h.Backend.UpdateWorkflowV1Alpha2(ctx, wf, data.UpdateOptions{StatusOnly: true}); err != nil {
+			if err := h.Backend.UpdateWorkflow(ctx, wf, data.UpdateOptions{StatusOnly: true}); err != nil {
 				code := codes.Internal
 				if apierrors.IsConflict(err) {
 					code = codes.Aborted
@@ -644,7 +644,7 @@ func (h *Handler) updateHardwareWithAttributes(ctx context.Context, log logr.Log
 	}
 
 	hw.Annotations[constant.AttributesAnnotation] = string(a)
-	if err := h.Backend.UpdateHardwareV1Alpha2(ctx, hw, data.UpdateOptions{PatchFrom: original}); err != nil {
+	if err := h.Backend.UpdateHardware(ctx, hw, data.UpdateOptions{PatchFrom: original}); err != nil {
 		return fmt.Errorf("error updating Hardware with attributes annotation: %w", err)
 	}
 
@@ -676,7 +676,7 @@ func (h *Handler) resolveAndApplyInBandAttributes(ctx context.Context, log logr.
 	inBand.PruneEmpty()
 	inBand.CollectionMethod = "agent"
 	inBand.LastUpdated = &metav1.Time{Time: h.NowFunc()}
-	if err := h.Backend.ApplyHardwareInBandAttributesV1Alpha2(ctx, hwRef.Name, hwRef.Namespace, inBand); err != nil {
+	if err := h.Backend.ApplyHardwareInBandAttributes(ctx, hwRef.Name, hwRef.Namespace, inBand); err != nil {
 		journal.Log(ctx, "error applying Hardware status.attributes.inBand", "error", err)
 		log.Error(err, "error applying Hardware status.attributes.inBand")
 	}
@@ -691,7 +691,7 @@ func (h *Handler) resolveHardware(ctx context.Context, hwRef *v1alpha2.Hardware,
 	if ref == nil {
 		return nil
 	}
-	hw, err := h.Backend.ReadHardwareV1Alpha2(ctx, ref.Name, ref.Namespace)
+	hw, err := h.Backend.ReadHardware(ctx, ref.Name, ref.Namespace)
 	if err != nil {
 		return nil
 	}

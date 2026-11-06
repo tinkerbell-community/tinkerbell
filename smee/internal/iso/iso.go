@@ -34,7 +34,7 @@ const (
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Handler is a struct that contains the necessary fields to patch an ISO file with
@@ -462,7 +462,7 @@ func (h *Handler) getFacility(ctx context.Context, mac net.HardwareAddr, br Back
 		return "", dhcp.Hardware{}, nil, errors.New("backend is nil")
 	}
 
-	spec, err := br.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
+	spec, err := br.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: mac.String()})
 	if err != nil {
 		return "", dhcp.Hardware{}, nil, err
 	}

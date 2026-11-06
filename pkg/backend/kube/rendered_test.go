@@ -88,11 +88,11 @@ func TestRenderedHardwareCreatedThroughV1Alpha1(t *testing.T) {
 	b := newFakeBackend(t, Backend{}, hw)
 	filter := data.HardwareFilter{ByName: hw.Name, InNamespace: hw.Namespace}
 
-	stored, err := b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter)
+	stored, err := b.RenderedReader().FilterHardware(ctx, filter)
 	if err != nil || *stored.Spec.Instance.Userdata != *old.Spec.UserData {
 		t.Fatalf("without rendering got %v, %v; want the stored Hardware", stored, err)
 	}
-	if got, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *old.Spec.UserData {
+	if got, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *old.Spec.UserData {
 		t.Fatalf("without rendering got %v, %v; want the stored v1alpha1 Hardware", got, err)
 	}
 
@@ -100,14 +100,14 @@ func TestRenderedHardwareCreatedThroughV1Alpha1(t *testing.T) {
 	b.store = newTestStore(hws, res, &fakeInformers{})
 	defer b.store.queue.ShutDown()
 	hws.set(stored)
-	if _, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
+	if _, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found before the first render", err)
 	}
 	b.store.render(ctx, client.ObjectKeyFromObject(hw))
-	if got, err := b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter); err != nil || *got.Spec.Instance.Userdata != "domain=example.org" {
+	if got, err := b.RenderedReader().FilterHardware(ctx, filter); err != nil || *got.Spec.Instance.Userdata != "domain=example.org" {
 		t.Fatalf("got %v, %v; want the rendering", got, err)
 	}
-	got, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored))
+	got, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored))
 	if err != nil || *got.Spec.UserData != "domain=example.org" {
 		t.Fatalf("got %v, %v; want the rendering as v1alpha1", got, err)
 	}
@@ -116,24 +116,24 @@ func TestRenderedHardwareCreatedThroughV1Alpha1(t *testing.T) {
 	}
 	res.set(nil, nil)
 	b.store.render(ctx, client.ObjectKeyFromObject(hw))
-	if _, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
+	if _, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want a failed rendering to be not found", err)
 	}
 }
 
-// TestRenderedReaderV1Alpha2 reads v1alpha2 Hardware in both versions: v1alpha2
+// TestRenderedReader reads v1alpha2 Hardware in both versions: v1alpha2
 // readers get the rendering, v1alpha1 readers the same rendering converted.
-func TestRenderedReaderV1Alpha2(t *testing.T) {
+func TestRenderedReader(t *testing.T) {
 	ctx := context.Background()
 	hw := templated("1")
 	b := newFakeBackend(t, Backend{}, hw)
 	filter := data.HardwareFilter{ByName: hw.Name, InNamespace: hw.Namespace}
 
-	stored, err := b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter)
+	stored, err := b.RenderedReader().FilterHardware(ctx, filter)
 	if err != nil || *stored.Spec.Instance.Userdata != *hw.Spec.Instance.Userdata {
 		t.Fatalf("without rendering got %v, %v; want the stored Hardware", stored, err)
 	}
-	if got, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *hw.Spec.Instance.Userdata {
+	if got, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); err != nil || *got.Spec.UserData != *hw.Spec.Instance.Userdata {
 		t.Fatalf("without rendering got %v, %v; want the stored v1alpha1 Hardware", got, err)
 	}
 
@@ -141,30 +141,30 @@ func TestRenderedReaderV1Alpha2(t *testing.T) {
 	b.store = newTestStore(hws, res, &fakeInformers{})
 	defer b.store.queue.ShutDown()
 	hws.set(stored)
-	if _, err := b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter); !apierrors.IsNotFound(err) {
+	if _, err := b.RenderedReader().FilterHardware(ctx, filter); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found before the first render", err)
 	}
-	if _, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
+	if _, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want not found for v1alpha1 readers before the first render", err)
 	}
 	b.store.render(ctx, client.ObjectKeyFromObject(hw))
-	if got, err := b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter); err != nil || *got.Spec.Instance.Userdata != "domain=example.org" {
+	if got, err := b.RenderedReader().FilterHardware(ctx, filter); err != nil || *got.Spec.Instance.Userdata != "domain=example.org" {
 		t.Fatalf("got %v, %v; want the rendering", got, err)
 	}
-	asV1Alpha1, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored))
+	asV1Alpha1, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored))
 	if err != nil || *asV1Alpha1.Spec.UserData != "domain=example.org" {
 		t.Fatalf("got %v, %v; want the rendering as v1alpha1", asV1Alpha1, err)
 	}
 	asV1Alpha1.Spec.UserData = ptr("mutated")
-	if again, _ := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); *again.Spec.UserData != "domain=example.org" {
+	if again, _ := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); *again.Spec.UserData != "domain=example.org" {
 		t.Fatal("a v1alpha1 caller's copy must not change the stored rendering")
 	}
 	res.set(nil, nil)
 	b.store.render(ctx, client.ObjectKeyFromObject(hw))
-	if _, err := b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter); !apierrors.IsNotFound(err) {
+	if _, err := b.RenderedReader().FilterHardware(ctx, filter); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want a failed rendering to be not found", err)
 	}
-	if _, err := b.RenderedHardware(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
+	if _, err := b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, stored)); !apierrors.IsNotFound(err) {
 		t.Fatalf("err = %v, want a failed rendering to be not found for v1alpha1 readers", err)
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 func TestNoop(t *testing.T) {
 	want := errors.New("no backend specified, please specify a backend")
-	_, got := noop{}.FilterHardwareV1Alpha2(context.TODO(), data.HardwareFilter{})
+	_, got := noop{}.FilterHardware(context.TODO(), data.HardwareFilter{})
 	if diff := cmp.Diff(want.Error(), got.Error()); diff != "" {
 		t.Fatal(diff)
 	}

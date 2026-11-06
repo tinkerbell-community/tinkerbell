@@ -60,8 +60,8 @@ func TestNewBackend(t *testing.T) {
 				}
 			},
 			idxs: map[IndexType]Index{
-				IndexType("one"):              {Obj: &v1alpha2.Hardware{}, Field: MACAddrIndexV1Alpha2, ExtractValue: MACAddrsV1Alpha2},
-				IndexType("duplicate of one"): {Obj: &v1alpha2.Hardware{}, Field: MACAddrIndexV1Alpha2, ExtractValue: MACAddrsV1Alpha2},
+				IndexType("one"):              {Obj: &v1alpha2.Hardware{}, Field: MACAddrIndex, ExtractValue: MACAddrs},
+				IndexType("duplicate of one"): {Obj: &v1alpha2.Hardware{}, Field: MACAddrIndex, ExtractValue: MACAddrs},
 			},
 		},
 	}
@@ -96,7 +96,7 @@ func newWorkingClient(t *testing.T) client.WithWatch {
 
 	ct = ct.WithScheme(rs)
 	ct = ct.WithRuntimeObjects(&v1alpha2.HardwareList{})
-	ct = ct.WithIndex(&v1alpha2.Hardware{}, IPAddrIndexV1Alpha2, func(client.Object) []string {
+	ct = ct.WithIndex(&v1alpha2.Hardware{}, IPAddrIndex, func(client.Object) []string {
 		var list []string
 		return list
 	})
@@ -183,21 +183,21 @@ func TestBackendWatchesHardwareAndWorkflowsOnlyAsV1Alpha2(t *testing.T) {
 	// server (ReadWorkflow) and writes do not start informers.
 	ctx := context.Background()
 	filter := data.HardwareFilter{ByName: "m1", InNamespace: "tink"}
-	_, _ = b.FilterHardwareV1Alpha2(ctx, filter)
-	_, _ = b.RenderedReader().FilterHardwareV1Alpha2(ctx, filter)
-	_, _ = b.ListHardwareV1Alpha2(ctx, filter)
-	_, _ = b.ReadHardwareV1Alpha2(ctx, "m1", "tink")
-	_, _ = b.ListWorkflowsV1Alpha2(ctx, data.WorkflowFilter{ByAgentID: "agent1", ByTaskAgentID: "agent1"})
-	_, _ = b.FilterBMCMachineV1Alpha2(ctx, filter)
-	_, _ = b.BMCConnectionV1Alpha2(ctx, createdAsV1Alpha1(t, hardwareWithBMCRef("bmc1")))
+	_, _ = b.FilterHardware(ctx, filter)
+	_, _ = b.RenderedReader().FilterHardware(ctx, filter)
+	_, _ = b.ListHardware(ctx, filter)
+	_, _ = b.ReadHardware(ctx, "m1", "tink")
+	_, _ = b.ListWorkflows(ctx, data.WorkflowFilter{ByAgentID: "agent1", ByTaskAgentID: "agent1"})
+	_, _ = b.FilterBMCMachine(ctx, filter)
+	_, _ = b.BMCConnection(ctx, createdAsV1Alpha1(t, hardwareWithBMCRef("bmc1")))
 	if _, _, err := b.ReadAuthSecret(ctx, "credentials", "tink"); err == nil {
 		t.Error("want an error for credentials the cache does not have")
 	}
 	_, _ = b.ReadTask(ctx, "task1", "tink")
 	_, _ = b.ListPolicies(ctx, data.WorkflowFilter{})
 	_, _ = b.ListWorkflowRuleSets(ctx, data.WorkflowFilter{})
-	_, _ = b.RenderedHardwareV1Alpha2(ctx, templated("1"))
-	_, _ = b.RenderedHardware(ctx, servedAsV1Alpha1(t, templated("1")))
+	_, _ = b.RenderedHardware(ctx, templated("1"))
+	_, _ = b.RenderedHardwareV1Alpha1(ctx, servedAsV1Alpha1(t, templated("1")))
 
 	for _, kind := range []schema.GroupVersionKind{v1alpha1.GroupVersion.WithKind("Hardware"), v1alpha1.GroupVersion.WithKind("Workflow")} {
 		if watched.watches(kind) {

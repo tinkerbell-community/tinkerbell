@@ -40,7 +40,7 @@ const tracerName = "github.com/tinkerbell/tinkerbell/smee/internal/dhcp/handler/
 
 // BackendReader is the interface for getting data from a backend.
 type BackendReader interface {
-	FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
+	FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error)
 }
 
 // Handler holds the configuration details for the running the DHCP server.
@@ -206,7 +206,7 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp dhcp.Pac
 
 	// check the backend, if PXE is NOT allowed, set the boot file name to "/<mac address>/not-allowed"
 	var hw dhcp.Hardware
-	spec, err := h.Backend.FilterHardwareV1Alpha2(ctx, data.HardwareFilter{ByMACAddress: dp.Pkt.ClientHWAddr.String()})
+	spec, err := h.Backend.FilterHardware(ctx, data.HardwareFilter{ByMACAddress: dp.Pkt.ClientHWAddr.String()})
 	switch {
 	case err != nil && !h.AutoProxyEnabled:
 		log.Info("Ignoring packet", "error", err.Error())

@@ -50,7 +50,7 @@ const mixedVersions = `
             address: "2001:db8::15"
 `
 
-func TestFilterHardwareV1Alpha2(t *testing.T) {
+func TestFilterHardware(t *testing.T) {
 	name, err := createFile([]byte(mixedVersions))
 	if err != nil {
 		t.Fatal(err)
@@ -80,11 +80,11 @@ func TestFilterHardwareV1Alpha2(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			hw, err := w.FilterHardwareV1Alpha2(context.Background(), tt.opts)
+			hw, err := w.FilterHardware(context.Background(), tt.opts)
 			if tt.wantName == "" {
 				var nf hardwareNotFoundError
 				if !errors.As(err, &nf) {
-					t.Fatalf("FilterHardwareV1Alpha2() error = %v, want NotFound error", err)
+					t.Fatalf("FilterHardware() error = %v, want NotFound error", err)
 				}
 				return
 			}
@@ -98,10 +98,10 @@ func TestFilterHardwareV1Alpha2(t *testing.T) {
 	}
 }
 
-// TestFilterHardwareV1Alpha2Converts checks that a v1alpha1 entry is served as
+// TestFilterHardwareConverts checks that a v1alpha1 entry is served as
 // its conversion, annotation included, so that readers can recover what only
 // v1alpha1 holds.
-func TestFilterHardwareV1Alpha2Converts(t *testing.T) {
+func TestFilterHardwareConverts(t *testing.T) {
 	w, err := NewWatcher(logr.Discard(), "testdata/example.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func TestFilterHardwareV1Alpha2Converts(t *testing.T) {
 	if old.Spec.Interfaces[0].DHCP.MAC != "08:00:27:29:4e:67" {
 		t.Fatalf("first entry has MAC %s, want 08:00:27:29:4e:67", old.Spec.Interfaces[0].DHCP.MAC)
 	}
-	got, err := w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByMACAddress: "08:00:27:29:4e:67"})
+	got, err := w.FilterHardware(context.Background(), data.HardwareFilter{ByMACAddress: "08:00:27:29:4e:67"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestFilterHardwareV1Alpha2Converts(t *testing.T) {
 	}
 }
 
-func TestFilterHardwareV1Alpha2Errors(t *testing.T) {
+func TestFilterHardwareErrors(t *testing.T) {
 	tests := map[string]struct {
 		content string
 		wantErr error
@@ -153,7 +153,7 @@ func TestFilterHardwareV1Alpha2Errors(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = w.FilterHardwareV1Alpha2(context.Background(), data.HardwareFilter{ByAgentID: "a"})
+			_, err = w.FilterHardware(context.Background(), data.HardwareFilter{ByAgentID: "a"})
 			if tt.wantErr != nil {
 				if !errors.Is(err, tt.wantErr) {
 					t.Fatalf("error = %v, want %v", err, tt.wantErr)

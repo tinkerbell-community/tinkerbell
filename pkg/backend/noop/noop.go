@@ -12,6 +12,6 @@ var errAlways = errors.New("noop backend always returns an error")
 
 type Backend struct{}
 
-func (n Backend) FilterHardwareV1Alpha2(_ context.Context, _ data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (n Backend) FilterHardware(_ context.Context, _ data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	return nil, errAlways
 }

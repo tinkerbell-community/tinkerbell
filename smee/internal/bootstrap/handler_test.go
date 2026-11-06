@@ -262,9 +262,9 @@ func TestHandlerErrors(t *testing.T) {
 	}
 }
 
-// FilterHardwareV1Alpha2 serves the v1alpha1 fixture as the API server serves
+// FilterHardware serves the v1alpha1 fixture as the API server serves
 // it to a v1alpha2 reader.
-func (s *stubBackend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+func (s *stubBackend) FilterHardware(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
 	hw, err := s.filterV1Alpha1(ctx, opts)
 	if err != nil {
 		return nil, err

@@ -18,16 +18,16 @@ func TestEnabledIndexes(t *testing.T) {
 	}{
 		"none": {},
 		"smee": {smee: true, want: []kube.IndexType{
-			kube.IndexTypeMACAddrV1Alpha2, kube.IndexTypeIPAddrV1Alpha2,
+			kube.IndexTypeMACAddr, kube.IndexTypeIPAddr,
 		}},
 		"smee and tootles": {smee: true, tootles: true, want: []kube.IndexType{
-			kube.IndexTypeMACAddrV1Alpha2, kube.IndexTypeIPAddrV1Alpha2, kube.IndexTypeLookupIDV1Alpha2,
+			kube.IndexTypeMACAddr, kube.IndexTypeIPAddr, kube.IndexTypeLookupID,
 		}},
 		"tink server": {tinkServer: true, want: []kube.IndexType{
-			kube.IndexTypeWorkflowAgentIDV1Alpha2, kube.IndexTypeWorkflowTaskAgentIDV1Alpha2, kube.IndexTypeHardwareAgentIDV1Alpha2,
+			kube.IndexTypeWorkflowAgentID, kube.IndexTypeWorkflowTaskAgentID, kube.IndexTypeHardwareAgentID,
 		}},
 		"secondstar": {secondStar: true, want: []kube.IndexType{
-			kube.IndexTypeHardwareNameV1Alpha2, kube.IndexTypeMachineName,
+			kube.IndexTypeHardwareName, kube.IndexTypeMachineName,
 		}},
 	}
 	for name, tt := range tests {
