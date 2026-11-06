@@ -1,11 +1,56 @@
 package main
 
 import (
+	"maps"
 	"net/netip"
+	"slices"
 	"testing"
 
 	"github.com/tinkerbell/tinkerbell/cmd/tinkerbell/flag"
+	"github.com/tinkerbell/tinkerbell/pkg/backend/kube"
 )
+
+func TestEnabledIndexes(t *testing.T) {
+	smeeIndexes := len(flag.KubeIndexesSmee)
+	tests := map[string]struct {
+		smee, tootles, tinkServer, secondStar bool
+		want                                  []kube.IndexType
+	}{
+		"none": {},
+		"smee": {smee: true, want: []kube.IndexType{
+			kube.IndexTypeMACAddr, kube.IndexTypeIPAddr, kube.IndexTypeMACAddrV1Alpha2, kube.IndexTypeIPAddrV1Alpha2,
+		}},
+		"smee and tootles": {smee: true, tootles: true, want: []kube.IndexType{
+			kube.IndexTypeMACAddr, kube.IndexTypeIPAddr, kube.IndexTypeInstanceID,
+			kube.IndexTypeMACAddrV1Alpha2, kube.IndexTypeIPAddrV1Alpha2, kube.IndexTypeLookupIDV1Alpha2,
+		}},
+		"tink server": {tinkServer: true, want: []kube.IndexType{
+			kube.IndexTypeWorkflowAgentID, kube.IndexTypeHardwareAgentID,
+			kube.IndexTypeWorkflowAgentIDV1Alpha2, kube.IndexTypeWorkflowTaskAgentIDV1Alpha2, kube.IndexTypeHardwareAgentIDV1Alpha2,
+		}},
+		"secondstar": {secondStar: true, want: []kube.IndexType{
+			kube.IndexTypeHardwareName, kube.IndexTypeMachineName, kube.IndexTypeHardwareNameV1Alpha2,
+		}},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := enabledIndexes(tt.smee, tt.tootles, tt.tinkServer, tt.secondStar)
+			gotTypes := slices.Sorted(maps.Keys(got))
+			slices.Sort(tt.want)
+			if !slices.Equal(gotTypes, tt.want) {
+				t.Fatalf("enabled %v, want %v", gotTypes, tt.want)
+			}
+			for indexType, index := range got {
+				if index.Obj == nil || index.ExtractValue == nil {
+					t.Errorf("index %q is not defined", indexType)
+				}
+			}
+			if len(flag.KubeIndexesSmee) != smeeIndexes {
+				t.Fatal("enabling indexes must not change a component's index set")
+			}
+		})
+	}
+}
 
 func TestMetadataEndpoint(t *testing.T) {
 	base := flag.GlobalConfig{

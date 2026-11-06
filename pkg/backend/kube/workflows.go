@@ -22,60 +22,50 @@ func (b *Backend) CreateWorkflow(ctx context.Context, w *v1alpha1.Workflow) erro
 // ReadWorkflow returns the Workflow as currently stored by the API server, not as cached,
 // so the result is never stale. A Workflow outside b.Namespaces is reported as not found.
 func (b *Backend) ReadWorkflow(ctx context.Context, name, namespace string) (*v1alpha1.Workflow, error) {
-	if !b.Watches(namespace) {
-		return nil, apierrors.NewNotFound(v1alpha1.GroupVersion.WithResource("workflows").GroupResource(), name)
-	}
 	wflw := &v1alpha1.Workflow{}
-	if err := b.cluster.GetAPIReader().Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, wflw); err != nil {
-		return nil, fmt.Errorf("failed to get workflow %s/%s: %w", namespace, name, err)
+	if err := b.readWorkflowInto(ctx, wflw, name, namespace); err != nil {
+		return nil, err
 	}
 	return wflw, nil
 }
 
+// readWorkflowInto reads the Workflow name in namespace into wf, of either version,
+// as ReadWorkflow does.
+func (b *Backend) readWorkflowInto(ctx context.Context, wf client.Object, name, namespace string) error {
+	if !b.Watches(namespace) {
+		return apierrors.NewNotFound(v1alpha1.GroupVersion.WithResource("workflows").GroupResource(), name)
+	}
+	if err := b.cluster.GetAPIReader().Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, wf); err != nil {
+		return fmt.Errorf("failed to get workflow %s/%s: %w", namespace, name, err)
+	}
+	return nil
+}
+
 func (b *Backend) ListWorkflows(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha1.Workflow, error) {
 	stored := &v1alpha1.WorkflowList{}
-	los := []client.ListOption{}
-	if opts.InNamespace != "" {
-		los = append(los, client.InNamespace(opts.InNamespace))
-	}
-	if opts.ByAgentID != "" {
-		los = append(los, client.MatchingFields{WorkflowAgentIDIndex: opts.ByAgentID})
-	}
-	if err := b.cluster.GetClient().List(ctx, stored, los...); err != nil {
-		return nil, fmt.Errorf("failed to list workflows in namespace %s: %w", opts.InNamespace, err)
+	if err := b.listWorkflowsInto(ctx, stored, WorkflowAgentIDIndex, opts); err != nil {
+		return nil, err
 	}
 
 	return stored.Items, nil
 }
 
-func (b *Backend) UpdateWorkflow(ctx context.Context, wf *v1alpha1.Workflow, opts data.UpdateOptions) error {
-	cc := b.cluster.GetClient()
-
-	if p, err := patchFromOpts(opts); err != nil {
-		return fmt.Errorf("invalid patch options for workflow %s: %w", wf.Name, err)
-	} else if p != nil {
-		if opts.StatusOnly {
-			if err := cc.Status().Patch(ctx, wf, p); err != nil {
-				return fmt.Errorf("failed to patch workflow status %s: %w", wf.Name, err)
-			}
-			return nil
-		}
-		if err := cc.Patch(ctx, wf, p); err != nil {
-			return fmt.Errorf("failed to patch workflow %s: %w", wf.Name, err)
-		}
-		return nil
+// listWorkflowsInto lists the Workflows matching opts into list, of either version,
+// finding them by agent with the index agentIndex.
+func (b *Backend) listWorkflowsInto(ctx context.Context, list client.ObjectList, agentIndex string, opts data.WorkflowFilter) error {
+	los := []client.ListOption{}
+	if opts.InNamespace != "" {
+		los = append(los, client.InNamespace(opts.InNamespace))
 	}
-
-	if opts.StatusOnly {
-		// Only update the status subresource of the workflow. This is used by the tinkerbell server to update the workflow status without having to worry about conflicts with the controller which may be updating the workflow spec at the same time.
-		if err := cc.Status().Update(ctx, wf); err != nil {
-			return fmt.Errorf("failed to update workflow status %s: %w", wf.Name, err)
-		}
-		return nil
+	if opts.ByAgentID != "" {
+		los = append(los, client.MatchingFields{agentIndex: opts.ByAgentID})
 	}
-	if err := cc.Update(ctx, wf); err != nil {
-		return fmt.Errorf("failed to update workflow %s: %w", wf.Name, err)
+	if err := b.cluster.GetClient().List(ctx, list, los...); err != nil {
+		return fmt.Errorf("failed to list workflows in namespace %s: %w", opts.InNamespace, err)
 	}
-
 	return nil
+}
+
+func (b *Backend) UpdateWorkflow(ctx context.Context, wf *v1alpha1.Workflow, opts data.UpdateOptions) error {
+	return b.update(ctx, wf, "workflow", wf.Name, opts)
 }

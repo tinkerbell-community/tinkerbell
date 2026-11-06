@@ -3,6 +3,7 @@ package kube
 import (
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -73,6 +74,41 @@ var Indexes = map[IndexType]Index{
 		Obj:          &tinkerbell.Hardware{},
 		Field:        InstanceIDIndex,
 		ExtractValue: InstanceID,
+	},
+	IndexTypeMACAddrV1Alpha2: {
+		Obj:          &v1alpha2.Hardware{},
+		Field:        MACAddrIndexV1Alpha2,
+		ExtractValue: MACAddrsV1Alpha2,
+	},
+	IndexTypeIPAddrV1Alpha2: {
+		Obj:          &v1alpha2.Hardware{},
+		Field:        IPAddrIndexV1Alpha2,
+		ExtractValue: IPAddrsV1Alpha2,
+	},
+	IndexTypeHardwareNameV1Alpha2: {
+		Obj:          &v1alpha2.Hardware{},
+		Field:        NameIndex,
+		ExtractValue: HardwareNameV1Alpha2,
+	},
+	IndexTypeHardwareAgentIDV1Alpha2: {
+		Obj:          &v1alpha2.Hardware{},
+		Field:        HardwareAgentIDIndex,
+		ExtractValue: HardwareAgentIDV1Alpha2,
+	},
+	IndexTypeLookupIDV1Alpha2: {
+		Obj:          &v1alpha2.Hardware{},
+		Field:        LookupIDIndexV1Alpha2,
+		ExtractValue: LookupIDV1Alpha2,
+	},
+	IndexTypeWorkflowAgentIDV1Alpha2: {
+		Obj:          &v1alpha2.Workflow{},
+		Field:        WorkflowAgentIDIndexV1Alpha2,
+		ExtractValue: WorkflowAgentIDV1Alpha2,
+	},
+	IndexTypeWorkflowTaskAgentIDV1Alpha2: {
+		Obj:          &v1alpha2.Workflow{},
+		Field:        WorkflowTaskAgentIDIndexV1Alpha2,
+		ExtractValue: WorkflowTaskAgentIDsV1Alpha2,
 	},
 }
 

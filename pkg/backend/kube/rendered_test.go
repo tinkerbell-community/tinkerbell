@@ -8,6 +8,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"github.com/tinkerbell/tinkerbell/pkg/data"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -23,16 +25,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 )
 
+// newFakeBackend returns a Backend reading objs through a fake client that has
+// every index in Indexes. A fake client cannot convert between versions, so an
+// object can only be read in the version it was given in.
 func newFakeBackend(t *testing.T, cfg Backend, objs ...client.Object) *Backend {
 	t.Helper()
 	scheme := runtime.NewScheme()
-	builder := runtime.NewSchemeBuilder(corev1.AddToScheme, tinkerbell.AddToScheme, bmc.AddToScheme)
+	builder := runtime.NewSchemeBuilder(corev1.AddToScheme, tinkerbell.AddToScheme, bmc.AddToScheme, v1alpha2.AddToScheme, bmcv1alpha2.AddToScheme)
 	if err := builder.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
 	}
-	indexName := func(object client.Object) []string { return []string{object.GetName()} }
-	kubeClient := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
-		WithIndex(&tinkerbell.Hardware{}, NameIndex, indexName).WithIndex(&bmc.Machine{}, NameIndex, indexName).Build()
+	clientBuilder := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).
+		WithStatusSubresource(&tinkerbell.Hardware{}, &tinkerbell.Workflow{}, &v1alpha2.Hardware{}, &v1alpha2.Workflow{})
+	for _, index := range Indexes {
+		clientBuilder = clientBuilder.WithIndex(index.Obj, index.Field, index.ExtractValue)
+	}
+	kubeClient := clientBuilder.Build()
 	options := func(options *cluster.Options) {
 		options.NewClient = func(*rest.Config, client.Options) (client.Client, error) { return kubeClient, nil }
 		options.MapperProvider = func(*rest.Config, *http.Client) (meta.RESTMapper, error) { return kubeClient.RESTMapper(), nil }

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"maps"
 	"os"
 	"path"
+	"slices"
 	"strings"
 
 	"github.com/tinkerbell/tinkerbell/cmd/tinkerbell/flag"
@@ -45,25 +47,27 @@ func numEnabled(globals *flag.GlobalConfig) int {
 	return n
 }
 
+// enabledIndexes returns the indexes the enabled components need. While
+// components move from v1alpha1 to v1alpha2 each may read either version, so
+// every v1alpha1 index comes with its v1alpha2 counterparts.
 func enabledIndexes(smeeEnabled, tootlesEnabled, tinkServerEnabled, secondStarEnabled bool) map[kube.IndexType]kube.Index {
-	idxs := make(map[kube.IndexType]kube.Index, 0)
+	idxs := make(map[kube.IndexType]kube.Index)
 
 	if smeeEnabled {
-		idxs = flag.KubeIndexesSmee
+		maps.Copy(idxs, flag.KubeIndexesSmee)
 	}
 	if tootlesEnabled {
-		for k, v := range flag.KubeIndexesTootles {
-			idxs[k] = v
-		}
+		maps.Copy(idxs, flag.KubeIndexesTootles)
 	}
 	if tinkServerEnabled {
-		for k, v := range flag.KubeIndexesTinkServer {
-			idxs[k] = v
-		}
+		maps.Copy(idxs, flag.KubeIndexesTinkServer)
 	}
 	if secondStarEnabled {
-		for k, v := range flag.KubeIndexesSecondStar {
-			idxs[k] = v
+		maps.Copy(idxs, flag.KubeIndexesSecondStar)
+	}
+	for _, t := range slices.Collect(maps.Keys(idxs)) {
+		for _, counterpart := range kube.V1Alpha2Counterparts(t) {
+			idxs[counterpart] = kube.Indexes[counterpart]
 		}
 	}
 

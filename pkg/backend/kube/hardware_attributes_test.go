@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -31,10 +33,13 @@ func newAttributesTestBackend(t *testing.T, objs ...client.Object) *Backend {
 	if err := v1alpha1.AddToScheme(rs); err != nil {
 		t.Fatal(err)
 	}
+	if err := v1alpha2.AddToScheme(rs); err != nil {
+		t.Fatal(err)
+	}
 
 	cl := fake.NewClientBuilder().
 		WithScheme(rs).
-		WithStatusSubresource(&v1alpha1.Hardware{}).
+		WithStatusSubresource(&v1alpha1.Hardware{}, &v1alpha2.Hardware{}).
 		WithObjects(objs...).
 		Build()
 
@@ -117,5 +122,38 @@ func TestApplyHardwareInBandAttributes_DoesNotClobberOutOfBand(t *testing.T) {
 	}
 	if got.Status.Attributes.InBand == nil || got.Status.Attributes.InBand.CollectionMethod != "agent" {
 		t.Errorf("InBand = %+v, want CollectionMethod=agent", got.Status.Attributes.InBand)
+	}
+}
+
+func TestApplyHardwareInBandAttributesV1Alpha2(t *testing.T) {
+	hw := &v1alpha2.Hardware{
+		ObjectMeta: metav1.ObjectMeta{Name: "hw-1", Namespace: "default"},
+	}
+	b := newAttributesTestBackend(t, hw)
+
+	// Rufio applied status.attributes.outOfBand under its own field manager.
+	oob := hw.DeepCopy()
+	oob.Status.Attributes = &inventory.HardwareAttributes{
+		OutOfBand: &inventory.Attributes{CollectionMethod: "redfish"},
+	}
+	if err := b.cluster.GetClient().Status().Update(context.Background(), oob); err != nil {
+		t.Fatal(err)
+	}
+
+	attrs := &inventory.Attributes{CollectionMethod: "agent", BIOS: &inventory.BIOS{Vendor: "American Megatrends"}}
+	if err := b.ApplyHardwareInBandAttributesV1Alpha2(context.Background(), hw.Name, hw.Namespace, attrs); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := b.ReadHardwareV1Alpha2(context.Background(), hw.Name, hw.Namespace)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status.Attributes == nil || got.Status.Attributes.InBand == nil || got.Status.Attributes.InBand.BIOS == nil ||
+		got.Status.Attributes.InBand.CollectionMethod != "agent" || got.Status.Attributes.InBand.BIOS.Vendor != "American Megatrends" {
+		t.Fatalf("attributes = %+v, want the applied in-band attributes", got.Status.Attributes)
+	}
+	if got.Status.Attributes.OutOfBand == nil || got.Status.Attributes.OutOfBand.CollectionMethod != "redfish" {
+		t.Errorf("OutOfBand = %+v, want it left untouched with CollectionMethod=redfish", got.Status.Attributes.OutOfBand)
 	}
 }

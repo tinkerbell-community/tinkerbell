@@ -123,32 +123,5 @@ func hardwareListOptions(opts data.HardwareFilter) []client.ListOption {
 }
 
 func (b *Backend) UpdateHardware(ctx context.Context, hw *v1alpha1.Hardware, opts data.UpdateOptions) error {
-	cc := b.cluster.GetClient()
-
-	if p, err := patchFromOpts(opts); err != nil {
-		return fmt.Errorf("invalid patch options for hardware %s/%s: %w", hw.Namespace, hw.Name, err)
-	} else if p != nil {
-		if opts.StatusOnly {
-			if err := cc.Status().Patch(ctx, hw, p); err != nil {
-				return fmt.Errorf("failed to patch hardware status %s/%s: %w", hw.Namespace, hw.Name, err)
-			}
-			return nil
-		}
-		if err := cc.Patch(ctx, hw, p); err != nil {
-			return fmt.Errorf("failed to patch hardware %s/%s: %w", hw.Namespace, hw.Name, err)
-		}
-		return nil
-	}
-
-	if opts.StatusOnly {
-		if err := cc.Status().Update(ctx, hw); err != nil {
-			return fmt.Errorf("failed to update hardware status %s/%s: %w", hw.Namespace, hw.Name, err)
-		}
-		return nil
-	}
-	if err := cc.Update(ctx, hw); err != nil {
-		return fmt.Errorf("failed to update hardware %s/%s: %w", hw.Namespace, hw.Name, err)
-	}
-
-	return nil
+	return b.update(ctx, hw, "hardware", hw.Namespace+"/"+hw.Name, opts)
 }

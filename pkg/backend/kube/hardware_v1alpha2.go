@@ -1,0 +1,120 @@
+package kube
+
+import (
+	"context"
+	"fmt"
+
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/pkg/data"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+// CreateHardwareV1Alpha2 is CreateHardware for v1alpha2 Hardware.
+func (b *Backend) CreateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware) error {
+	if err := b.cluster.GetClient().Create(ctx, hw); err != nil {
+		return fmt.Errorf("failed to create hardware %s/%s: %w", hw.Namespace, hw.Name, err)
+	}
+
+	return nil
+}
+
+// ReadHardwareV1Alpha2 is ReadHardware for v1alpha2 Hardware. Hardware outside
+// b.Namespaces is reported as not found.
+func (b *Backend) ReadHardwareV1Alpha2(ctx context.Context, name, namespace string) (*v1alpha2.Hardware, error) {
+	tracer := otel.Tracer(tracerName)
+	ctx, span := tracer.Start(ctx, "backend.kube.ReadHardwareV1Alpha2")
+	defer span.End()
+
+	if !b.Watches(namespace) {
+		err := apierrors.NewNotFound(v1alpha2.GroupVersion.WithResource("hardware").GroupResource(), name)
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+	hw := &v1alpha2.Hardware{}
+	if err := b.cluster.GetClient().Get(ctx, types.NamespacedName{Name: name, Namespace: namespace}, hw); err != nil {
+		return nil, fmt.Errorf("failed to get hardware %s/%s: %w", namespace, name, err)
+	}
+
+	return hw, nil
+}
+
+// FilterHardwareV1Alpha2 is FilterHardware for v1alpha2 Hardware.
+func (b *Backend) FilterHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) (*v1alpha2.Hardware, error) {
+	tracer := otel.Tracer(tracerName)
+	ctx, span := tracer.Start(ctx, "backend.kube.FilterHardwareV1Alpha2")
+	defer span.End()
+
+	hwList := &v1alpha2.HardwareList{}
+	if err := b.cluster.GetClient().List(ctx, hwList, hardwareListOptionsV1Alpha2(opts)...); err != nil {
+		return nil, fmt.Errorf("failed to list hardware %s: %w", filterQueryDesc(opts), err)
+	}
+
+	nsDesc := ternary(opts.InNamespace == "", "all namespaces", opts.InNamespace)
+
+	if len(hwList.Items) == 0 {
+		err := hardwareNotFoundError{name: filterQueryDesc(opts), namespace: nsDesc}
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	if len(hwList.Items) > 1 {
+		err := &foundMultipleHardwareError{id: filterQueryDesc(opts), namespace: nsDesc, count: len(hwList.Items)}
+		span.SetStatus(codes.Error, err.Error())
+		return nil, err
+	}
+
+	return &hwList.Items[0], nil
+}
+
+// ListHardwareV1Alpha2 is ListHardware for v1alpha2 Hardware.
+func (b *Backend) ListHardwareV1Alpha2(ctx context.Context, opts data.HardwareFilter) ([]v1alpha2.Hardware, error) {
+	list := &v1alpha2.HardwareList{}
+	if err := b.cluster.GetClient().List(ctx, list, hardwareListOptionsV1Alpha2(opts)...); err != nil {
+		return nil, err
+	}
+
+	return list.Items, nil
+}
+
+// hardwareListOptionsV1Alpha2 is hardwareListOptions for the v1alpha2 indexes.
+// ByInstanceID matches spec.instance.lookupID, its v1alpha2 form. MAC and IP
+// addresses are normalized the way the indexes store them.
+//
+// The fields are matched with a single MatchingFields: each one replaces the
+// field selector of the one before, so with several only the last would apply.
+func hardwareListOptionsV1Alpha2(opts data.HardwareFilter) []client.ListOption {
+	los := []client.ListOption{}
+	if opts.InNamespace != "" {
+		los = append(los, client.InNamespace(opts.InNamespace))
+	}
+	fields := client.MatchingFields{}
+	if opts.ByAgentID != "" {
+		fields[HardwareAgentIDIndex] = opts.ByAgentID
+	}
+	if opts.ByName != "" {
+		fields[NameIndex] = opts.ByName
+	}
+	if opts.ByIPAddress != "" {
+		fields[IPAddrIndexV1Alpha2] = normalizeIP(opts.ByIPAddress)
+	}
+	if opts.ByMACAddress != "" {
+		fields[MACAddrIndexV1Alpha2] = normalizeMAC(opts.ByMACAddress)
+	}
+	if opts.ByInstanceID != "" {
+		fields[LookupIDIndexV1Alpha2] = opts.ByInstanceID
+	}
+	if len(fields) > 0 {
+		los = append(los, fields)
+	}
+
+	return los
+}
+
+// UpdateHardwareV1Alpha2 is UpdateHardware for v1alpha2 Hardware.
+func (b *Backend) UpdateHardwareV1Alpha2(ctx context.Context, hw *v1alpha2.Hardware, opts data.UpdateOptions) error {
+	return b.update(ctx, hw, "hardware", hw.Namespace+"/"+hw.Name, opts)
+}

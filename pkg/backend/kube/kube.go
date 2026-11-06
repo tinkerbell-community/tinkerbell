@@ -9,6 +9,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	"golang.org/x/sync/errgroup"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/dynamic"
@@ -45,7 +47,7 @@ type Backend struct {
 	Indexes       map[IndexType]Index
 	dynamicClient dynamic.Interface
 	// HardwareReferenceAllowListRules and HardwareReferenceDenyListRules are the Quamina rules
-	// ResolveReferences applies. An empty deny list denies every reference.
+	// ResolveReferences and ResolveReferencesFor apply. An empty deny list denies every reference.
 	HardwareReferenceAllowListRules []string
 	HardwareReferenceDenyListRules  []string
 	// Rendering serves Hardware with the templates in its spec rendered.
@@ -67,10 +69,8 @@ type Index struct {
 	ExtractValue client.IndexerFunc
 }
 
-// NewBackend returns a controller-runtime cluster.Cluster with the Tinkerbell runtime
-// scheme registered, and indexers for:
-// * Hardware by MAC address
-// * Hardware by IP address
+// NewBackend returns a controller-runtime cluster.Cluster with the Tinkerbell v1alpha1
+// and v1alpha2 runtime schemes registered, and the field indexes in cfg.Indexes.
 //
 // Callers must instantiate the client-side cache by calling Start() before use.
 func NewBackend(cfg Backend, opts ...cluster.Option) (*Backend, error) {
@@ -92,6 +92,15 @@ func NewBackend(cfg Backend, opts ...cluster.Option) (*Backend, error) {
 	}
 
 	if err := bmc.AddToScheme(rs); err != nil {
+		return nil, err
+	}
+
+	// v1alpha2 is registered next to v1alpha1 while components move to it.
+	if err := v1alpha2.AddToScheme(rs); err != nil {
+		return nil, err
+	}
+
+	if err := bmcv1alpha2.AddToScheme(rs); err != nil {
 		return nil, err
 	}
 
