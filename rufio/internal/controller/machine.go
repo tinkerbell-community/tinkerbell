@@ -22,13 +22,12 @@ import (
 	"time"
 
 	bmclib "github.com/bmc-toolbox/bmclib/v2"
-	"github.com/bmc-toolbox/bmclib/v2/providers/rpc"
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -111,27 +110,14 @@ func (r *MachineReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *MachineReconciler) doReconcile(ctx context.Context, bm *bmc.Machine, bmPatch client.Patch, logger logr.Logger) (ctrl.Result, error) {
-	var username, password string
-	opts := &BMCOptions{
-		ProviderOptions: bm.Spec.Connection.ProviderOptions,
+	conn, err := conversion.MachineConnectionToV1Alpha2(bm.Spec.Connection)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("machine %s/%s connection: %w", bm.Namespace, bm.Name, err)
 	}
-	if bm.Spec.Connection.ProviderOptions != nil && bm.Spec.Connection.ProviderOptions.RPC != nil {
-		opts.ProviderOptions = bm.Spec.Connection.ProviderOptions
-		if bm.Spec.Connection.ProviderOptions.RPC.HMAC != nil && len(bm.Spec.Connection.ProviderOptions.RPC.HMAC.Secrets) > 0 {
-			se, err := retrieveHMACSecrets(ctx, r.client, bm.Spec.Connection.ProviderOptions.RPC.HMAC.Secrets)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("unable to get hmac secrets: %w", err)
-			}
-			opts.rpcSecrets = se
-		}
-	} else {
-		// Fetching username, password from SecretReference
-		// Requeue if error fetching secret
-		var err error
-		username, password, err = resolveAuthSecretRef(ctx, r.client, bm.Spec.Connection.AuthSecretRef)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("resolving Machine %s/%s SecretReference: %w", bm.Namespace, bm.Name, err)
-		}
+	// Requeue if error fetching secret
+	username, password, opts, err := bmcCredentials(ctx, r.client, conn)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("resolving Machine %s/%s SecretReference: %w", bm.Namespace, bm.Name, err)
 	}
 
 	// Initializing BMC Client and Open the connection.
@@ -238,28 +224,6 @@ func (r *MachineReconciler) patchStatus(ctx context.Context, bm *bmc.Machine, pa
 	}
 
 	return nil
-}
-
-func retrieveHMACSecrets(ctx context.Context, c client.Client, hmacSecrets bmc.HMACSecrets) (rpc.Secrets, error) {
-	sec := rpc.Secrets{}
-	for k, v := range hmacSecrets {
-		for _, s := range v {
-			secret := &corev1.Secret{}
-			key := types.NamespacedName{Namespace: s.Namespace, Name: s.Name}
-
-			if err := c.Get(ctx, key, secret); err != nil {
-				if apierrors.IsNotFound(err) {
-					return nil, fmt.Errorf("secret %s not found: %w", key, err)
-				}
-
-				return nil, fmt.Errorf("failed to retrieve secret %s : %w", s, err)
-			}
-
-			sec[rpc.Algorithm(k)] = append(sec[rpc.Algorithm(k)], string(secret.Data["secret"]))
-		}
-	}
-
-	return sec, nil
 }
 
 // SetupWithManager sets up the controller with the Manager. When inventory

@@ -20,22 +20,16 @@ import (
 	"time"
 
 	bmclib "github.com/bmc-toolbox/bmclib/v2"
-	bmclibbmc "github.com/bmc-toolbox/bmclib/v2/bmc"
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
+	bmcv2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	ctrlcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
-)
-
-const (
-	powerActionRequeueAfter = 3 * time.Second
-	// taskTimeout bounds how long a started Task may keep being requeued (status checks, transient
-	// BMC connection errors) before it is failed.
-	taskTimeout = 10 * time.Minute
 )
 
 // TaskReconciler reconciles a Task object.
@@ -94,27 +88,14 @@ func (r *TaskReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.
 }
 
 func (r *TaskReconciler) doReconcile(ctx context.Context, task *bmc.Task, taskPatch client.Patch, logger logr.Logger) (ctrl.Result, error) {
-	var username, password string
-	opts := &BMCOptions{
-		ProviderOptions: task.Spec.Connection.ProviderOptions,
+	conn, err := conversion.MachineConnectionToV1Alpha2(task.Spec.Connection)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("task %s/%s connection: %w", task.Namespace, task.Name, err)
 	}
-	if task.Spec.Connection.ProviderOptions != nil && task.Spec.Connection.ProviderOptions.RPC != nil {
-		opts.ProviderOptions = task.Spec.Connection.ProviderOptions
-		if task.Spec.Connection.ProviderOptions.RPC.HMAC != nil && len(task.Spec.Connection.ProviderOptions.RPC.HMAC.Secrets) > 0 {
-			se, err := retrieveHMACSecrets(ctx, r.client, task.Spec.Connection.ProviderOptions.RPC.HMAC.Secrets)
-			if err != nil {
-				return ctrl.Result{}, fmt.Errorf("unable to get hmac secrets: %w", err)
-			}
-			opts.rpcSecrets = se
-		}
-	} else {
-		// Fetching username, password from SecretReference in Connection.
-		// Requeue if error fetching secret
-		var err error
-		username, password, err = resolveAuthSecretRef(ctx, r.client, task.Spec.Connection.AuthSecretRef)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("resolving connection secret for task %s/%s: %w", task.Namespace, task.Name, err)
-		}
+	// Requeue if error fetching secret
+	username, password, opts, err := bmcCredentials(ctx, r.client, conn)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("resolving connection secret for task %s/%s: %w", task.Namespace, task.Name, err)
 	}
 
 	// A Task that already ran its action must not be failed because a later status check could not
@@ -123,8 +104,7 @@ func (r *TaskReconciler) doReconcile(ctx context.Context, task *bmc.Task, taskPa
 	started := !task.Status.StartTime.IsZero()
 	if started {
 		jobRunningTime := time.Since(task.Status.StartTime.Time)
-		// TODO(pokearu): add timeout for tasks on API spec
-		if jobRunningTime >= taskTimeout {
+		if jobRunningTime >= defaultOperationTimeout {
 			timeOutErr := fmt.Errorf("bmc task timeout: %s", jobRunningTime)
 			// Set Task Condition Failed True
 			task.SetCondition(bmc.TaskFailed, bmc.ConditionTrue, bmc.WithTaskConditionMessage(timeOutErr.Error()))
@@ -217,18 +197,7 @@ func (r *TaskReconciler) doReconcile(ctx context.Context, task *bmc.Task, taskPa
 
 // runTask executes the defined Task in a Task.
 func (r *TaskReconciler) runTask(ctx context.Context, logger logr.Logger, task bmc.Action, bmcClient *bmclib.Client) error {
-	if task.PowerAction != nil {
-		ok, err := bmcClient.SetPowerState(ctx, string(*task.PowerAction))
-		if err != nil {
-			return fmt.Errorf("failed to perform PowerAction: %w", err)
-		}
-		md := bmcClient.GetMetadata()
-		logger.Info("power state set successfully", "providersAttempted", md.ProvidersAttempted, "successfulProvider", md.SuccessfulProvider, "ok", ok)
-
-		return nil
-	}
-
-	if task.OneTimeBootDeviceAction != nil { //nolint:staticcheck // oneTimeBootDeviceAction is deprecated but still supported for backward compatibility. We will remove in a future release.
+	if task.PowerAction == nil && task.OneTimeBootDeviceAction != nil { //nolint:staticcheck // oneTimeBootDeviceAction is deprecated but still supported for backward compatibility. We will remove in a future release.
 		// OneTimeBootDeviceAction currently sets the first boot device from Devices.
 		// setPersistent is false.
 		if len(task.OneTimeBootDeviceAction.Devices) == 0 { //nolint:staticcheck // oneTimeBootDeviceAction is deprecated but still supported for backward compatibility. We will remove in a future release.
@@ -244,113 +213,41 @@ func (r *TaskReconciler) runTask(ctx context.Context, logger logr.Logger, task b
 		return nil
 	}
 
-	if task.BootDevice != nil {
-		ok, err := bmcClient.SetBootDevice(ctx, task.BootDevice.Device.String(), task.BootDevice.Persistent, task.BootDevice.EFIBoot)
-		if err != nil || !ok {
-			return fmt.Errorf("failed to set BootDevice, ok: %v, err: %w", ok, err)
-		}
-		md := bmcClient.GetMetadata()
-		logger.Info("boot device set successfully", "providersAttempted", md.ProvidersAttempted, "successfulProvider", md.SuccessfulProvider, "ok", ok)
-
-		return nil
-	}
-
-	if task.VirtualMediaAction != nil {
-		ok, err := bmcClient.SetVirtualMedia(ctx, string(task.VirtualMediaAction.Kind), task.VirtualMediaAction.MediaURL)
-		if err != nil {
-			return fmt.Errorf("failed to perform SetVirtualMedia: %w", err)
-		}
-		md := bmcClient.GetMetadata()
-		logger.Info("virtual media set successfully", "providersAttempted", md.ProvidersAttempted, "successfulProvider", md.SuccessfulProvider, "ok", ok)
-
-		return nil
-	}
-
-	if task.NetworkBootConfig != nil {
-		return r.runNetworkBootConfig(ctx, logger, task.NetworkBootConfig, bmcClient)
-	}
-
-	logger.Info("no action specified in Task, nothing to do", "task", task)
-
-	return errors.New("no action specified in Task, nothing to do")
+	return runOperation(ctx, logger, actionOperation(task), bmcClient)
 }
 
-// runNetworkBootConfig applies the independent, individually-optional fields of a
-// NetworkBootConfig action: any combination of HTTPBootEnabled/PXEBootEnabled, HTTPBootURL, and
-// HTTPBootTLSMode may be set at once. HTTPBootTLSMode is applied before HTTPBootURL so that
-// relaxing TLS (e.g. Dell's default "OneWay" mode) takes effect before a plain-HTTP URL is set -
-// setting the URL first would have the BMC reject it under the still-active stricter mode.
-func (r *TaskReconciler) runNetworkBootConfig(ctx context.Context, logger logr.Logger, cfg *bmc.NetworkBootConfig, bmcClient *bmclib.Client) error {
-	if cfg.HTTPBootEnabled != nil || cfg.PXEBootEnabled != nil {
-		ok, err := bmcClient.SetNetworkBootEnabled(ctx, cfg.HTTPBootEnabled, cfg.PXEBootEnabled)
-		if err != nil || !ok {
-			return fmt.Errorf("failed to set network boot enabled state, ok: %v, err: %w", ok, err)
-		}
-		md := bmcClient.GetMetadata()
-		logger.Info("network boot enabled state set successfully",
-			"httpBootEnabled", boolPtrValue(cfg.HTTPBootEnabled),
-			"pxeBootEnabled", boolPtrValue(cfg.PXEBootEnabled),
-			"providersAttempted", md.ProvidersAttempted, "successfulProvider", md.SuccessfulProvider)
+// actionOperation returns the Job operation that performs a v1alpha1 action, other
+// than the deprecated oneTimeBootDeviceAction. An action sets one field; should it
+// set several, the first one in this order is the one a Task has always run.
+func actionOperation(a bmc.Action) bmcv2.Operations {
+	switch {
+	case a.PowerAction != nil:
+		pa := bmcv2.PowerAction(*a.PowerAction)
+		return bmcv2.Operations{PowerAction: &pa}
+	case a.BootDevice != nil:
+		return bmcv2.Operations{BootDevice: &bmcv2.BootDeviceConfig{Name: bmcv2.BootDevice(a.BootDevice.Device), Persistent: a.BootDevice.Persistent, EFIBoot: a.BootDevice.EFIBoot}}
+	case a.VirtualMediaAction != nil:
+		return bmcv2.Operations{VirtualMediaAction: &bmcv2.VirtualMediaAction{MediaURL: a.VirtualMediaAction.MediaURL, Kind: bmcv2.VirtualMediaKind(a.VirtualMediaAction.Kind)}}
+	case a.NetworkBootConfig != nil:
+		cfg := bmcv2.NetworkBootConfig(*a.NetworkBootConfig)
+		return bmcv2.Operations{NetworkBootConfig: &cfg}
+	default:
+		return bmcv2.Operations{}
 	}
-
-	if cfg.HTTPBootTLSMode != nil {
-		ok, err := bmcClient.SetHTTPBootTLSMode(ctx, bmclibbmc.HTTPBootTLSMode(*cfg.HTTPBootTLSMode))
-		if err != nil || !ok {
-			return fmt.Errorf("failed to set HTTP boot TLS mode, ok: %v, err: %w", ok, err)
-		}
-		md := bmcClient.GetMetadata()
-		logger.Info("http boot tls mode set successfully", "httpBootTLSMode", *cfg.HTTPBootTLSMode, "providersAttempted", md.ProvidersAttempted, "successfulProvider", md.SuccessfulProvider)
-	}
-
-	if cfg.HTTPBootURL != nil {
-		ok, err := bmcClient.SetHTTPBootURI(ctx, *cfg.HTTPBootURL)
-		if err != nil || !ok {
-			return fmt.Errorf("failed to set HTTP boot URL, ok: %v, err: %w", ok, err)
-		}
-		md := bmcClient.GetMetadata()
-		logger.Info("http boot url set successfully", "providersAttempted", md.ProvidersAttempted, "successfulProvider", md.SuccessfulProvider, "ok", ok)
-	}
-
-	return nil
-}
-
-// boolPtrValue returns the pointed-to value for logging, or nil if b is nil, so log lines show
-// "true"/"false"/"<nil>" instead of a pointer address.
-func boolPtrValue(b *bool) any {
-	if b == nil {
-		return nil
-	}
-	return *b
 }
 
 // checkTaskStatus checks if Task action completed.
 // This is currently limited only to a few PowerAction types.
 func (r *TaskReconciler) checkTaskStatus(ctx context.Context, log logr.Logger, task bmc.Action, bmcClient *bmclib.Client) (ctrl.Result, error) {
-	// TODO(pokearu): Extend to all actions.
-	if task.PowerAction != nil {
-		rawState, err := bmcClient.GetPowerState(ctx)
-		if err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to get power state: %w", err)
-		}
-		log = log.WithValues("currentPowerState", rawState)
-		log.Info("power state check")
-
-		state := toPowerState(rawState)
-
-		switch *task.PowerAction { //nolint:exhaustive // we only support a few power actions right now.
-		case bmc.PowerOn:
-			if state != bmc.On {
-				log.Info("requeuing task", "requeueAfter", powerActionRequeueAfter)
-				return ctrl.Result{RequeueAfter: powerActionRequeueAfter}, nil
-			}
-		case bmc.PowerHardOff, bmc.PowerSoftOff:
-			if bmc.Off != state {
-				return ctrl.Result{RequeueAfter: powerActionRequeueAfter}, nil
-			}
-		}
+	done, err := operationDone(ctx, log, actionOperation(task), bmcClient)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if !done {
+		log.Info("requeuing task", "requeueAfter", powerActionRequeueAfter)
+		return ctrl.Result{RequeueAfter: powerActionRequeueAfter}, nil
 	}
 
-	// Other Task action types do not support checking status. So noop.
 	return ctrl.Result{}, nil
 }
 
