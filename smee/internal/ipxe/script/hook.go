@@ -83,6 +83,11 @@ type Hook struct {
 	RetryDelay            int    // number of seconds to wait between retries
 	KernelName            string // name of the kernel file
 	InitrdName            string // name of the initrd file
+	// Kernel and Initrd are the kernel and initrd that generated TFTP configs
+	// (pxelinux.cfg, Raspberry Pi config.txt) load, relative to the TFTP root.
+	// Empty means vmlinuz-<arch> and initramfs-<arch>.
+	Kernel string
+	Initrd string
 	// BootstrapURL is the per-host configuration archive, loaded as an
 	// additional initrd. It must come after the OS initramfs: the kernel
 	// applies archives in order, so an earlier one would be overwritten.

@@ -1,10 +1,13 @@
 package script
 
 import (
+	"bytes"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/pkg/tftp/handler"
 )
 
@@ -171,3 +174,58 @@ func TestHandleTFTP_ErrorMessages(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleTFTPGeneratedConfigs covers the generated pxelinux.cfg and
+// Raspberry Pi config.txt: both name the kernel and initrd, the Hardware's when
+// it sets them and vmlinuz-<arch> and initramfs-<arch> when it does not.
+func TestHandleTFTPGeneratedConfigs(t *testing.T) {
+	const mac = "b8:27:eb:00:00:01"
+	withOSIE := func(o *tinkerbell.OSIE) *tinkerbell.Hardware {
+		return &tinkerbell.Hardware{Spec: tinkerbell.HardwareSpec{Interfaces: []tinkerbell.Interface{{
+			DHCP:    &tinkerbell.DHCP{MAC: mac, Arch: "aarch64"},
+			Netboot: &tinkerbell.Netboot{AllowPXE: ptrTo(true), OSIE: o},
+		}}}}
+	}
+	tests := map[string]struct {
+		hw       *tinkerbell.Hardware
+		filename string
+		want     []string
+	}{
+		"pxelinux.cfg defaults": {
+			hw:       withOSIE(nil),
+			filename: "pxelinux.cfg/01-" + mac,
+			want:     []string{"kernel vmlinuz-aarch64\n", "initrd initramfs-aarch64\n"},
+		},
+		"pxelinux.cfg Hardware kernel and initrd": {
+			hw:       withOSIE(&tinkerbell.OSIE{Kernel: "custom-${arch}", Initrd: "custom-initrd"}),
+			filename: "pxelinux.cfg/01-" + mac,
+			want:     []string{"kernel custom-aarch64\n", "initrd custom-initrd\n"},
+		},
+		"config.txt defaults": {
+			hw:       withOSIE(nil),
+			filename: "b8-27-eb-00-00-01/config.txt",
+			want:     []string{"kernel=vmlinuz-aarch64\n", "initramfs initramfs-aarch64 followkernel\n"},
+		},
+		"config.txt Hardware kernel and initrd": {
+			hw:       withOSIE(&tinkerbell.OSIE{Kernel: "custom-${arch}", Initrd: "custom-initrd"}),
+			filename: "b8-27-eb-00-00-01/config.txt",
+			want:     []string{"kernel=custom-aarch64\n", "initramfs custom-initrd followkernel\n"},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			h := Handler{Logger: logr.Discard(), Backend: &mockBackend{hw: tt.hw}}
+			var buf bytes.Buffer
+			if err := h.HandleTFTP(tt.filename, &buf); err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tt.want {
+				if !strings.Contains(buf.String(), w) {
+					t.Errorf("want %q in:\n%s", w, buf.String())
+				}
+			}
+		})
+	}
+}
+
+func ptrTo[T any](v T) *T { return &v }

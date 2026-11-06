@@ -164,6 +164,8 @@ func (h Handler) HandleTFTP(filename string, rf io.ReaderFrom) error {
 	// Build Hook struct from hardware info. A TFTP request carries no client
 	// address here, and the generated configs have only ever been IPv4.
 	auto := h.buildHook(span, hw, h.settingsFor(ipv4))
+	auto.Kernel = tftpFileName(hw.OSIE.Kernel, auto.Arch)
+	auto.Initrd = tftpFileName(hw.OSIE.Initrd, auto.Arch)
 
 	// Generate the iPXE script content
 	content, err := GenerateTemplate(auto, tmplStr)
@@ -178,6 +180,12 @@ func (h Handler) HandleTFTP(filename string, rf io.ReaderFrom) error {
 
 	// Serve the content
 	return serveContent(content, rf, log, span, filename)
+}
+
+// tftpFileName returns name, a file on the TFTP server, with ${arch}
+// substituted: a TFTP client, unlike iPXE, does not expand it.
+func tftpFileName(name, arch string) string {
+	return strings.ReplaceAll(name, "${arch}", arch)
 }
 
 func serveContent(content string, rf io.ReaderFrom, log logr.Logger, span trace.Span, filename string) error {
