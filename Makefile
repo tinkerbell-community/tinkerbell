@@ -51,13 +51,19 @@ endif
 test: ## Run go test
 	CGO_ENABLED=1 go test -race -coverprofile=coverage.txt -covermode=atomic -v ${TEST_ARGS} ${TEST_PKGS}
 
+.PHONY: test-api
+test-api: ## Run go test for the API module (api/ is its own Go module)
+	(cd api && CGO_ENABLED=1 go test -race -covermode=atomic -v ${TEST_ARGS} ./...)
+
 .PHONY: vet
 vet: ## Run go vet
 	go vet ./...
+	(cd api && go vet ./...)
 
 .PHONY: fmt
 fmt: $(GOLANGCI_LINT) ## Run go fmt
 	$(GOLANGCI_LINT) fmt ./...
+	(cd api && $(GOLANGCI_LINT) fmt ./...)
 
 FILE_TO_NOT_INCLUDE_IN_COVERAGE := script/version/main.go|*.pb.go|zz_generated.deepcopy.go|facility_string.go|severity_string.go|*_templ.go
 
@@ -69,7 +75,7 @@ coverage: test ## Show test coverage
 	mv coverage.out coverage.txt
 
 .PHONY: ci
-ci: coverage lint vet ## Runs all the same validations and tests that run in CI
+ci: coverage test-api lint vet ## Runs all the same validations and tests that run in CI
 
 .PHONY: generate
 generate: ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.

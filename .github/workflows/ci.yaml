@@ -36,6 +36,11 @@ jobs:
           args: --timeout=10m
           version-file: .tool-versions
 
+      # api/ is a separate Go module, which ./... at the root does not include.
+      - name: golangci-lint (api module)
+        working-directory: api
+        run: golangci-lint run --timeout=10m -c ../.golangci.yml
+
   generate:
     runs-on: ubuntu-latest
     steps:
@@ -54,12 +59,15 @@ jobs:
           version-file: .tool-versions
 
       - name: Run go mod tidy
-        run: go mod tidy
+        run: |
+          go mod tidy
+          (cd api && go mod tidy)
 
       - name: Generate code and format
         run: |
           go generate ./...
           golangci-lint fmt ./...
+          (cd api && golangci-lint fmt -c ../.golangci.yml ./...)
 
       - name: Check for changes
         run: git diff --compact-summary --exit-code
@@ -88,6 +96,13 @@ jobs:
       - name: Run Tests
         if: always()
         run: go tool gotestsum --junitfile junit.xml -- -coverprofile=coverage.txt -covermode=atomic -race -count=1 -v ./...
+        env:
+          CGO_ENABLED: 1
+
+      - name: Run API module tests
+        if: always()
+        working-directory: api
+        run: go test -race -count=1 -v ./...
         env:
           CGO_ENABLED: 1
 

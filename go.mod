@@ -72,9 +72,10 @@ require (
 	k8s.io/kubernetes v1.36.4
 	quamina.net/go/quamina v1.5.2-0.20250207005432-0526acc321a8
 	sigs.k8s.io/controller-runtime v0.24.1
-	sigs.k8s.io/randfill v1.0.0
 	sigs.k8s.io/yaml v1.6.0
 )
+
+require sigs.k8s.io/randfill v1.0.0 // indirect
 
 require (
 	buf.build/gen/go/bufbuild/bufplugin/protocolbuffers/go v1.36.12-20261002170247-538130002972.2 // indirect
@@ -275,6 +276,7 @@ require (
 	github.com/stmcginnis/gofish v0.25.1-0.20260915152414-af1cf20386d5 // indirect
 	github.com/tetratelabs/wazero v1.12.0 // indirect
 	github.com/tidwall/btree v1.8.2 // indirect
+	github.com/tinkerbell/tinkerbell/api v0.0.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20220101234140-673ab2c3ae75 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 // indirect
@@ -414,3 +416,5 @@ replace (
 	github.com/bmc-toolbox/bmclib/v2 => github.com/tinkerbell-community/bmclib/v2 v2.0.0-20261105231521-91650ff76c1a
 	github.com/jacobweinstock/iamt => github.com/tinkerbell-community/iamt v0.0.0-20260910214403-be779a24a30d
 )
+
+replace github.com/tinkerbell/tinkerbell/api => ./api

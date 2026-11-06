@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
-	"github.com/tinkerbell/tinkerbell/pkg/template/funcmap"
 )
 
 const captTemplate = `version: "0.1"
@@ -37,7 +36,7 @@ tasks:
 `
 
 func TestConvertTemplate(t *testing.T) {
-	got, err := ConvertTemplate(captTemplate, funcmap.New())
+	got, err := ConvertTemplate(captTemplate, testFuncs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +80,7 @@ func TestConvertTemplate(t *testing.T) {
 		"workflow": map[string]any{"spec": map[string]any{"tasks": []any{map[string]any{"agentID": "52:54:00:00:00:01"}}}},
 	}
 	for k, want := range map[string]string{"DEST_DISK": "/dev/nvme0n1", "METADATA": "http://tootles/52:54:00:00:00:01", "ID": `"abc"`} {
-		tpl := template.Must(template.New(k).Funcs(funcmap.New()).Parse(task.Spec.Actions[0].Env[k]))
+		tpl := template.Must(template.New(k).Funcs(testFuncs()).Parse(task.Spec.Actions[0].Env[k]))
 		var b bytes.Buffer
 		if err := tpl.Execute(&b, data); err != nil {
 			t.Fatal(err)
@@ -106,7 +105,7 @@ func TestConvertTemplateNotConvertible(t *testing.T) {
 	}
 	for name, tpl := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := ConvertTemplate(tpl, funcmap.New())
+			_, err := ConvertTemplate(tpl, testFuncs())
 			if !IsNotConvertible(err) {
 				t.Fatalf("want a NotConvertibleError, got %v", err)
 			}
@@ -129,7 +128,7 @@ tasks:
           U: "{{ .Hardware.UserData }}"
           K: '{{ join "," .Hardware.Metadata.Instance.SSHKeys }}'
 `
-	c, err := ConvertTemplate(tpl, funcmap.New())
+	c, err := ConvertTemplate(tpl, testFuncs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +137,7 @@ tasks:
 		{"hardware": map[string]any{"spec": map[string]any{"instance": map[string]any{}}}},
 	} {
 		for k, expr := range c.Tasks[0].Spec.Actions[0].Env {
-			tm := template.Must(template.New(k).Funcs(funcmap.New()).Option("missingkey=error").Parse(expr))
+			tm := template.Must(template.New(k).Funcs(testFuncs()).Option("missingkey=error").Parse(expr))
 			var b bytes.Buffer
 			if err := tm.Execute(&b, data); err != nil {
 				t.Fatalf("%s (%s): %v", k, expr, err)

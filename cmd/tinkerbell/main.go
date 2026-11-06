@@ -8,9 +8,9 @@ import (
 	"syscall"
 )
 
-//go:generate go tool controller-gen crd webhook paths="../../api/..." output:crd:artifacts:config=../../crd/bases
+//go:generate sh -c "cd ../../api && $(cd ../cmd/tinkerbell && go tool -n controller-gen) crd webhook paths=./... output:crd:artifacts:config=../crd/bases"
 //go:generate go run ../../script/crdtrim ../../crd/bases/tinkerbell.org_tasks.yaml:v1alpha1
-//go:generate go tool controller-gen paths="../../..." object:headerFile="../../script/boilerplate.go.txt"
+//go:generate sh -c "cd ../../api && $(cd ../cmd/tinkerbell && go tool -n controller-gen) paths=./... object:headerFile=../script/boilerplate.go.txt"
 //go:generate go tool buf generate ../.. --config ../../buf.yaml --template ../../buf.gen.yaml --output ../../
 func main() {
 	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)

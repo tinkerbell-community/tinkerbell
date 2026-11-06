@@ -9,7 +9,6 @@ import (
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	bmcv2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
-	"github.com/tinkerbell/tinkerbell/pkg/template/funcmap"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -35,7 +34,7 @@ tasks:
         environment:
           SITE: "{{ .site }}"
 `
-	c, err := ConvertTemplate(tpl, funcmap.New())
+	c, err := ConvertTemplate(tpl, testFuncs())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +121,7 @@ func TestMachineConnectionToV1Alpha2(t *testing.T) {
 }
 
 func TestRewriteWorkflowToTasks(t *testing.T) {
-	c, err := ConvertTemplate(captTemplate, funcmap.New())
+	c, err := ConvertTemplate(captTemplate, testFuncs())
 	if err != nil {
 		t.Fatal(err)
 	}
