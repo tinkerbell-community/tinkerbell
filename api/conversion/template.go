@@ -330,15 +330,20 @@ func rewriteField(ident []string, workerTask map[string]int) (parse.Node, error)
 	case "references":
 		return nil, notConvertible("it uses %s: in v1alpha2 a Task cannot read its Hardware's references", path)
 	case identHardwareV1:
+		// The legacy .Hardware contract is a struct: an unset field renders as its zero
+		// value. In v1alpha2 these are map keys, which fail when missing, so look them
+		// up with dig and the same zero value.
 		switch {
 		case slices.Equal(ident, []string{identHardwareV1, "UserData"}):
-			return field(identHardware, identSpec, identInstance, "userdata"), nil
+			return digInstance("userdata", emptyString()), nil
 		case slices.Equal(ident, []string{identHardwareV1, "VendorData"}):
-			return field(identHardware, identSpec, identInstance, "vendordata"), nil
+			return digInstance("vendordata", emptyString()), nil
 		case slices.Equal(ident, []string{identHardwareV1, "Metadata", "Instance", "ID"}):
-			return field(identHardware, identSpec, identInstance, "lookupID"), nil
+			return digInstance("lookupID", emptyString()), nil
 		case slices.Equal(ident, []string{identHardwareV1, "Metadata", "Instance", "SSHKeys"}):
-			return field(identHardware, identSpec, identInstance, "sshKeys"), nil
+			return digInstance("sshKeys", &parse.PipeNode{NodeType: parse.NodePipe, Cmds: []*parse.CommandNode{{
+				NodeType: parse.NodeCommand, Args: []parse.Node{&parse.IdentifierNode{NodeType: parse.NodeIdentifier, Ident: "list"}},
+			}}}), nil
 		}
 		return nil, notConvertible("it uses %s, which has no v1alpha2 equivalent", path)
 	case identHardware:
@@ -372,6 +377,26 @@ func rewriteField(ident []string, workerTask map[string]int) (parse.Node, error)
 		return &parse.ChainNode{NodeType: parse.NodeChain, Node: &parse.PipeNode{NodeType: parse.NodePipe, Cmds: []*parse.CommandNode{idx}}, Field: []string{"agentID"}}, nil
 	}
 	return field("workflow", identSpec, "globals", "templateMap", ident[0]), nil
+}
+
+// digInstance returns (dig "spec" "instance" key def .hardware): the v1alpha2
+// Hardware's spec.instance key, or def when it is not set.
+func digInstance(key string, def parse.Node) parse.Node {
+	str := func(s string) parse.Node {
+		return &parse.StringNode{NodeType: parse.NodeString, Quoted: strconv.Quote(s), Text: s}
+	}
+	return &parse.PipeNode{NodeType: parse.NodePipe, Cmds: []*parse.CommandNode{{
+		NodeType: parse.NodeCommand,
+		Args: []parse.Node{
+			&parse.IdentifierNode{NodeType: parse.NodeIdentifier, Ident: "dig"},
+			str(identSpec), str(identInstance), str(key), def,
+			&parse.FieldNode{NodeType: parse.NodeField, Ident: []string{identHardware}},
+		},
+	}}}
+}
+
+func emptyString() parse.Node {
+	return &parse.StringNode{NodeType: parse.NodeString, Quoted: `""`, Text: ""}
 }
 
 // topLevelField returns K when the action is exactly {{ .K }}.

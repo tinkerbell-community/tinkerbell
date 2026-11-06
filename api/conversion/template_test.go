@@ -58,7 +58,7 @@ func TestConvertTemplate(t *testing.T) {
 					"DEST_DISK": "{{(index .hardware.spec.storageDevices 0).name}}",
 					"USER_DATA": "{{.hardware.spec.instance.userdata}}",
 					"METADATA":  "{{.metadata_url}}/{{(index .workflow.spec.tasks 0).agentID}}",
-					"ID":        "{{.hardware.spec.instance.lookupID | quote}}",
+					"ID":        `{{(dig "spec" "instance" "lookupID" "" .hardware) | quote}}`,
 				},
 			},
 			{
@@ -112,5 +112,40 @@ func TestConvertTemplateNotConvertible(t *testing.T) {
 			}
 			t.Log(err)
 		})
+	}
+}
+
+// The legacy .Hardware contract renders unset fields as empty, as v1alpha1 did.
+func TestConvertTemplateLegacyUnsetFields(t *testing.T) {
+	tpl := `version: "0.1"
+name: x
+tasks:
+  - name: t
+    worker: "{{.device_1}}"
+    actions:
+      - name: a
+        image: i
+        environment:
+          U: "{{ .Hardware.UserData }}"
+          K: '{{ join "," .Hardware.Metadata.Instance.SSHKeys }}'
+`
+	c, err := ConvertTemplate(tpl, funcmap.New())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, data := range []map[string]any{
+		{"hardware": map[string]any{"spec": map[string]any{}}},
+		{"hardware": map[string]any{"spec": map[string]any{"instance": map[string]any{}}}},
+	} {
+		for k, expr := range c.Tasks[0].Spec.Actions[0].Env {
+			tm := template.Must(template.New(k).Funcs(funcmap.New()).Option("missingkey=error").Parse(expr))
+			var b bytes.Buffer
+			if err := tm.Execute(&b, data); err != nil {
+				t.Fatalf("%s (%s): %v", k, expr, err)
+			}
+			if b.String() != "" {
+				t.Errorf("%s rendered %q, want empty", k, b.String())
+			}
+		}
 	}
 }

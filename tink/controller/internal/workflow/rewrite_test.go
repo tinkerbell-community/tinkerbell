@@ -82,9 +82,12 @@ func captObjects() (*v1alpha1.Template, *v1alpha1.Hardware, *v1alpha1.Workflow) 
 
 // renderBothWays reconciles the CAPT Workflow in v1alpha1 compatibility mode and rewritten onto Tasks, and
 // returns both.
-func renderBothWays(t *testing.T) (compat, native *v1alpha2.Workflow, c client.Client) {
+func renderBothWays(t *testing.T, mutateHW ...func(*v1alpha1.Hardware)) (compat, native *v1alpha2.Workflow, c client.Client) {
 	t.Helper()
 	tpl, hw, wf := captObjects()
+	for _, m := range mutateHW {
+		m(hw)
+	}
 	key := client.ObjectKeyFromObject(wf)
 	run := func(compatOnly bool, times int) (*v1alpha2.Workflow, client.Client) {
 		c := GetFakeClientBuilder().WithObjects(tpl.DeepCopy(), v2(t, hw), v2(t, wf)).Build()
@@ -265,12 +268,6 @@ tasks:
 			wantReason:   "do not render",
 			wantRendered: true,
 		},
-		"data v1alpha1 renders empty is missing": {
-			template:     captTemplate,
-			mutateHW:     func(hw *v1alpha1.Hardware) { hw.Spec.VendorData = nil },
-			wantReason:   "do not render",
-			wantRendered: true,
-		},
 		"template does not translate": {
 			template:   structural,
 			wantReason: "range",
@@ -343,5 +340,25 @@ func TestRewriteOnlyNewWorkflows(t *testing.T) {
 	stored := &v1alpha2.Task{}
 	if err := c.Get(context.Background(), types.NamespacedName{Name: "machine-1-talos", Namespace: "default"}, stored); err == nil {
 		t.Error("Tasks created for a Workflow that is not rewritten")
+	}
+}
+
+// TestRewriteRendersUnsetLegacyFieldsTheSame: the legacy .Hardware data renders an unset field as
+// empty, and so does its translation, so Hardware without vendor data is rewritten too.
+func TestRewriteRendersUnsetLegacyFieldsTheSame(t *testing.T) {
+	compat, native, _ := renderBothWays(t, func(hw *v1alpha1.Hardware) { hw.Spec.VendorData = nil })
+	if engine.Compat(native) {
+		t.Fatal("the Workflow was not rewritten onto Tasks")
+	}
+	ignore := []cmp.Option{
+		cmpopts.IgnoreFields(v1alpha2.Metadata{}, "ID", "Hardware"),
+		cmpopts.IgnoreFields(v1alpha2.WorkflowCondition{}, "Time"),
+		cmpopts.EquateEmpty(),
+	}
+	if d := cmp.Diff(compat.Status.RenderedTasks, native.Status.RenderedTasks, ignore...); d != "" {
+		t.Errorf("rendered tasks (-compatibility mode +rewritten):\n%s", d)
+	}
+	if got := native.Status.RenderedTasks[0].Actions[0].Env["VENDOR"]; got != "" {
+		t.Errorf("VENDOR = %q, want empty", got)
 	}
 }
