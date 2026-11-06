@@ -13,9 +13,15 @@ type HardwareFilter struct {
 }
 
 // WorkflowFilter holds selectors for listing Workflows.
+// Multiple selectors can be set and are AND-ed.
 type WorkflowFilter struct {
 	InNamespace string
-	ByAgentID   string
+	// ByAgentID matches the Agent running the Workflow's current Task.
+	ByAgentID string
+	// ByTaskAgentID matches every Agent one of the Workflow's Tasks is assigned
+	// to, so that Workflows that will run on an Agent are found before they reach
+	// it. Only v1alpha2 Workflows can be listed by it.
+	ByTaskAgentID string
 }
 
 // UpdateOptions holds all the parameters that can be used to update an object.

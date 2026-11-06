@@ -43,7 +43,7 @@ func (b *Backend) readWorkflowInto(ctx context.Context, wf client.Object, name, 
 
 func (b *Backend) ListWorkflows(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha1.Workflow, error) {
 	stored := &v1alpha1.WorkflowList{}
-	if err := b.listWorkflowsInto(ctx, stored, WorkflowAgentIDIndex, opts); err != nil {
+	if err := b.listWorkflowsInto(ctx, stored, WorkflowAgentIDIndex, "", opts); err != nil {
 		return nil, err
 	}
 
@@ -51,14 +51,25 @@ func (b *Backend) ListWorkflows(ctx context.Context, opts data.WorkflowFilter) (
 }
 
 // listWorkflowsInto lists the Workflows matching opts into list, of either version,
-// finding them by agent with the index agentIndex.
-func (b *Backend) listWorkflowsInto(ctx context.Context, list client.ObjectList, agentIndex string, opts data.WorkflowFilter) error {
+// finding them by current agent with the index agentIndex and by task agent with
+// taskAgentIndex. A version without a task agent index passes an empty one.
+func (b *Backend) listWorkflowsInto(ctx context.Context, list client.ObjectList, agentIndex, taskAgentIndex string, opts data.WorkflowFilter) error {
 	los := []client.ListOption{}
 	if opts.InNamespace != "" {
 		los = append(los, client.InNamespace(opts.InNamespace))
 	}
+	fields := client.MatchingFields{}
 	if opts.ByAgentID != "" {
-		los = append(los, client.MatchingFields{agentIndex: opts.ByAgentID})
+		fields[agentIndex] = opts.ByAgentID
+	}
+	if opts.ByTaskAgentID != "" {
+		if taskAgentIndex == "" {
+			return fmt.Errorf("failed to list workflows: listing by task agent is not supported for %T", list)
+		}
+		fields[taskAgentIndex] = opts.ByTaskAgentID
+	}
+	if len(fields) > 0 {
+		los = append(los, fields)
 	}
 	if err := b.cluster.GetClient().List(ctx, list, los...); err != nil {
 		return fmt.Errorf("failed to list workflows in namespace %s: %w", opts.InNamespace, err)

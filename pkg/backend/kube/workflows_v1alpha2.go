@@ -28,10 +28,11 @@ func (b *Backend) ReadWorkflowV1Alpha2(ctx context.Context, name, namespace stri
 }
 
 // ListWorkflowsV1Alpha2 is ListWorkflows for v1alpha2 Workflows. ByAgentID
-// matches the Agent running the current Task (status.metadata.task.agentID).
+// matches the Agent running the current Task (status.metadata.task.agentID),
+// ByTaskAgentID any Agent a Task is assigned to (spec.tasks[].agentID).
 func (b *Backend) ListWorkflowsV1Alpha2(ctx context.Context, opts data.WorkflowFilter) ([]v1alpha2.Workflow, error) {
 	stored := &v1alpha2.WorkflowList{}
-	if err := b.listWorkflowsInto(ctx, stored, WorkflowAgentIDIndexV1Alpha2, opts); err != nil {
+	if err := b.listWorkflowsInto(ctx, stored, WorkflowAgentIDIndexV1Alpha2, WorkflowTaskAgentIDIndexV1Alpha2, opts); err != nil {
 		return nil, err
 	}
 

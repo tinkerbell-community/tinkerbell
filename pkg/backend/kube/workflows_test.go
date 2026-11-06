@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	v1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/pkg/data"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -93,5 +94,14 @@ func TestReadWorkflow(t *testing.T) {
 				t.Fatalf("got Tasks %+v, want the API server's version with action-1", got.Status.Tasks)
 			}
 		})
+	}
+}
+
+// TestListWorkflowsByTaskAgent verifies that v1alpha1 Workflows, which have no
+// task agents to index, refuse the filter rather than ignore it.
+func TestListWorkflowsByTaskAgent(t *testing.T) {
+	b := newFakeBackend(t, Backend{})
+	if _, err := b.ListWorkflows(context.Background(), data.WorkflowFilter{ByTaskAgentID: "agent1"}); err == nil {
+		t.Fatal("want an error listing v1alpha1 Workflows by task agent")
 	}
 }

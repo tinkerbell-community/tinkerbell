@@ -74,21 +74,32 @@ func TestReadWorkflowV1Alpha2(t *testing.T) {
 }
 
 func TestListWorkflowsV1Alpha2(t *testing.T) {
-	workflow := func(name, namespace, agent string) *v1alpha2.Workflow {
+	workflow := func(name, namespace, agent string, taskAgents ...string) *v1alpha2.Workflow {
 		wf := &v1alpha2.Workflow{ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace}}
 		wf.Status.Metadata.Task.AgentID = agent
+		for _, a := range taskAgents {
+			wf.Spec.Tasks = append(wf.Spec.Tasks, v1alpha2.WorkflowTask{AgentID: a})
+		}
 		return wf
 	}
-	b := newFakeBackend(t, Backend{}, workflow("wf1", "tink", "agent1"), workflow("wf2", "tink", "agent2"), workflow("wf3", "other", "agent1"))
+	b := newFakeBackend(t, Backend{},
+		workflow("wf1", "tink", "agent1", "agent1", "agent2"),
+		workflow("wf2", "tink", "agent2", "agent2"),
+		workflow("wf3", "other", "agent1"),
+		workflow("wf4", "other", "", "agent2"),
+	)
 	tests := map[string]struct {
 		filter data.WorkflowFilter
 		want   int
 	}{
-		"all":                    {want: 3},
-		"namespace":              {filter: data.WorkflowFilter{InNamespace: "tink"}, want: 2},
-		"current agent":          {filter: data.WorkflowFilter{ByAgentID: "agent1"}, want: 2},
-		"agent in namespace":     {filter: data.WorkflowFilter{ByAgentID: "agent1", InNamespace: "other"}, want: 1},
-		"agent without workflow": {filter: data.WorkflowFilter{ByAgentID: "agent3"}},
+		"all":                          {want: 4},
+		"namespace":                    {filter: data.WorkflowFilter{InNamespace: "tink"}, want: 2},
+		"current agent":                {filter: data.WorkflowFilter{ByAgentID: "agent1"}, want: 2},
+		"agent in namespace":           {filter: data.WorkflowFilter{ByAgentID: "agent1", InNamespace: "other"}, want: 1},
+		"agent without workflow":       {filter: data.WorkflowFilter{ByAgentID: "agent3"}},
+		"task agent":                   {filter: data.WorkflowFilter{ByTaskAgentID: "agent2"}, want: 3},
+		"task agent in namespace":      {filter: data.WorkflowFilter{ByTaskAgentID: "agent2", InNamespace: "other"}, want: 1},
+		"current agent and task agent": {filter: data.WorkflowFilter{ByAgentID: "agent1", ByTaskAgentID: "agent2"}, want: 1},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
