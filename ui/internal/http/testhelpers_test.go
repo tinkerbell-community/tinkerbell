@@ -10,6 +10,7 @@ import (
 	bmcv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkv1alpha1 "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
 	tinkv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -165,7 +166,24 @@ func newTestBMCMachine(name, namespace, host string, power bmcv1alpha1.PowerStat
 	}
 }
 
-func newTestBMCJob(name, namespace, machine string, conditions []bmcv1alpha1.JobCondition) *bmcv1alpha1.Job {
+// newTestBMCJob returns a bmc Job created through v1alpha1, as the API server
+// stores it: converted to v1alpha2.
+func newTestBMCJob(name, namespace, machine string, conditions []bmcv1alpha1.JobCondition) *bmcv1alpha2.Job { //nolint:unparam // not a problem that namespace always receives "default".
+	return bmcJobV1Alpha2(newTestBMCJobV1Alpha1(name, namespace, machine, conditions))
+}
+
+// bmcJobV1Alpha2 converts a bmc Job created through v1alpha1 as the
+// conversion webhook does.
+func bmcJobV1Alpha2(job *bmcv1alpha1.Job) *bmcv1alpha2.Job {
+	var out bmcv1alpha2.Job
+	if err := conversion.JobToV1Alpha2(job, &out); err != nil {
+		panic(err)
+	}
+	return &out
+}
+
+// newTestBMCJobV1Alpha1 returns a bmc Job as a v1alpha1 client creates it.
+func newTestBMCJobV1Alpha1(name, namespace, machine string, conditions []bmcv1alpha1.JobCondition) *bmcv1alpha1.Job {
 	return &bmcv1alpha1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              name,

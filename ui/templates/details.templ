@@ -1284,31 +1284,89 @@ templ BMCMachineDetailContent(machine BMCMachineDetail, baseURL string) {
 
 templ BMCJobDetailContent(job BMCJobDetail, baseURL string) {
 	@MainInfoHeader(job.Name, job.Status)
-	
+
 	<!-- Main Info Section -->
 	@SectionBox("Info") {
 		@MetadataTable(job.Name, job.Namespace, job.CreatedAt, job.Labels, job.Annotations)
 	}
-	
+
 	<!-- Job Details -->
 	@SectionBox("Job Details") {
+		<div class="overflow-x-auto">
+			<table class="min-w-full">
+				<tbody>
+					if job.Target != "" {
+						<tr class="border-b border-gray-100 dark:border-darkBorder">
+							<td class="py-3 pr-4 text-sm font-medium text-gray-500 dark:text-gray-400 w-1/4 whitespace-nowrap">Target</td>
+							<td class="py-3 text-sm whitespace-nowrap">
+								@JobTargetLink(job.JobTarget, baseURL)
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 		@NameValueTable([]InfoRow{
-			{Name: "Machine Reference", Value: job.MachineRef, Link: baseURL + "/bmc/machines/" + job.MachineRef},
 			{Name: "Status", Value: job.Status},
+			{Name: "Started At", Value: job.StartedAt},
 			{Name: "Completed At", Value: job.CompletedAt},
+			{Name: "Operations Completed", Value: job.Progress},
 		})
 	}
-	
+
+	<!-- Operations -->
+	if len(job.Operations) > 0 {
+		@SectionBox("Operations") {
+			<div class="overflow-x-auto">
+				<table class="min-w-full">
+					<thead>
+						<tr class="border-b border-gray-200 dark:border-darkBorder">
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">#</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Operation</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Details</th>
+							<th class="py-2 pr-4 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Timeout</th>
+							<th class="py-2 text-left text-sm font-medium text-gray-500 dark:text-gray-400">Done</th>
+						</tr>
+					</thead>
+					<tbody>
+						for i, op := range job.Operations {
+							<tr class="border-b border-gray-100 dark:border-darkBorder last:border-b-0">
+								<td class="py-2 pr-4 text-sm text-gray-500 dark:text-gray-400">{ strconv.Itoa(i + 1) }</td>
+								<td class="py-2 pr-4 text-sm font-medium text-gray-900 dark:text-white whitespace-nowrap">{ op.Kind }</td>
+								<td class="py-2 pr-4 text-sm font-mono text-gray-700 dark:text-gray-300 break-all">{ op.Details }</td>
+								<td class="py-2 pr-4 text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap">{ op.Timeout }</td>
+								<td class="py-2 text-sm text-gray-700 dark:text-gray-300">
+									if op.Done {
+										Yes
+									} else {
+										No
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+
+	<!-- Conditions -->
+	if len(job.Conditions) > 0 {
+		@SectionBox("Conditions") {
+			@ConditionsTable(job.Conditions)
+		}
+	}
+
 	<!-- Status Section -->
 	@SectionBoxCollapsible("Status", true) {
 		@CodeBlockYAML(job.StatusYAML)
 	}
-	
+
 	<!-- Spec Section -->
 	@SectionBoxCollapsible("Spec", false) {
 		@CodeBlockYAML(job.SpecYAML)
 	}
-	
+
 	<!-- Raw YAML -->
 	@SectionBoxCollapsible("Full YAML", false) {
 		@CodeBlockYAMLWithCopy(job.YAML, "job-yaml")

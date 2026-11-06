@@ -179,6 +179,21 @@ templ RenderedTaskCard(task RenderedTask) {
 	</div>
 }
 
+// JobTargetLink - the BMC a Job runs against: a linked Machine or Hardware, or a host
+templ JobTargetLink(target JobTarget, baseURL string) {
+	if target.TargetPath != "" {
+		<a href={ templ.SafeURL(baseURL + target.TargetPath) } class="text-tink-teal-600 dark:text-tink-teal-400 hover:text-tink-teal-800 dark:hover:text-tink-teal-300 hover:underline" onclick="event.stopPropagation()">{ target.Target }</a>
+	} else {
+		<span class="font-mono text-gray-600 dark:text-gray-300">{ target.Target }</span>
+	}
+	if target.TargetKind != "" {
+		<span class="ml-1 text-xs text-gray-500 dark:text-gray-400">({ target.TargetKind })</span>
+	}
+	if target.TargetKind == "Machine" {
+		@DeprecatedBadge()
+	}
+}
+
 // TaskRefsTable - the Tasks a Workflow or Policy runs, with the Agent and Hardware of each
 templ TaskRefsTable(refs []TaskRef, baseURL string) {
 	<div class="overflow-x-auto">

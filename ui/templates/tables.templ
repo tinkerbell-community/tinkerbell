@@ -405,7 +405,8 @@ templ BMCJobTableContent(jobData BMCJobPageData) {
 					<tr>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Name</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Namespace</th>
-						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Machine</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Target</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Operations</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Status</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Completed</th>
 						<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">Age</th>
@@ -421,14 +422,17 @@ templ BMCJobTableContent(jobData BMCJobPageData) {
 							</div>
 						</td>
 						<td class="px-6 py-4 whitespace-nowrap"><span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-700 dark:bg-darkBorderSoft dark:text-gray-300">{ job.Namespace }</span></td>
-						<td class="px-6 py-4 whitespace-nowrap text-sm"><a href={ templ.SafeURL("/bmc/machines/" + job.MachineRef) } class="text-tink-teal-600 dark:text-tink-teal-400 hover:text-tink-teal-800 dark:hover:text-tink-teal-300 hover:underline" onclick="event.stopPropagation()">{ job.MachineRef }</a></td>
+						<td class="px-6 py-4 whitespace-nowrap text-sm">
+							@JobTargetLink(job.JobTarget, "")
+						</td>
+						<td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{ job.Operations }</td>
 						<td class="px-6 py-4 whitespace-nowrap">@StatusBadge(job.Status)</td>
 						<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{ job.CompletedAt }</td>
 						<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">{ job.CreatedAt }</td>
 					</tr>
 					}
 					if len(jobData.Jobs) == 0 {
-						<tr><td colspan="6" class="px-6 py-12 text-center"><div class="flex flex-col items-center"><div class="h-12 w-12 rounded-full bg-gray-100 dark:bg-darkBorderSoft flex items-center justify-center mb-4">@templ.Raw(jobsIcon())</div><p class="text-sm font-medium text-gray-900 dark:text-white">No Jobs found</p></div></td></tr>
+						<tr><td colspan="7" class="px-6 py-12 text-center"><div class="flex flex-col items-center"><div class="h-12 w-12 rounded-full bg-gray-100 dark:bg-darkBorderSoft flex items-center justify-center mb-4">@templ.Raw(jobsIcon())</div><p class="text-sm font-medium text-gray-900 dark:text-white">No Jobs found</p></div></td></tr>
 					}
 				</tbody>
 			</table>

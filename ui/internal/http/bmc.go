@@ -271,20 +271,8 @@ func HandleBMCJobList(c *gin.Context, log logr.Logger) {
 			return
 		}
 	} else {
-		for _, job := range jobList.Items {
-			completedAt := ""
-			if job.Status.CompletionTime != nil {
-				completedAt = job.Status.CompletionTime.Format("2006-01-02 15:04:05")
-			}
-			webJob := templates.BMCJob{
-				Name:        job.Name,
-				Namespace:   job.Namespace,
-				MachineRef:  job.Spec.MachineRef.Namespace + "/" + job.Spec.MachineRef.Name,
-				Status:      GetBMCJobStatus(job.Status.Conditions),
-				CompletedAt: completedAt,
-				CreatedAt:   job.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-			}
-			jobs = append(jobs, webJob)
+		for i := range jobList.Items {
+			jobs = append(jobs, toBMCJobRow(&jobList.Items[i]))
 		}
 	}
 
@@ -341,20 +329,8 @@ func HandleBMCJobData(c *gin.Context, log logr.Logger) {
 			return
 		}
 	} else {
-		for _, job := range jobList.Items {
-			completedAt := ""
-			if job.Status.CompletionTime != nil {
-				completedAt = job.Status.CompletionTime.Format("2006-01-02 15:04:05")
-			}
-			webJob := templates.BMCJob{
-				Name:        job.Name,
-				Namespace:   job.Namespace,
-				MachineRef:  job.Spec.MachineRef.Namespace + "/" + job.Spec.MachineRef.Name,
-				Status:      GetBMCJobStatus(job.Status.Conditions),
-				CompletedAt: completedAt,
-				CreatedAt:   job.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-			}
-			jobs = append(jobs, webJob)
+		for i := range jobList.Items {
+			jobs = append(jobs, toBMCJobRow(&jobList.Items[i]))
 		}
 	}
 
@@ -403,24 +379,10 @@ func HandleBMCJobDetail(c *gin.Context, log logr.Logger) {
 	specYAML, _ := yaml.Marshal(&job.Spec)
 	statusYAML, _ := yaml.Marshal(&job.Status)
 
-	completedAt := ""
-	if job.Status.CompletionTime != nil {
-		completedAt = job.Status.CompletionTime.Format("2006-01-02 15:04:05")
-	}
-
-	jobDetail := templates.BMCJobDetail{
-		Name:        job.Name,
-		Namespace:   job.Namespace,
-		MachineRef:  job.Spec.MachineRef.Namespace + "/" + job.Spec.MachineRef.Name,
-		Status:      GetBMCJobStatus(job.Status.Conditions),
-		CompletedAt: completedAt,
-		CreatedAt:   job.GetCreationTimestamp().Format("2006-01-02 15:04:05"),
-		Labels:      job.Labels,
-		Annotations: job.Annotations,
-		SpecYAML:    string(specYAML),
-		StatusYAML:  string(statusYAML),
-		YAML:        string(yamlBytes),
-	}
+	jobDetail := bmcJobDetail(job)
+	jobDetail.SpecYAML = string(specYAML)
+	jobDetail.StatusYAML = string(statusYAML)
+	jobDetail.YAML = string(yamlBytes)
 
 	cfg := templates.PageConfig{
 		BaseURL:    GetBaseURL(c),

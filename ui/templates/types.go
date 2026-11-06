@@ -83,12 +83,26 @@ type BMCMachine struct {
 
 // BMCJob represents a BMC job resource in the list view.
 type BMCJob struct {
-	Name        string
-	Namespace   string
-	MachineRef  string
+	Name      string
+	Namespace string
+	JobTarget
+	// Operations summarizes the Job's operations, in order.
+	Operations  string
 	Status      string
 	CompletedAt string
 	CreatedAt   string
+}
+
+// JobTarget is the BMC a Job runs against.
+type JobTarget struct {
+	// TargetKind is "Machine" for the deprecated bmc Machine of a Job created
+	// through v1alpha1, "Hardware" for a Hardware whose BMC the Job uses, or
+	// "BMC" for a connection given in the Job.
+	TargetKind string
+	// Target names the Machine or Hardware ("namespace/name") or the BMC host.
+	Target string
+	// TargetPath is the UI path of the Machine or Hardware, empty for a host.
+	TargetPath string
 }
 
 // BMCTask represents a BMC task resource in the list view.
@@ -733,17 +747,31 @@ type BMCMachineDetail struct {
 
 // BMCJobDetail is the data for the BMC job detail page.
 type BMCJobDetail struct {
-	Name        string
-	Namespace   string
-	MachineRef  string
+	Name      string
+	Namespace string
+	JobTarget
 	Status      string
+	StartedAt   string
 	CompletedAt string
+	// Progress is the number of operations completed, as "n of m".
+	Progress    string
+	Operations  []BMCOperation
+	Conditions  []Condition
 	CreatedAt   string
 	Labels      map[string]string
 	Annotations map[string]string
 	SpecYAML    string
 	StatusYAML  string
 	YAML        string
+}
+
+// BMCOperation is an operation of a bmc Job.
+type BMCOperation struct {
+	Kind    string
+	Details string
+	Timeout string
+	// Done reports that the operation completed.
+	Done bool
 }
 
 // BMCTaskDetail is the data for the BMC task detail page.

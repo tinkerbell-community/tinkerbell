@@ -524,22 +524,17 @@ func (k *KubeClient) GetBMCMachine(ctx context.Context, namespace, name string) 
 }
 
 // ListBMCJobs returns all BMC job resources, optionally filtered by namespace.
-func (k *KubeClient) ListBMCJobs(ctx context.Context, namespace string) (*bmcv1alpha1.JobList, error) {
-	var jobList bmcv1alpha1.JobList
-	opts := []client.ListOption{}
-	if namespace != "" && namespace != templates.AllNamespace {
-		opts = append(opts, client.InNamespace(namespace))
-	}
-
-	if err := k.List(ctx, &jobList, opts...); err != nil {
+func (k *KubeClient) ListBMCJobs(ctx context.Context, namespace string) (*bmcv1alpha2.JobList, error) {
+	var jobList bmcv1alpha2.JobList
+	if err := k.List(ctx, &jobList, inNamespace(namespace)...); err != nil {
 		return nil, fmt.Errorf("failed to list BMC jobs: %w", err)
 	}
 	return &jobList, nil
 }
 
 // GetBMCJob returns a specific BMC job resource.
-func (k *KubeClient) GetBMCJob(ctx context.Context, namespace, name string) (*bmcv1alpha1.Job, error) {
-	var job bmcv1alpha1.Job
+func (k *KubeClient) GetBMCJob(ctx context.Context, namespace, name string) (*bmcv1alpha2.Job, error) {
+	var job bmcv1alpha2.Job
 	if err := k.Get(ctx, client.ObjectKey{Namespace: namespace, Name: name}, &job); err != nil {
 		return nil, fmt.Errorf("failed to get BMC job: %w", err)
 	}
@@ -699,18 +694,18 @@ func GetSelectedNamespace(c *gin.Context, namespaces []string) string {
 }
 
 // GetBMCJobStatus determines the status of a BMC job from its conditions.
-func GetBMCJobStatus(conditions []bmcv1alpha1.JobCondition) string {
+func GetBMCJobStatus(conditions []bmcv1alpha2.Condition) string {
 	status := statusPending
 	for _, condition := range conditions {
-		if condition.Status != bmcv1alpha1.ConditionTrue {
+		if condition.Status != bmcv1alpha2.ConditionStatusTrue {
 			continue
 		}
-		switch condition.Type {
-		case bmcv1alpha1.JobCompleted:
+		switch condition.Type { //nolint:exhaustive // only the Job conditions matter here.
+		case bmcv1alpha2.ConditionTypeCompleted:
 			return statusCompleted
-		case bmcv1alpha1.JobFailed:
+		case bmcv1alpha2.ConditionTypeFailed:
 			return statusFailed
-		case bmcv1alpha1.JobRunning:
+		case bmcv1alpha2.ConditionTypeRunning:
 			status = statusRunning
 		}
 	}
