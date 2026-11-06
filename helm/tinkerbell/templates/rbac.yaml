@@ -30,15 +30,17 @@ rules:
   - apiGroups: ["tinkerbell.org"]
     resources: ["workflows", "workflows/status"]
     verbs: ["create", "get", "list", "patch", "update", "watch"]
+  # The Tink controller annotates rule sets and Templates that have no v1alpha2
+  # translation, and deletes the Tasks and Policies a translation no longer has.
   - apiGroups: ["tinkerbell.org"]
     resources: ["workflowrulesets"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "patch", "update", "watch"]
   - apiGroups: ["tinkerbell.org"]
     resources: ["tasks", "tasks/status"]
-    verbs: ["create", "get", "list", "patch", "update", "watch"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
   - apiGroups: ["tinkerbell.org"]
     resources: ["policies"]
-    verbs: ["create", "get", "list", "patch", "update", "watch"]
+    verbs: ["create", "delete", "get", "list", "patch", "update", "watch"]
   - apiGroups: ["bmc.tinkerbell.org"]
     resources: ["jobs", "jobs/status", "tasks", "tasks/status"]
     verbs: ["create", "delete", "get", "list", "patch", "update", "watch", "deletecollection"]
@@ -48,7 +50,8 @@ rules:
   - apiGroups: ["bmc.tinkerbell.org"]
     resources: ["jobs/finalizers", "machines/finalizers", "tasks/finalizers"]
     verbs: ["update"]
-  # Rufio records Kubernetes events against the objects it reconciles.
+  # Rufio and the Tink controller record Kubernetes events against the objects
+  # they reconcile.
   - apiGroups: ["", "events.k8s.io"]
     resources: ["events"]
     verbs: ["create", "patch", "update"]

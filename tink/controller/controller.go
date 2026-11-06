@@ -8,6 +8,9 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	bmcv1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/bmc"
+	"github.com/tinkerbell/tinkerbell/tink/controller/internal/translate"
 	"github.com/tinkerbell/tinkerbell/tink/controller/internal/workflow"
 	"k8s.io/apimachinery/pkg/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -22,6 +25,8 @@ var schemeBuilder = runtime.NewSchemeBuilder(
 	clientgoscheme.AddToScheme,
 	tinkerbell.AddToScheme,
 	bmc.AddToScheme,
+	v1alpha2.AddToScheme,
+	bmcv1alpha2.AddToScheme,
 )
 
 type Config struct {
@@ -143,6 +148,15 @@ func newManager(cfg *rest.Config, rr referenceResolver, opts controllerruntime.O
 
 	if err = workflow.NewReconciler(mgr.GetClient(), rr, wfOpts...).SetupWithManager(mgr, ctrlcontroller.Options{MaxConcurrentReconciles: maxConcurrentReconciles}); err != nil {
 		return nil, fmt.Errorf("setup workflow reconciler: %w", err)
+	}
+
+	// The v1alpha2 translations of the kinds only v1alpha1 has.
+	recorder := mgr.GetEventRecorder("tink-controller")
+	if err = translate.NewTemplateReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
+		return nil, fmt.Errorf("setup template translation reconciler: %w", err)
+	}
+	if err = translate.NewRuleSetReconciler(mgr.GetClient(), recorder).SetupWithManager(mgr, ctrlcontroller.Options{}); err != nil {
+		return nil, fmt.Errorf("setup workflowruleset translation reconciler: %w", err)
 	}
 
 	return mgr, nil
