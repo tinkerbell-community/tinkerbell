@@ -30,10 +30,12 @@ import (
 	common "github.com/bmc-toolbox/common"
 	"github.com/ccoveille/go-safecast/v2"
 	"github.com/go-logr/logr"
-	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/tools/events"
 	ctrlclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -73,47 +75,52 @@ const disableOutOfBandInventoryAnnotation = "tinkerbell.org/disable-outofband-in
 // make dueForInventoryRefresh flap between calls.
 const inventoryJitterFraction = 0.1
 
-// hardwareBMCRefIndexKey indexes Hardware objects by the name of the Machine
-// their spec.bmcRef points at, so the Machine controller can find its linked
-// Hardware without a full List+filter.
+// hardwareBMCRefIndexKey indexes v1alpha2 Hardware by the name of the bmc
+// Machine their v1alpha1 spec.bmcRef points at (see conversion.HardwareBMCRef),
+// so the Machine controller can find its linked Hardware without a full
+// List+filter.
 const hardwareBMCRefIndexKey = ".spec.bmcRef.name"
 
 // hardwareBMCRefIndexFunc is the IndexerFunc for hardwareBMCRefIndexKey.
 func hardwareBMCRefIndexFunc(obj ctrlclient.Object) []string {
-	hw, ok := obj.(*tinkerbell.Hardware)
-	if !ok || hw.Spec.BMCRef == nil {
+	hw, ok := obj.(*v1alpha2.Hardware)
+	if !ok {
 		return nil
 	}
-	return []string{hw.Spec.BMCRef.Name}
+	ref := conversion.HardwareBMCRef(hw)
+	if ref == nil {
+		return nil
+	}
+	return []string{ref.Name}
 }
 
 // dueForInventoryRefresh returns true if inventory has never been collected, is
-// stale (older than interval, plus a per-Machine jitter — see
+// stale (older than interval, plus a per-source jitter — see
 // inventoryJitterFraction), or a manual refresh was explicitly requested via
-// refreshInventoryAnnotation.
-func dueForInventoryRefresh(hw *tinkerbell.Hardware, bm *bmc.Machine, interval time.Duration) bool {
-	if bm.Annotations[refreshInventoryAnnotation] == trueString {
+// refreshInventoryAnnotation. source is the object whose BMC is polled.
+func dueForInventoryRefresh(hw *v1alpha2.Hardware, source metav1.Object, interval time.Duration) bool {
+	if source.GetAnnotations()[refreshInventoryAnnotation] == trueString {
 		return true
 	}
 	inv := outOfBandAttributes(hw)
 	if inv == nil || inv.LastUpdated == nil {
 		return true
 	}
-	return time.Since(inv.LastUpdated.Time) > interval+inventoryJitter(bm, interval)
+	return time.Since(inv.LastUpdated.Time) > interval+inventoryJitter(source, interval)
 }
 
-// inventoryJitter returns a deterministic per-Machine offset in
+// inventoryJitter returns a deterministic per-source offset in
 // [-interval*inventoryJitterFraction, +interval*inventoryJitterFraction],
-// derived from a hash of the Machine's namespace/name so it is stable across
+// derived from a hash of the source's namespace/name so it is stable across
 // calls without needing to persist any extra state.
-func inventoryJitter(bm *bmc.Machine, interval time.Duration) time.Duration {
+func inventoryJitter(source metav1.Object, interval time.Duration) time.Duration {
 	maxJitter := float64(interval) * inventoryJitterFraction
 	if maxJitter <= 0 {
 		return 0
 	}
 
 	h := fnv.New32a()
-	_, _ = h.Write([]byte(bm.Namespace + "/" + bm.Name))
+	_, _ = h.Write([]byte(source.GetNamespace() + "/" + source.GetName()))
 	// Normalize the 32-bit hash to [0, 1) and scale into [-maxJitter, +maxJitter).
 	// Using float64 here (rather than an integer modulo by 2*maxJitter) avoids
 	// truncating 2*maxJitter through a uint32 conversion, which for interval
@@ -126,7 +133,7 @@ func inventoryJitter(bm *bmc.Machine, interval time.Duration) time.Duration {
 
 // outOfBandAttributes returns the out-of-band attributes subtree, or nil if it has
 // never been populated. Both intermediate levels are optional pointers.
-func outOfBandAttributes(hw *tinkerbell.Hardware) *tinkerbell.Attributes {
+func outOfBandAttributes(hw *v1alpha2.Hardware) *inventory.Attributes {
 	if hw == nil || hw.Status.Attributes == nil {
 		return nil
 	}
@@ -134,15 +141,17 @@ func outOfBandAttributes(hw *tinkerbell.Hardware) *tinkerbell.Attributes {
 }
 
 // clearRefreshInventoryAnnotation removes refreshInventoryAnnotation from the
-// Machine after a successful inventory collection, so a manually-requested
-// refresh doesn't keep forcing collection on every reconcile if the caller
-// forgets to remove the annotation themselves.
-func (r *MachineReconciler) clearRefreshInventoryAnnotation(ctx context.Context, logger logr.Logger, bm *bmc.Machine) {
-	if bm.Annotations[refreshInventoryAnnotation] != trueString {
+// source, the object whose BMC is polled, after a successful inventory
+// collection, so a manually-requested refresh doesn't keep forcing collection on
+// every reconcile if the caller forgets to remove the annotation themselves.
+func clearRefreshInventoryAnnotation(ctx context.Context, c ctrlclient.Client, recorder events.EventRecorder, logger logr.Logger, source ctrlclient.Object) {
+	if source.GetAnnotations()[refreshInventoryAnnotation] != trueString {
 		return
 	}
-	patch := ctrlclient.MergeFrom(bm.DeepCopy())
-	delete(bm.Annotations, refreshInventoryAnnotation)
+	patch := ctrlclient.MergeFrom(source.DeepCopyObject().(ctrlclient.Object)) //nolint:forcetypeassert // a client.Object's deep copy is one.
+	annotations := source.GetAnnotations()
+	delete(annotations, refreshInventoryAnnotation)
+	source.SetAnnotations(annotations)
 	// Retried: dueForInventoryRefresh treats refreshInventoryAnnotation as an
 	// unconditional override, so an un-retried, transiently-failed Patch here
 	// would leave it set on the server and force a full (5-30s) BMC inventory
@@ -150,36 +159,37 @@ func (r *MachineReconciler) clearRefreshInventoryAnnotation(ctx context.Context,
 	// cadence, not inventoryRefreshInterval — until some later attempt
 	// happens to succeed.
 	if err := retry.Do(func() error {
-		return r.client.Patch(ctx, bm, patch)
+		return c.Patch(ctx, source, patch)
 	}, retry.Attempts(3), retry.Delay(500*time.Millisecond), retry.Context(ctx)); err != nil {
 		logger.Error(err, "failed to clear refresh-inventory annotation after successful collection")
-		r.recorder.Eventf(bm, nil, corev1.EventTypeWarning, "ClearRefreshAnnotationFailed", "ClearRefreshInventoryAnnotation", "clear refresh-inventory annotation: %v", err)
+		recorder.Eventf(source, nil, corev1.EventTypeWarning, "ClearRefreshAnnotationFailed", "ClearRefreshInventoryAnnotation", "clear refresh-inventory annotation: %v", err)
 	}
 }
 
-// findLinkedHardware returns the Hardware object whose spec.bmcRef points at the
-// given Machine, if any. Returns (nil, nil) if no Hardware references this Machine.
-func (r *MachineReconciler) findLinkedHardware(ctx context.Context, bm *bmc.Machine) (*tinkerbell.Hardware, error) {
-	var hwList tinkerbell.HardwareList
-	if err := r.client.List(ctx, &hwList,
-		ctrlclient.InNamespace(bm.Namespace),
-		ctrlclient.MatchingFields{hardwareBMCRefIndexKey: bm.Name},
+// findLinkedHardware returns the Hardware object whose v1alpha1 spec.bmcRef
+// points at the given Machine, if any. Returns (nil, nil) if no Hardware
+// references this Machine.
+func findLinkedHardware(ctx context.Context, c ctrlclient.Client, namespace, machine string) (*v1alpha2.Hardware, error) {
+	var hwList v1alpha2.HardwareList
+	if err := c.List(ctx, &hwList,
+		ctrlclient.InNamespace(namespace),
+		ctrlclient.MatchingFields{hardwareBMCRefIndexKey: machine},
 	); err != nil {
-		return nil, fmt.Errorf("failed to list Hardware for Machine %s/%s: %w", bm.Namespace, bm.Name, err)
+		return nil, fmt.Errorf("failed to list Hardware for Machine %s/%s: %w", namespace, machine, err)
 	}
 	if len(hwList.Items) == 0 {
 		return nil, nil
 	}
 	if len(hwList.Items) > 1 {
-		return nil, fmt.Errorf("ambiguous Hardware link for Machine %s/%s: %d Hardware objects reference it via spec.bmcRef, want at most 1", bm.Namespace, bm.Name, len(hwList.Items))
+		return nil, fmt.Errorf("ambiguous Hardware link for Machine %s/%s: %d Hardware objects reference it via spec.bmcRef, want at most 1", namespace, machine, len(hwList.Items))
 	}
 	return &hwList.Items[0], nil
 }
 
 // reconcileInventory collects BMC inventory using the already-open bmcClient
-// (reused from the power-polling step in doReconcile — no second BMC connection is
-// opened) and writes it to the linked Hardware's status.
-func (r *MachineReconciler) reconcileInventory(ctx context.Context, logger logr.Logger, bmcClient *bmclib.Client, hw *tinkerbell.Hardware) error {
+// (reused from the power-polling step of the caller — no second BMC connection is
+// opened) and writes it to the Hardware's status.
+func reconcileInventory(ctx context.Context, c ctrlclient.Client, logger logr.Logger, bmcClient *bmclib.Client, hw *v1alpha2.Hardware) error {
 	device, err := bmcClient.Inventory(ctx)
 	if err != nil {
 		return fmt.Errorf("get BMC inventory: %w", err)
@@ -188,14 +198,14 @@ func (r *MachineReconciler) reconcileInventory(ctx context.Context, logger logr.
 	collectionMethod := bmcClient.GetMetadata().SuccessfulProvider
 	sortDevice(device)
 
-	return r.applyOutOfBandAttributes(ctx, logger, hw, device, collectionMethod)
+	return applyOutOfBandAttributes(ctx, c, logger, hw, device, collectionMethod)
 }
 
 // applyOutOfBandAttributes patches Hardware.status.attributes.outOfBand via
 // Server-Side Apply under a dedicated field manager ("machine-controller"), so a
 // future sibling subtree written by another controller stays a disjoint path and
 // the two writers cannot conflict.
-func (r *MachineReconciler) applyOutOfBandAttributes(ctx context.Context, logger logr.Logger, hw *tinkerbell.Hardware, device *common.Device, collectionMethod string) error {
+func applyOutOfBandAttributes(ctx context.Context, c ctrlclient.Client, logger logr.Logger, hw *v1alpha2.Hardware, device *common.Device, collectionMethod string) error {
 	now := metav1.Now()
 	newInventory := attributesFromDevice(device, collectionMethod, &now, logger)
 	// Convert first, normalize second: drop empty components the BMC didn't
@@ -215,13 +225,13 @@ func (r *MachineReconciler) applyOutOfBandAttributes(ctx context.Context, logger
 		// advance the timestamp, not to reflect a content change.
 		existing := outOfBandAttributes(hw)
 		if existing == nil {
-			newInventory = &tinkerbell.Attributes{LastUpdated: &now, CollectionMethod: collectionMethod}
+			newInventory = &inventory.Attributes{LastUpdated: &now, CollectionMethod: collectionMethod}
 		} else {
 			newInventory = existing.DeepCopy()
 			newInventory.LastUpdated = &now
 			newInventory.CollectionMethod = collectionMethod
 		}
-		return r.applyHardwareOutOfBand(ctx, hw, newInventory)
+		return applyHardwareOutOfBand(ctx, c, hw, newInventory)
 	}
 
 	// LastUpdated must advance on every successful collection, even when the
@@ -233,39 +243,39 @@ func (r *MachineReconciler) applyOutOfBandAttributes(ctx context.Context, logger
 	// a full interval. The write itself is idempotent under Server-Side Apply,
 	// and it only happens once per refresh interval, so there is no reconcile
 	// hot-loop to guard against.
-	return r.applyHardwareOutOfBand(ctx, hw, newInventory)
+	return applyHardwareOutOfBand(ctx, c, hw, newInventory)
 }
 
 // applyHardwareOutOfBand issues the Server-Side Apply patch for
 // status.attributes.outOfBand and updates hw in place to match, so callers
 // observing hw afterward (e.g. within the same reconcile) see the new value
 // without needing a fresh Get.
-func (r *MachineReconciler) applyHardwareOutOfBand(ctx context.Context, hw *tinkerbell.Hardware, newInventory *tinkerbell.Attributes) error {
-	apiVersion := tinkerbell.GroupVersion.String()
+func applyHardwareOutOfBand(ctx context.Context, c ctrlclient.Client, hw *v1alpha2.Hardware, newInventory *inventory.Attributes) error {
+	apiVersion := v1alpha2.GroupVersion.String()
 	kind := "Hardware"
 	name := hw.Name
 	namespace := hw.Namespace
-	applyConfig := &tinkerbell.HardwareApplyConfiguration{
+	applyConfig := &v1alpha2.HardwareApplyConfiguration{
 		Kind:       &kind,
 		APIVersion: &apiVersion,
-		Metadata: tinkerbell.HardwareApplyMetadata{
+		Metadata: v1alpha2.HardwareApplyMetadata{
 			Name:      &name,
 			Namespace: &namespace,
 		},
-		Status: &tinkerbell.HardwareStatusApplyConfiguration{
-			Attributes: &tinkerbell.HardwareAttributesApplyConfiguration{
+		Status: &v1alpha2.HardwareStatusApplyConfiguration{
+			Attributes: &v1alpha2.HardwareAttributesApplyConfiguration{
 				OutOfBand: newInventory,
 			},
 		},
 	}
-	if err := r.client.Status().Apply(ctx, applyConfig,
+	if err := c.Status().Apply(ctx, applyConfig,
 		ctrlclient.FieldOwner("machine-controller"),
 		ctrlclient.ForceOwnership,
 	); err != nil {
 		return fmt.Errorf("failed to apply Hardware %s/%s status.attributes.outOfBand: %w", hw.Namespace, hw.Name, err)
 	}
 	if hw.Status.Attributes == nil {
-		hw.Status.Attributes = &tinkerbell.HardwareAttributes{}
+		hw.Status.Attributes = &inventory.HardwareAttributes{}
 	}
 	hw.Status.Attributes.OutOfBand = newInventory
 
@@ -273,7 +283,7 @@ func (r *MachineReconciler) applyHardwareOutOfBand(ctx context.Context, hw *tink
 }
 
 // The HardwareApplyConfiguration family of types used above is defined in
-// api/v1alpha1/tinkerbell, shared with tink-server's equivalent writer for
+// api/v1alpha2/tinkerbell, shared with tink-server's equivalent writer for
 // status.attributes.inBand.
 
 // sortDevice sorts every slice field on device by a stable per-component key.
@@ -392,12 +402,12 @@ func gpuKey(g *common.GPU) string {
 // Fields on Attributes that only the in-band collector can fill (PCIDevices,
 // Memory.UsableBytes, per-port EnabledCapabilities, OS-visible names) are left
 // unset here by design.
-func attributesFromDevice(device *common.Device, collectionMethod string, t *metav1.Time, logger logr.Logger) *tinkerbell.Attributes {
+func attributesFromDevice(device *common.Device, collectionMethod string, t *metav1.Time, logger logr.Logger) *inventory.Attributes {
 	if device == nil {
 		return nil
 	}
 
-	attrs := &tinkerbell.Attributes{
+	attrs := &inventory.Attributes{
 		LastUpdated:      t,
 		CollectionMethod: collectionMethod,
 		Product:          productFromCommon(device.Common, logger),
@@ -406,7 +416,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		Baseboard:        baseboardFromMainboard(device.Mainboard),
 	}
 
-	var sockets []tinkerbell.CPUSocket
+	var sockets []inventory.CPUSocket
 	for _, c := range device.CPUs {
 		if c == nil {
 			continue
@@ -414,7 +424,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		cores := convertOrZero[uint32](logger, "cpu.cores", c.Cores)
 		threads := convertOrZero[uint32](logger, "cpu.threads", c.Threads)
 		clockSpeedMHz := convertOrZero[uint32](logger, "cpu.clockSpeedMHz", c.ClockSpeedHz/1_000_000)
-		socket := tinkerbell.CPUSocket{
+		socket := inventory.CPUSocket{
 			Slot:            c.Slot,
 			Vendor:          c.Vendor,
 			Model:           c.Model,
@@ -430,15 +440,15 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 	// view of the machine and are reported by the in-band collector. Summing
 	// the sockets here would look authoritative while silently disagreeing
 	// with the in-band totals on any machine with a disabled core or SMT off.
-	attrs.CPU = &tinkerbell.CPU{Sockets: sockets}
+	attrs.CPU = &inventory.CPU{Sockets: sockets}
 
-	var modules []tinkerbell.MemoryModule
+	var modules []inventory.MemoryModule
 	for _, m := range device.Memory {
 		if m == nil {
 			continue
 		}
 		speedMHz := convertOrZero[uint32](logger, "memory.speedMHz", m.ClockSpeedHz/1_000_000)
-		module := tinkerbell.MemoryModule{
+		module := inventory.MemoryModule{
 			Slot:            m.Slot,
 			Vendor:          m.Vendor,
 			Model:           m.Model,
@@ -452,7 +462,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		modules = append(modules, module)
 	}
 	// TotalBytes/UsableBytes left unset for the same reason as CPU totals.
-	attrs.Memory = &tinkerbell.Memory{Modules: modules}
+	attrs.Memory = &inventory.Memory{Modules: modules}
 
 	for _, n := range device.NICs {
 		if nic := networkInterfaceFromCommon(n, logger); nic != nil {
@@ -464,7 +474,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		if d == nil {
 			continue
 		}
-		drive := tinkerbell.BlockDevice{
+		drive := inventory.BlockDevice{
 			Vendor:          d.Vendor,
 			Model:           d.Model,
 			SerialNumber:    d.Serial,
@@ -482,7 +492,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		if sc == nil {
 			continue
 		}
-		controller := tinkerbell.StorageController{
+		controller := inventory.StorageController{
 			Vendor:          sc.Vendor,
 			Model:           sc.Model,
 			SerialNumber:    sc.Serial,
@@ -497,7 +507,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		if p == nil {
 			continue
 		}
-		psu := tinkerbell.PSU{
+		psu := inventory.PSU{
 			Vendor:             p.Vendor,
 			Model:              p.Model,
 			SerialNumber:       p.Serial,
@@ -513,7 +523,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		if tpm == nil {
 			continue
 		}
-		module := tinkerbell.TPM{
+		module := inventory.TPM{
 			Vendor:          tpm.Vendor,
 			Model:           tpm.Model,
 			SerialNumber:    tpm.Serial,
@@ -528,7 +538,7 @@ func attributesFromDevice(device *common.Device, collectionMethod string, t *met
 		if g == nil {
 			continue
 		}
-		gpu := tinkerbell.GPUDevice{
+		gpu := inventory.GPUDevice{
 			Vendor:          g.Vendor,
 			Model:           g.Model,
 			SerialNumber:    g.Serial,
@@ -563,8 +573,8 @@ func convertOrZero[NumOut, NumIn safecast.Number](logger logr.Logger, field stri
 // component like the Baseboard or BMC. POST code lives on the device-level status
 // in bmclib (only the asrockrack driver populates it), so it is mapped here rather
 // than onto BIOS.
-func productFromCommon(c common.Common, logger logr.Logger) *tinkerbell.Product {
-	return &tinkerbell.Product{
+func productFromCommon(c common.Common, logger logr.Logger) *inventory.Product {
+	return &inventory.Product{
 		Name:         c.ProductName,
 		Vendor:       c.Vendor,
 		Model:        c.Model,
@@ -586,11 +596,11 @@ func firmwareVersion(f *common.Firmware) string {
 // and State both empty) is left for Attributes.PruneEmpty to drop, so it neither
 // serializes as an empty {} object nor blocks a data-less component from being
 // dropped.
-func statusFromCommon(s *common.Status) *tinkerbell.ComponentStatus {
+func statusFromCommon(s *common.Status) *inventory.ComponentStatus {
 	if s == nil {
 		return nil
 	}
-	return &tinkerbell.ComponentStatus{
+	return &inventory.ComponentStatus{
 		Health: s.Health,
 		State:  s.State,
 	}
@@ -601,14 +611,14 @@ func statusFromCommon(s *common.Status) *tinkerbell.ComponentStatus {
 // survives serialization instead of being dropped by omitempty. PostCode is
 // attached independently of statusFromCommon's result so a device reporting POST
 // diagnostics without health/state still keeps them.
-func postStatusFromCommon(s *common.Status, logger logr.Logger) *tinkerbell.ComponentStatus {
+func postStatusFromCommon(s *common.Status, logger logr.Logger) *inventory.ComponentStatus {
 	if s == nil {
 		return nil
 	}
 	cs := statusFromCommon(s)
 	if s.PostCodeStatus != "" {
 		if cs == nil {
-			cs = &tinkerbell.ComponentStatus{}
+			cs = &inventory.ComponentStatus{}
 		}
 		postCode := convertOrZero[int32](logger, "status.postCode", s.PostCode)
 		cs.PostCode = &postCode
@@ -617,11 +627,11 @@ func postStatusFromCommon(s *common.Status, logger logr.Logger) *tinkerbell.Comp
 	return cs
 }
 
-func biosFromCommon(b *common.BIOS) *tinkerbell.BIOS {
+func biosFromCommon(b *common.BIOS) *inventory.BIOS {
 	if b == nil {
 		return nil
 	}
-	return &tinkerbell.BIOS{
+	return &inventory.BIOS{
 		Vendor:          b.Vendor,
 		Model:           b.Model,
 		SerialNumber:    b.Serial,
@@ -630,11 +640,11 @@ func biosFromCommon(b *common.BIOS) *tinkerbell.BIOS {
 	}
 }
 
-func bmcFromCommon(bmcComp *common.BMC, logger logr.Logger) *tinkerbell.BMC {
+func bmcFromCommon(bmcComp *common.BMC, logger logr.Logger) *inventory.BMC {
 	if bmcComp == nil {
 		return nil
 	}
-	return &tinkerbell.BMC{
+	return &inventory.BMC{
 		Vendor:          bmcComp.Vendor,
 		Model:           bmcComp.Model,
 		SerialNumber:    bmcComp.Serial,
@@ -647,11 +657,11 @@ func bmcFromCommon(bmcComp *common.BMC, logger logr.Logger) *tinkerbell.BMC {
 // networkInterfaceFromCommon converts a bmclib NIC (used for both the host's NICs
 // and the BMC's own out-of-band management NIC) into its Tinkerbell API
 // representation.
-func networkInterfaceFromCommon(n *common.NIC, logger logr.Logger) *tinkerbell.NetworkInterface {
+func networkInterfaceFromCommon(n *common.NIC, logger logr.Logger) *inventory.NetworkInterface {
 	if n == nil {
 		return nil
 	}
-	nic := &tinkerbell.NetworkInterface{
+	nic := &inventory.NetworkInterface{
 		Vendor:          n.Vendor,
 		Model:           n.Model,
 		SerialNumber:    n.Serial,
@@ -663,7 +673,7 @@ func networkInterfaceFromCommon(n *common.NIC, logger logr.Logger) *tinkerbell.N
 		}
 		speedMbps := convertOrZero[uint32](logger, "networkInterface.port.speedMbps", p.SpeedBits/1_000_000)
 		mtu := convertOrZero[uint32](logger, "networkInterface.port.mtu", p.MTUSize)
-		port := tinkerbell.NetworkPort{
+		port := inventory.NetworkPort{
 			PortID:     cmp.Or(p.PhysicalID, p.ID),
 			MAC:        strings.ToLower(p.MacAddress),
 			SpeedMbps:  speedMbps,
@@ -675,11 +685,11 @@ func networkInterfaceFromCommon(n *common.NIC, logger logr.Logger) *tinkerbell.N
 	return nic
 }
 
-func baseboardFromMainboard(m *common.Mainboard) *tinkerbell.Baseboard {
+func baseboardFromMainboard(m *common.Mainboard) *inventory.Baseboard {
 	if m == nil {
 		return nil
 	}
-	return &tinkerbell.Baseboard{
+	return &inventory.Baseboard{
 		Vendor:          m.Vendor,
 		Model:           m.Model,
 		SerialNumber:    m.Serial,

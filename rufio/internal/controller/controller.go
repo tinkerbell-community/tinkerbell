@@ -7,7 +7,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
@@ -28,7 +28,7 @@ var schemeBuilder = runtime.NewSchemeBuilder(
 	bmc.AddToScheme,
 	// Needed so the Machine controller can read/write the linked Hardware object's
 	// status.attributes.outOfBand field.
-	tinkerbell.AddToScheme,
+	v1alpha2.AddToScheme,
 )
 
 // DefaultScheme returns a scheme with all the types necessary for the Rufio controller.

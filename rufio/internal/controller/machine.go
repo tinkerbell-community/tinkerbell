@@ -25,7 +25,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/tinkerbell/tinkerbell/api/conversion"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -190,7 +190,8 @@ func (r *MachineReconciler) updatePowerState(ctx context.Context, bm *bmc.Machin
 }
 
 // reconcileInventoryIfDue collects BMC inventory when it's due (see
-// dueForInventoryRefresh) and writes it to the linked Hardware's status.
+// dueForInventoryRefresh) and writes it to the linked Hardware's status: the
+// Hardware whose v1alpha1 bmcRef names the Machine.
 // Failures are logged and evented but never block Machine reconciliation —
 // Hardware and Machine are reconciled independently, and an unreachable/
 // unsupported inventory source (e.g. IPMI-only BMCs, which bmclib cannot collect
@@ -200,7 +201,7 @@ func (r *MachineReconciler) reconcileInventoryIfDue(ctx context.Context, logger 
 	if !r.inventoryCollectionEnabled {
 		return
 	}
-	hw, err := r.findLinkedHardware(ctx, bm)
+	hw, err := findLinkedHardware(ctx, r.client, bm.Namespace, bm.Name)
 	if err != nil {
 		logger.Error(err, "failed to find linked Hardware for inventory refresh")
 		r.recorder.Eventf(bm, nil, corev1.EventTypeWarning, "HardwareLookupFailed", "FindLinkedHardware", "find linked Hardware: %v", err)
@@ -209,12 +210,12 @@ func (r *MachineReconciler) reconcileInventoryIfDue(ctx context.Context, logger 
 	if hw == nil || hw.Annotations[disableOutOfBandInventoryAnnotation] == trueString || !dueForInventoryRefresh(hw, bm, r.inventoryRefreshInterval) {
 		return
 	}
-	if err := r.reconcileInventory(ctx, logger, bmcClient, hw); err != nil {
+	if err := reconcileInventory(ctx, r.client, logger, bmcClient, hw); err != nil {
 		logger.Error(err, "BMC inventory collection failed", "host", bm.Spec.Connection.Host)
 		r.recorder.Eventf(bm, nil, corev1.EventTypeWarning, "InventoryUnreachable", "GetInventory", "get BMC inventory: %v", err)
 		return
 	}
-	r.clearRefreshInventoryAnnotation(ctx, logger, bm)
+	clearRefreshInventoryAnnotation(ctx, r.client, r.recorder, logger, bm)
 }
 
 // patchStatus patches the specifies patch on the Machine.
@@ -234,7 +235,7 @@ func (r *MachineReconciler) SetupWithManager(ctx context.Context, mgr ctrl.Manag
 	if r.inventoryCollectionEnabled {
 		if err := mgr.GetFieldIndexer().IndexField(
 			ctx,
-			&tinkerbell.Hardware{},
+			&v1alpha2.Hardware{},
 			hardwareBMCRefIndexKey,
 			hardwareBMCRefIndexFunc,
 		); err != nil {

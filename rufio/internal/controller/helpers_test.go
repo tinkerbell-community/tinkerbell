@@ -10,7 +10,7 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/jacobweinstock/registrar"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/rufio/internal/controller"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,7 +32,7 @@ func newClientBuilder() *fake.ClientBuilder {
 	if err := bmc.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
-	if err := tinkerbell.AddToScheme(scheme); err != nil {
+	if err := v1alpha2.AddToScheme(scheme); err != nil {
 		panic(err)
 	}
 	if err := corev1.AddToScheme(scheme); err != nil {
@@ -60,7 +60,7 @@ func newClientBuilder() *fake.ClientBuilder {
 	return fake.NewClientBuilder().
 		WithScheme(scheme).
 		WithObjectTracker(tracker).
-		WithIndex(&tinkerbell.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
+		WithIndex(&v1alpha2.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
 		WithInterceptorFuncs(interceptor.Funcs{
 			Get: func(ctx context.Context, c client.WithWatch, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
 				err := c.Get(ctx, key, obj, opts...)

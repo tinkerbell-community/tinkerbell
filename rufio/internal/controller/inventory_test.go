@@ -8,8 +8,10 @@ import (
 	bmclib "github.com/bmc-toolbox/bmclib/v2"
 	common "github.com/bmc-toolbox/common"
 	"github.com/go-logr/logr"
+	"github.com/tinkerbell/tinkerbell/api/conversion"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
 	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
 	"github.com/tinkerbell/tinkerbell/rufio/internal/controller"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,7 +35,7 @@ const trueString = "true"
 // the patch content and does a full Update instead (see its doc comment).
 func newInventoryTestClient(objs ...ctrlclient.Object) ctrlclient.Client {
 	s := runtime.NewScheme()
-	if err := tinkerbell.AddToScheme(s); err != nil {
+	if err := v1alpha2.AddToScheme(s); err != nil {
 		panic(err)
 	}
 	if err := bmc.AddToScheme(s); err != nil {
@@ -45,14 +47,17 @@ func newInventoryTestClient(objs ...ctrlclient.Object) ctrlclient.Client {
 
 	return fake.NewClientBuilder().
 		WithScheme(s).
-		WithStatusSubresource(&tinkerbell.Hardware{}).
-		WithIndex(&tinkerbell.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
+		WithStatusSubresource(&v1alpha2.Hardware{}).
+		WithIndex(&v1alpha2.Hardware{}, controller.HardwareBMCRefIndexKey, controller.HardwareBMCRefIndexFunc).
 		WithObjects(objs...).
 		Build()
 }
 
-func createHardwareForMachine(machineName string) *tinkerbell.Hardware {
-	return &tinkerbell.Hardware{
+// createHardwareForMachine returns a Hardware created through v1alpha1 whose
+// bmcRef names the Machine, as stored: in v1alpha2, with the bmcRef in the
+// conversion annotation.
+func createHardwareForMachine(machineName string) *v1alpha2.Hardware {
+	hw1 := &tinkerbell.Hardware{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: tinkerbell.GroupVersion.String(),
 			Kind:       "Hardware",
@@ -63,10 +68,16 @@ func createHardwareForMachine(machineName string) *tinkerbell.Hardware {
 		},
 		Spec: tinkerbell.HardwareSpec{
 			BMCRef: &corev1.TypedLocalObjectReference{
+				Kind: "Machine",
 				Name: machineName,
 			},
 		},
 	}
+	hw := &v1alpha2.Hardware{}
+	if err := conversion.HardwareToV1Alpha2(hw1, hw); err != nil {
+		panic(err)
+	}
+	return hw
 }
 
 // newOpenTestBMCClient opens a bmclib.Client wrapping the given testProvider,
@@ -99,7 +110,7 @@ func TestReconcileInventoryIfDue_Success(t *testing.T) {
 
 	reconciler.ReconcileInventoryIfDueForTest(context.Background(), logr.Discard(), bmcClient, bm)
 
-	var got tinkerbell.Hardware
+	var got v1alpha2.Hardware
 	if err := client.Get(context.Background(), types.NamespacedName{Namespace: "test-namespace", Name: "test-hw"}, &got); err != nil {
 		t.Fatalf("failed to get Hardware: %v", err)
 	}
@@ -166,7 +177,7 @@ func TestReconcileInventoryIfDue_IPMIOnlyHardError(t *testing.T) {
 	// never propagated. This call must not panic.
 	reconciler.ReconcileInventoryIfDueForTest(context.Background(), logr.Discard(), bmcClient, bm)
 
-	var got tinkerbell.Hardware
+	var got v1alpha2.Hardware
 	if err := client.Get(context.Background(), types.NamespacedName{Namespace: "test-namespace", Name: "test-hw"}, &got); err != nil {
 		t.Fatalf("failed to get Hardware: %v", err)
 	}

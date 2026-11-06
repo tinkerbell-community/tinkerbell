@@ -10,7 +10,8 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tinkerbell/tinkerbell/api/v1alpha1/bmc"
-	tinkerbell "github.com/tinkerbell/tinkerbell/api/v1alpha1/tinkerbell"
+	v1alpha2 "github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell"
+	"github.com/tinkerbell/tinkerbell/api/v1alpha2/tinkerbell/inventory"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/events"
@@ -283,20 +284,19 @@ func TestComponentStatusOmitsPostCode(t *testing.T) {
 // subsequent reconcile instead of respecting inventoryRefreshInterval.
 func TestApplyOutOfBandAttributesNilDeviceNoPanic(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := tinkerbell.AddToScheme(scheme); err != nil {
+	if err := v1alpha2.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to build scheme: %v", err)
 	}
-	hw := &tinkerbell.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-hw", Namespace: "test-namespace"},
 	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&tinkerbell.Hardware{}).
+		WithStatusSubresource(&v1alpha2.Hardware{}).
 		WithObjects(hw).
 		Build()
 
-	r := &MachineReconciler{client: fakeClient}
-	if err := r.applyOutOfBandAttributes(context.Background(), logr.Discard(), hw, nil, "redfish"); err != nil {
+	if err := applyOutOfBandAttributes(context.Background(), fakeClient, logr.Discard(), hw, nil, "redfish"); err != nil {
 		t.Fatalf("applyOutOfBandAttributes(nil device) error = %v, want nil", err)
 	}
 
@@ -317,30 +317,29 @@ func TestApplyOutOfBandAttributesNilDeviceNoPanic(t *testing.T) {
 // the slow BMC round-trip on every subsequent reconcile.
 func TestApplyOutOfBandAttributesNilDevicePreservesExisting(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := tinkerbell.AddToScheme(scheme); err != nil {
+	if err := v1alpha2.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to build scheme: %v", err)
 	}
 	collected := metav1.NewTime(metav1.Now().Add(-25 * time.Hour))
-	hw := &tinkerbell.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-hw", Namespace: "test-namespace"},
-		Status: tinkerbell.HardwareStatus{
-			Attributes: &tinkerbell.HardwareAttributes{
-				OutOfBand: &tinkerbell.Attributes{
+		Status: v1alpha2.HardwareStatus{
+			Attributes: &inventory.HardwareAttributes{
+				OutOfBand: &inventory.Attributes{
 					LastUpdated:      &collected,
 					CollectionMethod: "redfish",
-					Product:          &tinkerbell.Product{SerialNumber: "SYS-SERIAL-1"},
+					Product:          &inventory.Product{SerialNumber: "SYS-SERIAL-1"},
 				},
 			},
 		},
 	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&tinkerbell.Hardware{}).
+		WithStatusSubresource(&v1alpha2.Hardware{}).
 		WithObjects(hw).
 		Build()
 
-	r := &MachineReconciler{client: fakeClient}
-	if err := r.applyOutOfBandAttributes(context.Background(), logr.Discard(), hw, nil, "redfish"); err != nil {
+	if err := applyOutOfBandAttributes(context.Background(), fakeClient, logr.Discard(), hw, nil, "redfish"); err != nil {
 		t.Fatalf("applyOutOfBandAttributes(nil device) error = %v, want nil", err)
 	}
 
@@ -360,33 +359,32 @@ func TestApplyOutOfBandAttributesNilDevicePreservesExisting(t *testing.T) {
 // and re-collect (a 5-30s BMC round-trip) on every reconcile.
 func TestApplyOutOfBandAttributesUnchangedAdvancesTimestamp(t *testing.T) {
 	scheme := runtime.NewScheme()
-	if err := tinkerbell.AddToScheme(scheme); err != nil {
+	if err := v1alpha2.AddToScheme(scheme); err != nil {
 		t.Fatalf("failed to build scheme: %v", err)
 	}
 	collected := metav1.NewTime(metav1.Now().Add(-25 * time.Hour))
-	hw := &tinkerbell.Hardware{
+	hw := &v1alpha2.Hardware{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-hw", Namespace: "test-namespace"},
-		Status: tinkerbell.HardwareStatus{
-			Attributes: &tinkerbell.HardwareAttributes{
-				OutOfBand: &tinkerbell.Attributes{
+		Status: v1alpha2.HardwareStatus{
+			Attributes: &inventory.HardwareAttributes{
+				OutOfBand: &inventory.Attributes{
 					LastUpdated:      &collected,
 					CollectionMethod: "redfish",
-					Product:          &tinkerbell.Product{SerialNumber: "SYS-SERIAL-1"},
+					Product:          &inventory.Product{SerialNumber: "SYS-SERIAL-1"},
 				},
 			},
 		},
 	}
 	fakeClient := fake.NewClientBuilder().
 		WithScheme(scheme).
-		WithStatusSubresource(&tinkerbell.Hardware{}).
+		WithStatusSubresource(&v1alpha2.Hardware{}).
 		WithObjects(hw).
 		Build()
 
 	// A device whose mapping reproduces the stored inventory exactly.
 	device := &common.Device{Common: common.Common{ProductName: "", Serial: "SYS-SERIAL-1"}}
 
-	r := &MachineReconciler{client: fakeClient}
-	if err := r.applyOutOfBandAttributes(context.Background(), logr.Discard(), hw, device, "redfish"); err != nil {
+	if err := applyOutOfBandAttributes(context.Background(), fakeClient, logr.Discard(), hw, device, "redfish"); err != nil {
 		t.Fatalf("applyOutOfBandAttributes error = %v, want nil", err)
 	}
 
@@ -434,8 +432,7 @@ func TestClearRefreshInventoryAnnotationRetries(t *testing.T) {
 		}).
 		Build()
 
-	r := &MachineReconciler{client: fakeClient, recorder: events.NewFakeRecorder(2)}
-	r.clearRefreshInventoryAnnotation(context.Background(), logr.Discard(), bm)
+	clearRefreshInventoryAnnotation(context.Background(), fakeClient, events.NewFakeRecorder(2), logr.Discard(), bm)
 
 	if attempts != 3 {
 		t.Errorf("Patch called %d times, want 3 (2 injected failures then a success)", attempts)
@@ -545,27 +542,27 @@ func TestDueForInventoryRefresh(t *testing.T) {
 	fresh := metav1.NewTime(now.Add(-1 * time.Hour))
 
 	tests := map[string]struct {
-		hw   *tinkerbell.Hardware
+		hw   *v1alpha2.Hardware
 		bm   *bmc.Machine
 		want bool
 	}{
 		"never collected": {
-			hw:   &tinkerbell.Hardware{},
+			hw:   &v1alpha2.Hardware{},
 			bm:   &bmc.Machine{},
 			want: true,
 		},
 		"stale": {
-			hw:   &tinkerbell.Hardware{Status: tinkerbell.HardwareStatus{Attributes: &tinkerbell.HardwareAttributes{OutOfBand: &tinkerbell.Attributes{LastUpdated: &stale}}}},
+			hw:   &v1alpha2.Hardware{Status: v1alpha2.HardwareStatus{Attributes: &inventory.HardwareAttributes{OutOfBand: &inventory.Attributes{LastUpdated: &stale}}}},
 			bm:   &bmc.Machine{},
 			want: true,
 		},
 		"fresh": {
-			hw:   &tinkerbell.Hardware{Status: tinkerbell.HardwareStatus{Attributes: &tinkerbell.HardwareAttributes{OutOfBand: &tinkerbell.Attributes{LastUpdated: &fresh}}}},
+			hw:   &v1alpha2.Hardware{Status: v1alpha2.HardwareStatus{Attributes: &inventory.HardwareAttributes{OutOfBand: &inventory.Attributes{LastUpdated: &fresh}}}},
 			bm:   &bmc.Machine{},
 			want: false,
 		},
 		"fresh but refresh annotation forces it": {
-			hw: &tinkerbell.Hardware{Status: tinkerbell.HardwareStatus{Attributes: &tinkerbell.HardwareAttributes{OutOfBand: &tinkerbell.Attributes{LastUpdated: &fresh}}}},
+			hw: &v1alpha2.Hardware{Status: v1alpha2.HardwareStatus{Attributes: &inventory.HardwareAttributes{OutOfBand: &inventory.Attributes{LastUpdated: &fresh}}}},
 			bm: &bmc.Machine{ObjectMeta: metav1.ObjectMeta{
 				Annotations: map[string]string{refreshInventoryAnnotation: trueString},
 			}},
